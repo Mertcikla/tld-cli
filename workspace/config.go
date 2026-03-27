@@ -11,11 +11,14 @@ func ConfigDir() (string, error) {
 	if override := os.Getenv("TLD_CONFIG_DIR"); override != "" {
 		return override, nil
 	}
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("user config dir: %w", err)
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "tldiagram"), nil
 	}
-	return filepath.Join(dir, "tldiagram"), nil
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("user home dir: %w", err)
+	}
+	return filepath.Join(home, ".config", "tldiagram"), nil
 }
 
 // ConfigPath returns the path to the global configuration file.

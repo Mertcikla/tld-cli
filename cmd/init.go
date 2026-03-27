@@ -48,7 +48,8 @@ org_id: ""         # UUID of your organisation
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized workspace at %s\n", dir)
-			fmt.Fprintf(cmd.OutOrStdout(), "Edit %s with your server_url, api_key, and org_id.\n", cfgPath)
+			fmt.Fprintf(cmd.OutOrStdout(), "Configuration file: %s \n", cfgPath)
+			fmt.Printf("Run `tld login` to authenticate with tldiagram.com \n")
 			return nil
 		},
 	}
