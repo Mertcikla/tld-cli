@@ -1,8 +1,8 @@
-# tld
+# tld - CLI for tlDiagram.com
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mertcikla/tld-cli)](https://go.dev/) [![License](https://img.shields.io/github/license/mertcikla/tld-cli)](./LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/mertcikla/tld-cli/test.yml?branch=main)](https://github.com/mertcikla/tld-cli/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/mertcikla/tld-cli)](https://goreportcard.com/report/github.com/mertcikla/tld-cli)
 
-tld is a command-line interface for managing software architecture diagrams as code. It allows you to define your architecture in YAML, validate the consistency of your definitions, and sync them to a tlDiagram server.
+tld is a command-line interface for managing software architecture diagrams as code. It allows you to define your architecture in YAML, validate the consistency of your definitions, and sync them to  tlDiagram.com.
 
 
 ## Features
@@ -16,6 +16,12 @@ tld is a command-line interface for managing software architecture diagrams as c
 - **Edge Handles**: Specify precise connection points (handles) for edges.
 
 ## Installation
+
+### Latest Binary
+
+```bash
+curl -LsSf https://tldiagram.com/install.sh | sh
+```
 
 ### From Source
 
@@ -31,11 +37,13 @@ This will install the `tld` binary into your `$GOPATH/bin` directory.
 
 1. Initialize a new workspace:
    ```bash
-   tld init my-architecture
-   cd my-architecture
+   tld init
    ```
 
-2. Edit `~/.config/tldiagram/tld.yaml` (or your OS equivalent) to configure your server URL, API key, and Organization ID.
+2. Authorize tld with your tlDiagram.com account.
+   ```bash
+   tld login
+   ```
 
 3. Create your first diagram:
    ```bash
@@ -73,7 +81,7 @@ A tld workspace consists of the following directory structure:
 
 ### Core Workflow
 
-- `tld init [dir]`: Initialize a new workspace.
+- `tld init`: Initialize a new workspace.
 - `tld login`: Log in to the configured server.
 - `tld validate`: Check the workspace for structural and reference errors.
 - `tld plan`: Generate a preview of the changes and detect conflicts/drift.
