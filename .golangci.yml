@@ -1,0 +1,18 @@
+version: "2"
+linters:
+  enable:
+    - govet
+    - gocognit
+    - gocyclo
+    - maintidx
+    - revive
+    - wrapcheck
+    - unparam
+  settings:
+    gocognit:
+      min-complexity: 60
+    errcheck:
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fprint
