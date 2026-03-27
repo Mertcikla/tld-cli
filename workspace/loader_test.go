@@ -25,8 +25,8 @@ func writeFile(t *testing.T, path, content string) {
 func setupConfig(t *testing.T) string {
 	t.Helper()
 	configDir := t.TempDir()
-	os.Setenv("TLD_CONFIG_DIR", configDir)
-	t.Cleanup(func() { os.Unsetenv("TLD_CONFIG_DIR") })
+	_ = os.Setenv("TLD_CONFIG_DIR", configDir)
+	t.Cleanup(func() { _ = os.Unsetenv("TLD_CONFIG_DIR") })
 	return filepath.Join(configDir, "tld.yaml")
 }
 
@@ -80,8 +80,8 @@ func TestLoad_APIKeyFromEnv(t *testing.T) {
 	cfgPath := setupConfig(t)
 	writeFile(t, cfgPath, minimalConfig())
 
-	os.Setenv("TLD_API_KEY", "env-test-key")
-	t.Cleanup(func() { os.Unsetenv("TLD_API_KEY") })
+	_ = os.Setenv("TLD_API_KEY", "env-test-key")
+	t.Cleanup(func() { _ = os.Unsetenv("TLD_API_KEY") })
 
 	ws, err := workspace.Load(dir)
 	if err != nil {
@@ -97,8 +97,8 @@ func TestLoad_APIKeyFileOverridesEnv(t *testing.T) {
 	cfgPath := setupConfig(t)
 	writeFile(t, cfgPath, "server_url: http://localhost\napi_key: file-key\norg_id: \"\"\n")
 
-	os.Setenv("TLD_API_KEY", "env-key")
-	t.Cleanup(func() { os.Unsetenv("TLD_API_KEY") })
+	_ = os.Setenv("TLD_API_KEY", "env-key")
+	t.Cleanup(func() { _ = os.Unsetenv("TLD_API_KEY") })
 
 	ws, err := workspace.Load(dir)
 	if err != nil {

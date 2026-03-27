@@ -155,7 +155,7 @@ func newMockServer(t *testing.T, svc *mockDiagramService) string {
 const testOrgID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 // writeConfig writes a tld.yaml in TLD_CONFIG_DIR pointing at serverURL.
-func writeConfig(t *testing.T, dir, serverURL, apiKey string) {
+func writeConfig(t *testing.T, _, serverURL, apiKey string) {
 	t.Helper()
 	configDir := os.Getenv("TLD_CONFIG_DIR")
 	if configDir == "" {

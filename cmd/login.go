@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func newLoginCmd(wdir *string) *cobra.Command {
+func newLoginCmd(_ *string) *cobra.Command {
 	var serverURL string
 	var noBrowser bool
 

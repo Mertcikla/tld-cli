@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -12,7 +13,7 @@ func ConfigDir() (string, error) {
 	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("user config dir: %w", err)
 	}
 	return filepath.Join(dir, "tldiagram"), nil
 }
