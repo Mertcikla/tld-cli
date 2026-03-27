@@ -5,8 +5,8 @@ import (
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
 	"connectrpc.com/connect"
-	"github.com/mertcikla/tldiagram-cli/client"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/client"
+	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
 )
 

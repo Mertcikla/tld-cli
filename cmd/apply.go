@@ -10,10 +10,10 @@ import (
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
 	"connectrpc.com/connect"
-	"github.com/mertcikla/tldiagram-cli/client"
-	"github.com/mertcikla/tldiagram-cli/planner"
-	"github.com/mertcikla/tldiagram-cli/reporter"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/client"
+	"github.com/mertcikla/tld-cli/planner"
+	"github.com/mertcikla/tld-cli/reporter"
+	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 )

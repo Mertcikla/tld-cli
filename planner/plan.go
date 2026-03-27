@@ -5,7 +5,7 @@ import (
 	"sort"
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

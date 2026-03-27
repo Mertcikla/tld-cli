@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 // setupWorkspaceForLinks creates a workspace with two diagrams and one object on the first.

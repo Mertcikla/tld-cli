@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 	"gopkg.in/yaml.v3"
 )
 

@@ -6,7 +6,7 @@ import (
 	"io"
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
-	"github.com/mertcikla/tldiagram-cli/planner"
+	"github.com/mertcikla/tld-cli/planner"
 )
 
 // RenderExecutionMarkdown writes an apply execution report comparing plan vs result.

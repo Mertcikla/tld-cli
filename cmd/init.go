@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +28,7 @@ func newInitCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("get config path: %w", err)
 			}
-			
+
 			if err := os.MkdirAll(filepath.Dir(cfgPath), 0700); err != nil {
 				return fmt.Errorf("create config dir: %w", err)
 			}

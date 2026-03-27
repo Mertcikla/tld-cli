@@ -3,8 +3,8 @@ package planner_test
 import (
 	"testing"
 
-	"github.com/mertcikla/tldiagram-cli/planner"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/planner"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 // TestProtoMapping_DiagramFields verifies that each DiagramSpec field maps to the

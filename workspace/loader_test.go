@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 // writeFile writes content to path, creating dirs as needed.
@@ -79,7 +79,7 @@ func TestLoad_APIKeyFromEnv(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupConfig(t)
 	writeFile(t, cfgPath, minimalConfig())
-	
+
 	os.Setenv("TLD_API_KEY", "env-test-key")
 	t.Cleanup(func() { os.Unsetenv("TLD_API_KEY") })
 
@@ -96,7 +96,7 @@ func TestLoad_APIKeyFileOverridesEnv(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupConfig(t)
 	writeFile(t, cfgPath, "server_url: http://localhost\napi_key: file-key\norg_id: \"\"\n")
-	
+
 	os.Setenv("TLD_API_KEY", "env-key")
 	t.Cleanup(func() { os.Unsetenv("TLD_API_KEY") })
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	hashidlib "github.com/mertcikla/tldiagram-cli/internal/hashids"
+	hashidlib "github.com/mertcikla/tld-cli/internal/hashids"
 )
 
 // Config is parsed from .tld.yaml.

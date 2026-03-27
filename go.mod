@@ -1,4 +1,4 @@
-module github.com/mertcikla/tldiagram-cli
+module github.com/mertcikla/tld-cli
 
 go 1.26.1
 

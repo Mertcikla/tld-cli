@@ -4,7 +4,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
 )
 

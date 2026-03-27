@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 // setupWorkspaceWithObjects creates a workspace with "system" diagram and two objects: "svc", "db".

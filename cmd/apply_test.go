@@ -14,7 +14,7 @@ import (
 	diagv1connect "buf.build/gen/go/tldiagramcom/diagram/connectrpc/go/diag/v1/diagv1connect"
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
 	"connectrpc.com/connect"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 // ---- mock server ----
@@ -177,7 +177,7 @@ func setupApplyWorkspace(t *testing.T, dir, serverURL string) {
 	// Set TLD_CONFIG_DIR once for the entire test setup
 	configDir := t.TempDir()
 	t.Setenv("TLD_CONFIG_DIR", configDir)
-	
+
 	mustInitWorkspace(t, dir)
 	writeConfig(t, dir, serverURL, "test-api-key")
 }

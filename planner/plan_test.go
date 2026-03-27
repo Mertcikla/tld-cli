@@ -4,8 +4,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/mertcikla/tldiagram-cli/planner"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/planner"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 func ws(diagrams map[string]*workspace.Diagram, objects map[string]*workspace.Object, edges []workspace.Edge, links []workspace.Link) *workspace.Workspace {

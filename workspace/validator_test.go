@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 // buildWorkspace creates a minimal valid Workspace from the given components.

@@ -4,7 +4,7 @@ First off, thank you for considering contributing to tld!
 
 ## Getting Started
 
-If you've noticed a bug or have a feature request, check our [Issues](https://github.com/mertcikla/tldiagram-cli/issues) first. If not, go ahead and create one.
+If you've noticed a bug or have a feature request, check our [Issues](https://github.com/mertcikla/tld-cli/issues) first. If not, go ahead and create one.
 
 ## Development
 
@@ -12,7 +12,7 @@ Make sure you have Go 1.26 or later installed.
 Clone the repository and run the tests:
 
 ```bash
-git clone https://github.com/mertcikla/tldiagram-cli.git
+git clone https://github.com/mertcikla/tld-cli.git
 cd tld
 make test
 ```

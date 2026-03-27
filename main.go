@@ -2,7 +2,7 @@
 package main
 
 import (
-	"github.com/mertcikla/tldiagram-cli/cmd"
+	"github.com/mertcikla/tld-cli/cmd"
 )
 
 func main() {

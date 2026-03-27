@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
-	"github.com/mertcikla/tldiagram-cli/planner"
-	"github.com/mertcikla/tldiagram-cli/reporter"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/planner"
+	"github.com/mertcikla/tld-cli/reporter"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 func emptyPlan(t *testing.T) *planner.Plan {

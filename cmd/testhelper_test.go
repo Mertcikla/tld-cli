@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mertcikla/tldiagram-cli/cmd"
+	"github.com/mertcikla/tld-cli/cmd"
 )
 
 // runCmd executes a tld command rooted at dir with the given args.

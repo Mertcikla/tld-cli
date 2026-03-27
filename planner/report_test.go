@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mertcikla/tldiagram-cli/planner"
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/planner"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 func buildPlan(t *testing.T, w *workspace.Workspace) *planner.Plan {

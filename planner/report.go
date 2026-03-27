@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/mertcikla/tldiagram-cli/workspace"
+	"github.com/mertcikla/tld-cli/workspace"
 )
 
 // RenderPlanMarkdown writes a human-readable plan report to w.
