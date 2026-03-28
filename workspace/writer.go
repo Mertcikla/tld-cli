@@ -80,10 +80,24 @@ func UpsertObject(dir, ref string, spec *Object) error {
 	return nil
 }
 
-// AppendEdge appends an Edge to edges.yaml (creates file if absent).
+// AppendEdge adds an Edge to edges.yaml keyed by "diagram:source:target:label" (creates file if absent).
 func AppendEdge(dir string, spec *Edge) error {
 	path := filepath.Join(dir, "edges.yaml")
-	return appendYAMLList(path, spec)
+	existing := make(map[string]*Edge)
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+		delete(existing, "_meta")
+	}
+	key := spec.Diagram + ":" + spec.SourceObject + ":" + spec.TargetObject + ":" + spec.Label
+	existing[key] = spec
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("marshal edges: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }
 
 // AppendLink appends a Link to links.yaml (creates file if absent).
@@ -106,11 +120,11 @@ func Save(ws *Workspace) error {
 
 	// Write edges
 	if len(ws.Edges) > 0 {
-		data, err := yaml.Marshal(ws.Edges)
-		if err != nil {
-			return fmt.Errorf("marshal edges: %w", err)
+		var edgesMeta map[string]*ResourceMetadata
+		if ws.Meta != nil {
+			edgesMeta = ws.Meta.Edges
 		}
-		if err := os.WriteFile(filepath.Join(ws.Dir, "edges.yaml"), data, 0600); err != nil {
+		if err := writeFullYAMLMap(filepath.Join(ws.Dir, "edges.yaml"), ws.Edges, edgesMeta); err != nil {
 			return fmt.Errorf("write edges: %w", err)
 		}
 	}

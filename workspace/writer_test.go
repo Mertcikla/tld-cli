@@ -169,15 +169,16 @@ func TestAppendEdge_CreatesFileWhenAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	var got []workspace.Edge
+	var got map[string]*workspace.Edge
 	if err := yaml.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(got) != 1 {
 		t.Fatalf("len(got) = %d, want 1", len(got))
 	}
-	if got[0].Diagram != "system" || got[0].SourceObject != "api" || got[0].TargetObject != "db" {
-		t.Errorf("unexpected edge: %+v", got[0])
+	e := got["system:api:db:"]
+	if e == nil || e.Diagram != "system" || e.SourceObject != "api" || e.TargetObject != "db" {
+		t.Errorf("unexpected edge: %+v", e)
 	}
 }
 
@@ -195,7 +196,7 @@ func TestAppendEdge_AppendsToExistingFile(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "edges.yaml"))
-	var got []workspace.Edge
+	var got map[string]*workspace.Edge
 	_ = yaml.Unmarshal(data, &got)
 
 	if len(got) != 2 {
@@ -222,14 +223,14 @@ func TestAppendEdge_AllOptionalFields(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "edges.yaml"))
-	var got []workspace.Edge
+	var got map[string]*workspace.Edge
 	_ = yaml.Unmarshal(data, &got)
 
 	if len(got) != 1 {
 		t.Fatalf("len = %d", len(got))
 	}
-	e := got[0]
-	if e.Label != "calls" || e.Description != "HTTP call" || e.RelationshipType != "sync" ||
+	e := got["diag:src:tgt:calls"]
+	if e == nil || e.Label != "calls" || e.Description != "HTTP call" || e.RelationshipType != "sync" ||
 		e.Direction != "forward" || e.EdgeType != "bezier" || e.URL != "https://docs.example.com" {
 		t.Errorf("optional fields not round-tripped: %+v", e)
 	}
@@ -435,8 +436,8 @@ func TestSave(t *testing.T) {
 		Objects: map[string]*workspace.Object{
 			"o1": {Name: "O1", Type: "service"},
 		},
-		Edges: []workspace.Edge{
-			{Diagram: "d1", SourceObject: "o1", TargetObject: "o2"},
+		Edges: map[string]*workspace.Edge{
+			"d1:o1:o2:": {Diagram: "d1", SourceObject: "o1", TargetObject: "o2"},
 		},
 		Links: []workspace.Link{
 			{Object: "o1", FromDiagram: "d1", ToDiagram: "d2"},

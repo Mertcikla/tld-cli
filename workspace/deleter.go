@@ -21,7 +21,7 @@ func DeleteDiagram(dir, ref string) (int, int, int, error) {
 		return 0, 0, 0, err
 	}
 
-	edgesRemoved, err := filterYAMLList(
+	edgesRemoved, err := filterEdgesYAMLMap(
 		filepath.Join(dir, "edges.yaml"),
 		func(m map[string]any) bool { return strVal(m, "diagram") != ref },
 	)
@@ -59,7 +59,7 @@ func DeleteObject(dir, ref string) (int, int, error) {
 		return 0, 0, err
 	}
 
-	edgesRemoved, err := filterYAMLList(
+	edgesRemoved, err := filterEdgesYAMLMap(
 		filepath.Join(dir, "edges.yaml"),
 		func(m map[string]any) bool {
 			return strVal(m, "source_object") != ref && strVal(m, "target_object") != ref
@@ -85,7 +85,7 @@ func DeleteObject(dir, ref string) (int, int, error) {
 // Safe: no error if file is absent or no matches found.
 // Returns count of removed edges.
 func RemoveEdge(dir, diagram, source, target string) (int, error) {
-	return filterYAMLList(
+	return filterEdgesYAMLMap(
 		filepath.Join(dir, "edges.yaml"),
 		func(m map[string]any) bool {
 			return strVal(m, "diagram") != diagram ||
@@ -113,6 +113,43 @@ func RemoveLink(dir, object, fromDiagram, toDiagram string) (int, error) {
 			return false // remove
 		},
 	)
+}
+
+// filterEdgesYAMLMap reads edges.yaml as map[string]any, skips the _meta key,
+// calls keep(edgeFields) for each edge entry, removes entries where keep returns false,
+// writes back (preserving _meta), and returns count removed. Safe: returns 0,nil if file absent.
+func filterEdgesYAMLMap(path string, keep func(map[string]any) bool) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, nil // file absent is fine
+	}
+	var items map[string]any
+	if err := yaml.Unmarshal(data, &items); err != nil {
+		return 0, fmt.Errorf("parse %s: %w", path, err)
+	}
+	removed := 0
+	for k, v := range items {
+		if k == "_meta" {
+			continue
+		}
+		if m, ok := v.(map[string]any); ok {
+			if !keep(m) {
+				delete(items, k)
+				removed++
+			}
+		}
+	}
+	if removed == 0 {
+		return 0, nil
+	}
+	out, err := yaml.Marshal(items)
+	if err != nil {
+		return 0, fmt.Errorf("marshal %s: %w", path, err)
+	}
+	if err := os.WriteFile(path, out, 0600); err != nil {
+		return 0, fmt.Errorf("write %s: %w", path, err)
+	}
+	return removed, nil
 }
 
 // filterYAMLList reads path as []map[string]any, keeps only items where keep(item)==true,

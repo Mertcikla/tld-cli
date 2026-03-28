@@ -100,7 +100,7 @@ func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
 	}
 
 	// Edges
-	for _, e := range ws.Edges {
+	for edgeRef, e := range ws.Edges {
 		pe := &diagv1.PlanEdge{
 			DiagramRef:      e.Diagram,
 			SourceObjectRef: e.SourceObject,
@@ -131,10 +131,8 @@ func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
 			pe.TargetHandle = &e.TargetHandle
 		}
 
-		// Attach metadata for idempotent upserts: derive the same stable ref
-		// that the server will compute: "diagramRef:srcRef:tgtRef:label"
+		// Attach metadata for idempotent upserts using the map key as the stable ref
 		if !recreateIDs && ws.Meta != nil {
-			edgeRef := e.Diagram + ":" + e.SourceObject + ":" + e.TargetObject + ":" + e.Label
 			if meta, ok := ws.Meta.Edges[edgeRef]; ok {
 				id := int32(meta.ID)
 				pe.Id = &id

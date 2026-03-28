@@ -55,9 +55,11 @@ func Load(dir string) (*Workspace, error) {
 	// Load edges from edges.yaml
 	edgesFile := filepath.Join(dir, "edges.yaml")
 	if data, err := os.ReadFile(edgesFile); err == nil {
+		ws.Edges = make(map[string]*Edge)
 		if err := yaml.Unmarshal(data, &ws.Edges); err != nil {
 			return nil, fmt.Errorf("parse edges.yaml: %w", err)
 		}
+		delete(ws.Edges, "_meta")
 	}
 
 	// Load links from links.yaml

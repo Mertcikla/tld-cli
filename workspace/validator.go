@@ -67,8 +67,8 @@ func (ws *Workspace) Validate() []ValidationError {
 	}
 
 	// Edges: required fields + ref integrity
-	for i, e := range ws.Edges {
-		loc := fmt.Sprintf("edges.yaml[%d]", i)
+	for ref, e := range ws.Edges {
+		loc := fmt.Sprintf("edges.yaml[%s]", ref)
 		if e.Diagram == "" {
 			errs = append(errs, ValidationError{loc, "diagram is required"})
 		} else if _, ok := ws.Diagrams[e.Diagram]; !ok {

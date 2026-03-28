@@ -17,10 +17,12 @@ diag2:
   name: Diagram 2
 `
 	edgesYAML := `
-- diagram: diag1
+"diag1:obj1:obj2:":
+  diagram: diag1
   source_object: obj1
   target_object: obj2
-- diagram: diag2
+"diag2:obj1:obj3:":
+  diagram: diag2
   source_object: obj1
   target_object: obj3
 `
@@ -104,10 +106,12 @@ obj2:
   name: Object 2
 `
 	edgesYAML := `
-- diagram: diag1
+"diag1:obj1:obj2:":
+  diagram: diag1
   source_object: obj1
   target_object: obj2
-- diagram: diag1
+"diag1:obj2:obj3:":
+  diagram: diag1
   source_object: obj2
   target_object: obj3
 `
@@ -162,10 +166,12 @@ func TestRemoveEdge(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	edgesYAML := `
-- diagram: diag1
+"diag1:obj1:obj2:":
+  diagram: diag1
   source_object: obj1
   target_object: obj2
-- diagram: diag1
+"diag1:obj1:obj3:":
+  diagram: diag1
   source_object: obj1
   target_object: obj3
 `

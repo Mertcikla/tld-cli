@@ -35,15 +35,16 @@ func TestConnectObjectsCmd_AppendsEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read edges.yaml: %v", err)
 	}
-	var edges []workspace.Edge
+	var edges map[string]*workspace.Edge
 	if err := yaml.Unmarshal(data, &edges); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(edges) != 1 {
 		t.Fatalf("len(edges) = %d, want 1", len(edges))
 	}
-	if edges[0].SourceObject != "service" || edges[0].TargetObject != "database" {
-		t.Errorf("unexpected edge: %+v", edges[0])
+	e := edges["system:service:database:"]
+	if e == nil || e.SourceObject != "service" || e.TargetObject != "database" {
+		t.Errorf("unexpected edge: %+v", e)
 	}
 }
 
@@ -61,7 +62,7 @@ func TestConnectObjectsCmd_TwoCallsTwoEntries(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "edges.yaml"))
-	var edges []workspace.Edge
+	var edges map[string]*workspace.Edge
 	_ = yaml.Unmarshal(data, &edges)
 
 	if len(edges) != 2 {

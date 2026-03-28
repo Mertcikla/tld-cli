@@ -15,10 +15,16 @@ func ws(diagrams map[string]*workspace.Diagram, objects map[string]*workspace.Ob
 	if objects == nil {
 		objects = map[string]*workspace.Object{}
 	}
+	edgesMap := make(map[string]*workspace.Edge, len(edges))
+	for i := range edges {
+		e := edges[i]
+		key := e.Diagram + ":" + e.SourceObject + ":" + e.TargetObject + ":" + e.Label
+		edgesMap[key] = &e
+	}
 	return &workspace.Workspace{
 		Diagrams: diagrams,
 		Objects:  objects,
-		Edges:    edges,
+		Edges:    edgesMap,
 		Links:    links,
 		Config:   workspace.Config{OrgID: "test-org-id"},
 	}

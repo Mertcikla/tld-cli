@@ -191,7 +191,7 @@ func TestLoad_EdgesLoaded(t *testing.T) {
 	cfgPath := setupConfig(t)
 	writeFile(t, cfgPath, minimalConfig())
 	writeFile(t, filepath.Join(dir, "edges.yaml"),
-		"- diagram: sys\n  source_object: a\n  target_object: b\n- diagram: sys\n  source_object: c\n  target_object: d\n")
+		"\"sys:a:b:\":\n  diagram: sys\n  source_object: a\n  target_object: b\n\"sys:c:d:\":\n  diagram: sys\n  source_object: c\n  target_object: d\n")
 
 	ws, err := workspace.Load(dir)
 	if err != nil {
@@ -225,7 +225,7 @@ func TestLoad_MalformedEdgesYAML(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupConfig(t)
 	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "edges.yaml"), "not: valid: yaml: list\n")
+	writeFile(t, filepath.Join(dir, "edges.yaml"), "- diagram: sys\n  source_object: a\n  target_object: b\n")
 
 	_, err := workspace.Load(dir)
 	if err == nil {

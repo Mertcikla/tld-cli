@@ -122,7 +122,7 @@ type Workspace struct {
 	Config   Config
 	Diagrams map[string]*Diagram // key = ref
 	Objects  map[string]*Object  // key = ref
-	Edges    []Edge
+	Edges    map[string]*Edge
 	Links    []Link
 	Meta     *Meta // Loaded from separate _meta sections
 }
