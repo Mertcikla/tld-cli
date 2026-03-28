@@ -16,6 +16,15 @@ make test-cmd     # CLI command tests: cmd/
 make test-stage4  # Only TestApplyCmd (integration with mock gRPC server)
 ```
 
+## Release process
+
+The project uses **Semantic Release** to automate versioning and tagging based on Conventional Commits.
+- **Workflow:** On push to `main`, the `Tag` workflow runs `semantic-release`.
+- **Versioning:** It analyzes commits (feat/fix/etc.), and creates a new git tag (e.g., `v1.2.3`).
+- **Artifacts:** Tag pushes trigger the `Release` workflow, which runs **GoReleaser** to build binaries and create the GitHub release.
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/) for automated releases.
+
 Run a single test:
 ```bash
 go test ./cmd/... -run TestPlanCmd -count=1
