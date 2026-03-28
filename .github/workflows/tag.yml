@@ -15,6 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GH_TOKEN }}
           fetch-depth: 0
           persist-credentials: true
 
@@ -26,4 +27,12 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: npx semantic-release
+        run: |
+          npx \
+            -p semantic-release \
+            -p @semantic-release/commit-analyzer \
+            -p @semantic-release/release-notes-generator \
+            -p @semantic-release/changelog \
+            -p @semantic-release/git \
+            -p @semantic-release/exec \
+            semantic-release
