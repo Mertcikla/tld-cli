@@ -3,8 +3,8 @@ module github.com/mertcikla/tld-cli
 go 1.26.1
 
 require (
-	buf.build/gen/go/tldiagramcom/diagram/connectrpc/go v1.19.1-20260322154242-5d888e292ba3.2
-	buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go v1.36.11-20260322154242-5d888e292ba3.1
+	buf.build/gen/go/tldiagramcom/diagram/connectrpc/go v1.19.1-20260328022351-cdc7b18ed408.2
+	buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go v1.36.11-20260328022351-cdc7b18ed408.1
 	connectrpc.com/connect v1.19.1
 	github.com/speps/go-hashids/v2 v2.0.1
 	github.com/spf13/cobra v1.9.1

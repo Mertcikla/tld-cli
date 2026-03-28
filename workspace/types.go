@@ -131,4 +131,5 @@ type Workspace struct {
 type Meta struct {
 	Diagrams map[string]*ResourceMetadata
 	Objects  map[string]*ResourceMetadata
+	Edges    map[string]*ResourceMetadata // key = "diagramRef:srcRef:tgtRef:label"
 }

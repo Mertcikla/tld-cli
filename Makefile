@@ -1,9 +1,8 @@
 .PHONY: build run test test-unit test-cmd test-cover test-cover-html lint fmt
 
 proto:
-	go get -u buf.build/gen/go/tldiagramcom/diagram/connectrpc/go
-	go get -u buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go
-	go mod tidy
+	go get buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go@$(shell buf registry sdk version --module=buf.build/tldiagramcom/diagram --plugin=buf.build/protocolbuffers/go)
+	go get buf.build/gen/go/tldiagramcom/diagram/connectrpc/go@$(shell buf registry sdk version --module=buf.build/tldiagramcom/diagram --plugin=buf.build/connectrpc/go)
 
 build:
 	go build -o ./build/tld .

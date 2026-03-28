@@ -186,28 +186,36 @@ func updateMetadataFromResponse(wdir string, meta *workspace.Meta, respMsg *diag
 		meta = &workspace.Meta{
 			Diagrams: make(map[string]*workspace.ResourceMetadata),
 			Objects:  make(map[string]*workspace.ResourceMetadata),
+			Edges:    make(map[string]*workspace.ResourceMetadata),
 		}
 	}
 
+	// Create lookup maps for IDs to types
+	diagramIDs := make(map[int32]bool)
+	for _, d := range respMsg.CreatedDiagrams {
+		diagramIDs[d.Id] = true
+	}
+	objectIDs := make(map[int32]bool)
+	for _, o := range respMsg.CreatedObjects {
+		objectIDs[o.Id] = true
+	}
+	edgeIDs := make(map[int32]bool)
+	for _, e := range respMsg.CreatedEdges {
+		edgeIDs[e.Id] = true
+	}
+
 	for ref, resourceMeta := range respMsg.Metadata {
-		isDiagram := false
-		for _, d := range respMsg.CreatedDiagrams {
-			if d.Id == resourceMeta.Id {
-				isDiagram = true
-				break
-			}
+		m := &workspace.ResourceMetadata{
+			ID:        workspace.ResourceID(resourceMeta.Id),
+			UpdatedAt: resourceMeta.UpdatedAt.AsTime(),
 		}
 
-		if isDiagram {
-			meta.Diagrams[ref] = &workspace.ResourceMetadata{
-				ID:        workspace.ResourceID(resourceMeta.Id),
-				UpdatedAt: resourceMeta.UpdatedAt.AsTime(),
-			}
-		} else {
-			meta.Objects[ref] = &workspace.ResourceMetadata{
-				ID:        workspace.ResourceID(resourceMeta.Id),
-				UpdatedAt: resourceMeta.UpdatedAt.AsTime(),
-			}
+		if diagramIDs[resourceMeta.Id] {
+			meta.Diagrams[ref] = m
+		} else if objectIDs[resourceMeta.Id] {
+			meta.Objects[ref] = m
+		} else if edgeIDs[resourceMeta.Id] {
+			meta.Edges[ref] = m
 		}
 	}
 
@@ -217,6 +225,9 @@ func updateMetadataFromResponse(wdir string, meta *workspace.Meta, respMsg *diag
 	}
 	if err := workspace.WriteMetadata(wdir, "objects.yaml", meta.Objects); err != nil {
 		return fmt.Errorf("write objects metadata: %w", err)
+	}
+	if err := workspace.WriteMetadata(wdir, "edges.yaml", meta.Edges); err != nil {
+		return fmt.Errorf("write edges metadata: %w", err)
 	}
 
 	return nil

@@ -130,6 +130,18 @@ func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
 		if e.TargetHandle != "" {
 			pe.TargetHandle = &e.TargetHandle
 		}
+
+		// Attach metadata for idempotent upserts: derive the same stable ref
+		// that the server will compute: "diagramRef:srcRef:tgtRef:label"
+		if !recreateIDs && ws.Meta != nil {
+			edgeRef := e.Diagram + ":" + e.SourceObject + ":" + e.TargetObject + ":" + e.Label
+			if meta, ok := ws.Meta.Edges[edgeRef]; ok {
+				id := int32(meta.ID)
+				pe.Id = &id
+				pe.UpdatedAt = timestamppb.New(meta.UpdatedAt)
+			}
+		}
+
 		req.Edges = append(req.Edges, pe)
 	}
 

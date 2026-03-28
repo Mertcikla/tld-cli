@@ -111,6 +111,7 @@ func LoadMetadata(dir string) (*Meta, error) {
 	meta := &Meta{
 		Diagrams: make(map[string]*ResourceMetadata),
 		Objects:  make(map[string]*ResourceMetadata),
+		Edges:    make(map[string]*ResourceMetadata),
 	}
 
 	// Load diagrams metadata
@@ -121,6 +122,11 @@ func LoadMetadata(dir string) (*Meta, error) {
 	// Load objects metadata
 	if err := loadYAMLMetadata(filepath.Join(dir, "objects.yaml"), meta.Objects); err != nil {
 		return nil, fmt.Errorf("load objects metadata: %w", err)
+	}
+
+	// Load edges metadata
+	if err := loadYAMLMetadata(filepath.Join(dir, "edges.yaml"), meta.Edges); err != nil {
+		return nil, fmt.Errorf("load edges metadata: %w", err)
 	}
 
 	return meta, nil
