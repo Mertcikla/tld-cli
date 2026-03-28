@@ -42,7 +42,7 @@ func TestInitCmd_AlreadyInitialized(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first init: %v", err)
 	}
-	// Second init — should succeed and report already exists (config dir exists)
+	// Second init - should succeed and report already exists (config dir exists)
 	stdout, _, err := runCmd(t, ".", "init", dir)
 	if err != nil {
 		t.Fatalf("second init: %v", err)

@@ -6,7 +6,7 @@
 
 ## Global Options
 
-- `-w, --workspace` — Workspace directory. Defaults to `.`.
+- `-w, --workspace` - Workspace directory. Defaults to `.`.
 
 ---
 
@@ -47,8 +47,8 @@ tld init my-arch
 Authenticate with the tlDiagram server via device authorization flow.
 
 **Flags:**
-- `--server` — Server URL (default: `$TLD_SERVER_URL` or `https://tldiagram.com`)
-- `--no-browser` — Print the auth URL instead of opening a browser
+- `--server` - Server URL (default: `$TLD_SERVER_URL` or `https://tldiagram.com`)
+- `--no-browser` - Print the auth URL instead of opening a browser
 
 ---
 
@@ -56,10 +56,10 @@ Authenticate with the tlDiagram server via device authorization flow.
 Create a new diagram entry in `diagrams.yaml`.
 
 **Flags:**
-- `--ref <slug>` — Override the auto-generated ref (default: slugified name, e.g. `"My API"` → `my-api`)
-- `--description "..."` — Shown in the diagram panel
-- `--level-label "..."` — Abstraction level label (e.g. `System`, `Container`, `Component`)
-- `--parent <diagram_ref>` — Makes this a child diagram; used for hierarchy and topological apply ordering
+- `--ref <slug>` - Override the auto-generated ref (default: slugified name, e.g. `"My API"` → `my-api`)
+- `--description "..."` - Shown in the diagram panel
+- `--level-label "..."` - Abstraction level label (e.g. `System`, `Container`, `Component`)
+- `--parent <diagram_ref>` - Makes this a child diagram; used for hierarchy and topological apply ordering
 
 ```bash
 tld create diagram "System Context" --ref system-context --level-label "System"
@@ -74,12 +74,12 @@ Create a new object and place it on a diagram. **Idempotent**: if an object with
 **Common types:** `service`, `database`, `person`, `external_system`, `queue`, `cache`
 
 **Flags:**
-- `--ref <slug>` — Override auto-generated ref
-- `--description "..."` — What this object does
-- `--technology "..."` — Primary technology (e.g. `Go`, `React`, `PostgreSQL`)
-- `--url "..."` — Link to docs, repo, or dashboard
-- `--position-x <float>` — Horizontal canvas position
-- `--position-y <float>` — Vertical canvas position
+- `--ref <slug>` - Override auto-generated ref
+- `--description "..."` - What this object does
+- `--technology "..."` - Primary technology (e.g. `Go`, `React`, `PostgreSQL`)
+- `--url "..."` - Link to docs, repo, or dashboard
+- `--position-x <float>` - Horizontal canvas position
+- `--position-y <float>` - Vertical canvas position
 
 > **Note:** `logo_url` is supported in `objects.yaml` directly but has no CLI flag. Set it manually in YAML if needed.
 
@@ -96,14 +96,14 @@ tld create object system-context "Auth Provider" external_system --technology "O
 Add a directed edge between two objects on a diagram.
 
 **Flags:**
-- `--from <ref>` **(required)** — Source object ref
-- `--to <ref>` **(required)** — Target object ref
-- `--label "..."` — Short label shown on the edge (e.g. `"calls"`, `"reads"`)
-- `--description "..."` — Longer explanation shown in the edge panel
-- `--relationship-type "..."` — Semantic type (e.g. `uses`, `depends_on`, `integrates`)
-- `--direction` — `forward` | `backward` | `both` | `none` (default: `forward`)
-- `--edge-type` — `bezier` | `straight` | `step` | `smoothstep` (default: `bezier`)
-- `--url "..."` — Link to relevant docs or API spec
+- `--from <ref>` **(required)** - Source object ref
+- `--to <ref>` **(required)** - Target object ref
+- `--label "..."` - Short label shown on the edge (e.g. `"calls"`, `"reads"`)
+- `--description "..."` - Longer explanation shown in the edge panel
+- `--relationship-type "..."` - Semantic type (e.g. `uses`, `depends_on`, `integrates`)
+- `--direction` - `forward` | `backward` | `both` | `none` (default: `forward`)
+- `--edge-type` - `bezier` | `straight` | `step` | `smoothstep` (default: `bezier`)
+- `--url "..."` - Link to relevant docs or API spec
 
 ```bash
 tld connect objects api-internals --from auth-controller --to user-service --label "calls"
@@ -117,9 +117,9 @@ tld connect objects api-internals --from user-repo --to db --label "SQL"
 Create a drill-down navigation link. Clicking the anchor object in the UI navigates to the target diagram.
 
 **Flags:**
-- `--from <diagram_ref>` **(required)** — Source diagram
-- `--to <diagram_ref>` **(required)** — Target diagram to drill down into
-- `--object <ref>` — Object on the source diagram that acts as the drill-down anchor
+- `--from <diagram_ref>` **(required)** - Source diagram
+- `--to <diagram_ref>` **(required)** - Target diagram to drill down into
+- `--object <ref>` - Object on the source diagram that acts as the drill-down anchor
 
 ```bash
 tld add link --object api --from system-context --to api-internals
@@ -152,8 +152,8 @@ Atomically sync the local workspace to the server. Prompts for confirmation unle
 If conflicts are detected (resources modified on the server since last sync), you'll be prompted to abort or force-apply.
 
 **Flags:**
-- `--auto-approve` — Skip the confirmation prompt
-- `--debug` — Log detailed network request/response info
+- `--auto-approve` - Skip the confirmation prompt
+- `--debug` - Log detailed network request/response info
 
 ```bash
 tld apply

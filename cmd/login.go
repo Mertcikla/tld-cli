@@ -109,7 +109,7 @@ func pollDeviceToken(ctx context.Context, serverURL, deviceCode string, interval
 
 		tok, pollErr := deviceToken(ctx, serverURL, deviceCode)
 		if pollErr != nil {
-			// Transient network error — keep polling.
+			// Transient network error - keep polling.
 			continue
 		}
 
@@ -123,7 +123,7 @@ func pollDeviceToken(ctx context.Context, serverURL, deviceCode string, interval
 		case "access_denied":
 			return "", "", fmt.Errorf("authorisation denied by user")
 		case "expired_token":
-			return "", "", fmt.Errorf("device code expired — run 'tld login' again")
+			return "", "", fmt.Errorf("device code expired - run 'tld login' again")
 		default:
 			return "", "", fmt.Errorf("unexpected error from server: %s", tok.Error)
 		}
@@ -192,7 +192,7 @@ func setYAMLKey(mapping *yaml.Node, key, value string) {
 			return
 		}
 	}
-	// Key not found — append.
+	// Key not found - append.
 	mapping.Content = append(mapping.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Value: key},
 		&yaml.Node{Kind: yaml.ScalarNode, Value: value},

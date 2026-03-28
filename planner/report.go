@@ -9,7 +9,7 @@ import (
 )
 
 // RenderPlanMarkdown writes a human-readable plan report to w.
-func RenderPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace) {
+func RenderPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace, verbose bool) {
 	fmt.Fprintln(w, "# Diagram Plan")
 	fmt.Fprintln(w)
 
@@ -29,6 +29,12 @@ func RenderPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace) {
 	fmt.Fprintf(w, "| Links    | %d |\n", len(plan.Request.Links))
 	fmt.Fprintln(w)
 
+	if !verbose {
+		fmt.Fprintln(w, "💡 Use '-v' or '--verbose' for detailed resource reporting (objects, edges, links).")
+		return
+	}
+
+	// Verbose Reporting
 	// Objects per diagram
 	fmt.Fprintln(w, "## Objects per Diagram")
 	fmt.Fprintln(w)

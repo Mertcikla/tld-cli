@@ -240,7 +240,7 @@ func TestLoad_DiagramsFileAbsent(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupConfig(t)
 	writeFile(t, cfgPath, minimalConfig())
-	// No diagrams.yaml created — should not be an error
+	// No diagrams.yaml created - should not be an error
 
 	ws, err := workspace.Load(dir)
 	if err != nil {

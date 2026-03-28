@@ -3,11 +3,11 @@
 `tld` is a CLI for tlDiagram.com. It allows you to define, plan, and apply your system architecture diagrams using configuration files and commands.
 
 # Usage guide
-To efficiently map your codebase with this app, adopt a top-down architectural mapping workflow centered on the "Infinite Zoom" feature. Start by creating a root diagram that defines your system's high-level boundaries—such as your API gateway, main services, and external dependencies. Identify the primary entry points (e.g., main.go or App.tsx) and add them as the first set of objects. Use the tld CLI to define these programmatically in YAML, which allows you to version-control your architecture alongside your source code and ensures that your "source of truth" for the system design remains as dynamic as the code itself.
+To efficiently map your codebase with this app, adopt a top-down architectural mapping workflow centered on the "Infinite Zoom" feature. Start by creating a root diagram that defines your system's high-level boundaries-such as your API gateway, main services, and external dependencies. Identify the primary entry points (e.g., main.go or App.tsx) and add them as the first set of objects. Use the tld CLI to define these programmatically in YAML, which allows you to version-control your architecture alongside your source code and ensures that your "source of truth" for the system design remains as dynamic as the code itself.
 
 Once the high-level actors are connected via edges that represent data flow or dependencies, use the object-linking capability to drill down. Instead of overcrowding a single canvas, link a complex object (like a specific microservice or a core module) to its own sub-diagram. This creates a nested hierarchy where an object on the root canvas acts as a portal to a more granular view of its internal components. Because the data model separates the object definition from its placement, you can reuse the same actor (like a shared database or auth service) across multiple sub-diagrams, with the UI providing a "Find" action to quickly locate where else that component exists in your architecture.
 
-As your codebase evolves, iterate by refining these sub-diagrams and adding new links for emerging complexity. This recursive approach—identifying actors, connecting them, and then "expanding" the most complex nodes into their own diagrams—prevents visual clutter and mirrors the natural mental model of software abstraction. By leveraging the tld plan/apply workflow, you can automate parts of this process, such as parsing directory structures to generate initial objects, making it the most scalable way to keep your documentation in sync with a rapidly growing project.
+As your codebase evolves, iterate by refining these sub-diagrams and adding new links for emerging complexity. This recursive approach-identifying actors, connecting them, and then "expanding" the most complex nodes into their own diagrams-prevents visual clutter and mirrors the natural mental model of software abstraction. By leveraging the tld plan/apply workflow, you can automate parts of this process, such as parsing directory structures to generate initial objects, making it the most scalable way to keep your documentation in sync with a rapidly growing project.
 
 ## Global Options
 
@@ -68,8 +68,9 @@ Add a drill-down link between two diagrams via a specific object.
 Validate the workspace YAML files to ensure semantic correctness, referential integrity, and required fields.
 
 #### `tld plan [flags]`
-Analyze the workspace and show what changes would be applied to the diag server.
+Analyze the workspace and show what changes would be applied to the diag server. By default, it shows a high-level summary and the diagram hierarchy.
 **Flags:**
+- `-v, --verbose`: Show detailed resource reporting, including all objects per diagram, edges, and links.
 - `-o, --output`: Write the plan to a specified file instead of printing to standard output.
 
 #### `tld apply [flags]`
@@ -141,6 +142,8 @@ tld validate
 
 # Review the changes that will be made
 tld plan
+# Or for a detailed view:
+tld plan -v
 
 # Apply the changes to the diag server
 tld apply --auto-approve

@@ -16,6 +16,7 @@ import (
 func newPlanCmd(wdir *string) *cobra.Command {
 	var planOutput string
 	var recreateIDs bool
+	var verbose bool
 
 	c := &cobra.Command{
 		Use:   "plan",
@@ -56,7 +57,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 				out = f
 			}
 
-			planner.RenderPlanMarkdown(out, plan, ws)
+			planner.RenderPlanMarkdown(out, plan, ws, verbose)
 
 			// Show conflicts and drift if any
 			if len(resp.Msg.Conflicts) > 0 {
@@ -80,5 +81,6 @@ func newPlanCmd(wdir *string) *cobra.Command {
 
 	c.Flags().StringVarP(&planOutput, "output", "o", "", "write plan to file instead of stdout")
 	c.Flags().BoolVar(&recreateIDs, "recreate-ids", false, "ignore existing resource IDs and let the server generate new ones")
+	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "show detailed resource reporting (objects, edges, links)")
 	return c
 }

@@ -9,9 +9,16 @@ import (
 
 // Config is parsed from .tld.yaml.
 type Config struct {
-	ServerURL string `yaml:"server_url"`
-	APIKey    string `yaml:"api_key"`
-	OrgID     string `yaml:"org_id"`
+	ServerURL  string            `yaml:"server_url"`
+	APIKey     string            `yaml:"api_key"`
+	OrgID      string            `yaml:"org_id"`
+	Validation *ValidationConfig `yaml:"validation,omitempty"`
+}
+
+// ValidationConfig represents diagram validation settings.
+type ValidationConfig struct {
+	Level           int  `yaml:"level"`
+	AllowLowInsight bool `yaml:"allow_low_insight"`
 }
 
 // Diagram represents an entry in diagrams.yaml

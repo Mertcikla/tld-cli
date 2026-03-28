@@ -26,6 +26,45 @@ func TestPlanCmd_OutputsMarkdown(t *testing.T) {
 	}
 }
 
+func TestPlanCmd_VerboseFlag(t *testing.T) {
+	svc := &mockDiagramService{}
+	serverURL := newMockServer(t, svc)
+
+	dir := t.TempDir()
+	setupApplyWorkspace(t, dir, serverURL)
+	if _, _, err := runCmd(t, dir, "create", "diagram", "System", "--ref", "sys"); err != nil {
+		t.Fatalf("create diagram: %v", err)
+	}
+	// object <diagram_ref> <name> <type>
+	if _, _, err := runCmd(t, dir, "create", "object", "sys", "Svc", "service", "--ref", "svc"); err != nil {
+		t.Fatalf("create object: %v", err)
+	}
+
+	// Without verbose
+	stdout, _, err := runCmd(t, dir, "plan")
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if strings.Contains(stdout, "## Objects per Diagram") {
+		t.Errorf("stdout contains verbose section when it shouldn't: %q", stdout)
+	}
+	if !strings.Contains(stdout, "Use '-v' or '--verbose' for detailed resource reporting") {
+		t.Errorf("stdout missing verbose hint: %q", stdout)
+	}
+
+	// With verbose
+	stdout, _, err = runCmd(t, dir, "plan", "-v")
+	if err != nil {
+		t.Fatalf("plan -v: %v", err)
+	}
+	if !strings.Contains(stdout, "## Objects per Diagram") {
+		t.Errorf("stdout missing verbose section when -v is used: %q", stdout)
+	}
+	if strings.Contains(stdout, "Use '-v' or '--verbose' for detailed resource reporting") {
+		t.Errorf("stdout contains verbose hint when -v is used: %q", stdout)
+	}
+}
+
 func TestPlanCmd_OutputToFile(t *testing.T) {
 	svc := &mockDiagramService{}
 	serverURL := newMockServer(t, svc)

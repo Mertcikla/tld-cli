@@ -56,7 +56,7 @@ func newRemoveDiagramCmd(wdir *string) *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "  cascade: removed %d placement(s) referencing that diagram\n", placements)
 			}
 
-			// Server deletion — skipped when --offline or no server ID is available.
+			// Server deletion - skipped when --offline or no server ID is available.
 			if offline || serverID == 0 || ws.Config.ServerURL == "" {
 				if !offline && serverID == 0 {
 					fmt.Fprintln(cmd.OutOrStdout(), "  hint: no server ID found; run 'tld apply' to sync with the server")

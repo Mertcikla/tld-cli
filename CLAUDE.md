@@ -28,21 +28,21 @@ go test ./workspace/... -run TestLoader -count=1
 
 ```
 YAML files in workspace/
-  → workspace.Load()     — parse all YAML into a Workspace struct
-  → ws.Validate()        — check refs, cycles, required fields
-  → planner.Build()      — convert to gRPC ApplyPlanRequest + topo-sorted DiagramOrder
-  → planner.RenderPlanMarkdown() — human-readable preview
-  → client.ApplyPlan()   — gRPC call to diag backend
-  → reporter.RenderExecutionMarkdown() — execution summary
+  → workspace.Load()     - parse all YAML into a Workspace struct
+  → ws.Validate()        - check refs, cycles, required fields
+  → planner.Build()      - convert to gRPC ApplyPlanRequest + topo-sorted DiagramOrder
+  → planner.RenderPlanMarkdown() - human-readable preview
+  → client.ApplyPlan()   - gRPC call to diag backend
+  → reporter.RenderExecutionMarkdown() - execution summary
 ```
 
 ### Packages
 
-- **`workspace/`** — load/validate/write/delete workspace YAML. Types mirror gRPC protos. `writer.go` contains `Slugify()` for name → ref conversion. `deleter.go` handles cascade deletion (removing a diagram/object removes dependent edges, links, and placements).
-- **`planner/`** — `Build()` maps workspace to `ApplyPlanRequest`; `topoSortDiagrams()` (Kahn's algorithm) ensures parents are created before children.
-- **`reporter/`** — renders execution result markdown (planned vs. created counts, drift items).
-- **`client/`** — gRPC client factory with bearer-token interceptor.
-- **`cmd/`** — Cobra commands; each command validates then plans/applies. `groups.go` registers `create`, `connect`, `add`, and `remove` subcommand groups.
+- **`workspace/`** - load/validate/write/delete workspace YAML. Types mirror gRPC protos. `writer.go` contains `Slugify()` for name → ref conversion. `deleter.go` handles cascade deletion (removing a diagram/object removes dependent edges, links, and placements).
+- **`planner/`** - `Build()` maps workspace to `ApplyPlanRequest`; `topoSortDiagrams()` (Kahn's algorithm) ensures parents are created before children.
+- **`reporter/`** - renders execution result markdown (planned vs. created counts, drift items).
+- **`client/`** - gRPC client factory with bearer-token interceptor.
+- **`cmd/`** - Cobra commands; each command validates then plans/applies. `groups.go` registers `create`, `connect`, `add`, and `remove` subcommand groups.
 
 ### Command tree
 

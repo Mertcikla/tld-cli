@@ -24,7 +24,7 @@ func newRemoveLinkCmd(wdir *string) *cobra.Command {
 				return fmt.Errorf("remove link: %w", err)
 			}
 			if n == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No matching links found — nothing removed.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No matching links found - nothing removed.")
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "Removed %d link(s) from links.yaml\n", n)
 			}

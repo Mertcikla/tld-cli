@@ -23,7 +23,7 @@ func newRemoveEdgeCmd(wdir *string) *cobra.Command {
 				return fmt.Errorf("remove edge: %w", err)
 			}
 			if n == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No matching edges found — nothing removed.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No matching edges found - nothing removed.")
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "Removed %d edge(s) from edges.yaml\n", n)
 			}

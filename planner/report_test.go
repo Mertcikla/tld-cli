@@ -21,7 +21,7 @@ func TestRenderPlanMarkdown_Header(t *testing.T) {
 	w := ws(nil, nil, nil, nil)
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
 	if !strings.Contains(out, "# Diagram Plan") {
 		t.Errorf("missing header: %q", out)
@@ -44,7 +44,7 @@ func TestRenderPlanMarkdown_SummaryTableCounts(t *testing.T) {
 	})
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
 
 	if !strings.Contains(out, "| Diagrams | 2 |") {
@@ -68,7 +68,7 @@ func TestRenderPlanMarkdown_DiagramHierarchySection(t *testing.T) {
 	}, nil, nil, nil)
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
 
 	if !strings.Contains(out, "## Diagram Hierarchy") {
@@ -92,7 +92,7 @@ func TestRenderPlanMarkdown_EdgesSection(t *testing.T) {
 	}, nil)
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, true)
 	out := buf.String()
 
 	if !strings.Contains(out, "## Edges") {
@@ -109,7 +109,7 @@ func TestRenderPlanMarkdown_LinksSection(t *testing.T) {
 	})
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, true)
 	out := buf.String()
 
 	if !strings.Contains(out, "## Links") {
@@ -120,12 +120,30 @@ func TestRenderPlanMarkdown_LinksSection(t *testing.T) {
 	}
 }
 
+func TestRenderPlanMarkdown_VerboseHint(t *testing.T) {
+	w := ws(nil, nil, []workspace.Edge{
+		{Diagram: "d", SourceObject: "src", TargetObject: "tgt", Label: "HTTP"},
+	}, nil)
+	plan := buildPlan(t, w)
+	var buf strings.Builder
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
+	out := buf.String()
+
+	if strings.Contains(out, "## Edges") {
+		t.Errorf("edges section should be hidden when verbose=false: %q", out)
+	}
+	if !strings.Contains(out, "💡 Use '-v' or '--verbose' for detailed resource reporting") {
+		t.Errorf("missing verbose hint: %q", out)
+	}
+}
+
+
 func TestRenderPlanMarkdown_EmptyWorkspace(t *testing.T) {
 	w := ws(nil, nil, nil, nil)
 	plan := buildPlan(t, w)
 	var buf strings.Builder
 	// Should not panic
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
 	if !strings.Contains(out, "# Diagram Plan") {
 		t.Errorf("expected header even for empty workspace: %q", out)
@@ -136,7 +154,7 @@ func TestRenderPlanMarkdown_NoEdgesNoEdgesSection(t *testing.T) {
 	w := ws(nil, nil, nil, nil)
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
 	if strings.Contains(out, "## Edges") {
 		t.Errorf("edges section should be absent when no edges: %q", out)
@@ -147,7 +165,7 @@ func TestRenderPlanMarkdown_NoLinksNoLinksSection(t *testing.T) {
 	w := ws(nil, nil, nil, nil)
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
 	if strings.Contains(out, "## Links") {
 		t.Errorf("links section should be absent when no links: %q", out)
@@ -160,7 +178,7 @@ func TestRenderPlanMarkdown_Order(t *testing.T) {
 	}, nil, nil, nil)
 	plan := buildPlan(t, w)
 	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w)
+	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
 
 	hierarchyIdx := strings.Index(out, "## Diagram Hierarchy")
