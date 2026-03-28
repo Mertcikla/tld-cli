@@ -1,4 +1,4 @@
-.PHONY: build run test test-unit test-cmd test-cover test-cover-html lint fmt
+.PHONY: build run test test-unit test-cmd test-cover test-cover-html lint fmt release
 
 proto:
 	go get buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go@$(shell buf registry sdk version --module=buf.build/tldiagramcom/diagram --plugin=buf.build/protocolbuffers/go)
@@ -36,3 +36,27 @@ fmt: ## Format code
 	@echo "Formatting code..."
 	@go fmt ./...
 	@golangci-lint run --fix
+
+release: ## Create and push a new patch release
+	@echo "Fetching latest tags..."
+	@git fetch --tags --quiet
+	@LATEST_TAG=$$(git tag --sort=-v:refname | head -n 1); \
+	if [ -z "$$LATEST_TAG" ]; then LATEST_TAG="v0.0.0"; fi; \
+	VERSION=$${LATEST_TAG#v}; \
+	MAJOR=$$(echo $$VERSION | cut -d. -f1); \
+	MINOR=$$(echo $$VERSION | cut -d. -f2); \
+	PATCH=$$(echo $$VERSION | cut -d. -f3); \
+	NEW_PATCH=$$((PATCH + 1)); \
+	NEW_TAG="v$$MAJOR.$$MINOR.$$NEW_PATCH"; \
+	echo "Current tag: $$LATEST_TAG"; \
+	echo "New tag:     $$NEW_TAG"; \
+	printf "Confirm release? [y/N] "; \
+	read confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		echo "Creating tag $$NEW_TAG..."; \
+		git tag $$NEW_TAG; \
+		echo "Pushing tag $$NEW_TAG to origin..."; \
+		git push origin $$NEW_TAG; \
+	else \
+		echo "Release cancelled."; \
+	fi
