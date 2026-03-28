@@ -17,6 +17,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 	var planOutput string
 	var recreateIDs bool
 	var verbose bool
+	var strictness int
 
 	c := &cobra.Command{
 		Use:   "plan",
@@ -26,6 +27,15 @@ func newPlanCmd(wdir *string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load workspace: %w", err)
 			}
+
+			// Override strictness if flag is set
+			if strictness > 0 {
+				if ws.Config.Validation == nil {
+					ws.Config.Validation = &workspace.ValidationConfig{}
+				}
+				ws.Config.Validation.Level = strictness
+			}
+
 			if errs := ws.Validate(); len(errs) > 0 {
 				for _, e := range errs {
 					fmt.Fprintf(cmd.ErrOrStderr(), "validation error: %s\n", e)
@@ -61,17 +71,35 @@ func newPlanCmd(wdir *string) *cobra.Command {
 
 			// Show conflicts and drift if any
 			if len(resp.Msg.Conflicts) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "\n⚠️  %d conflicts detected:\n", len(resp.Msg.Conflicts))
+				fmt.Fprintf(out, "\n⚠️  %d conflicts detected:\n", len(resp.Msg.Conflicts))
 				for _, c := range resp.Msg.Conflicts {
-					fmt.Fprintf(cmd.OutOrStdout(), "  * %s \"%s\" (remote is newer: %s)\n",
+					fmt.Fprintf(out, "  * %s \"%s\" (remote is newer: %s)\n",
 						c.ResourceType, c.Ref, c.RemoteUpdatedAt.AsTime().Format(time.RFC3339))
 				}
 			}
 
 			if len(resp.Msg.Drift) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "\n🔍 %d drift items detected:\n", len(resp.Msg.Drift))
+				fmt.Fprintf(out, "\n🔍 %d drift items detected:\n", len(resp.Msg.Drift))
 				for _, d := range resp.Msg.Drift {
-					fmt.Fprintf(cmd.OutOrStdout(), "  * %s \"%s\": %s\n", d.ResourceType, d.Ref, d.Reason)
+					fmt.Fprintf(out, "  * %s \"%s\": %s\n", d.ResourceType, d.Ref, d.Reason)
+				}
+			}
+
+			// Evaluate Diagram warnings
+			warnings := planner.AnalyzePlan(ws)
+			if len(warnings) > 0 {
+				level := 3
+				if ws.Config.Validation != nil && ws.Config.Validation.Level > 0 {
+					level = ws.Config.Validation.Level
+				}
+				levelNames := map[int]string{1: "Minimal", 2: "Standard", 3: "Strict"}
+				fmt.Fprintf(out, "\n⚠️  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
+				for _, wg := range warnings {
+					fmt.Fprintf(out, "[%s]\n%s\n", wg.RuleName, wg.Mediation)
+					for _, v := range wg.Violations {
+						fmt.Fprintf(out, "  * %s\n", v)
+					}
+					fmt.Fprintln(out)
 				}
 			}
 
@@ -82,5 +110,6 @@ func newPlanCmd(wdir *string) *cobra.Command {
 	c.Flags().StringVarP(&planOutput, "output", "o", "", "write plan to file instead of stdout")
 	c.Flags().BoolVar(&recreateIDs, "recreate-ids", false, "ignore existing resource IDs and let the server generate new ones")
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "show detailed resource reporting (objects, edges, links)")
+	c.Flags().IntVar(&strictness, "strictness", 0, "override validation strictness level [1-3]")
 	return c
 }
