@@ -2,13 +2,6 @@
 
 `tld` is a CLI for tlDiagram. Define your architecture in YAML, validate it, and sync it to a tlDiagram server.
 
----
-
-## Global Options
-
-- `-w, --workspace` - Workspace directory. Defaults to `.`.
-
----
 
 ## Workspace Structure
 
@@ -21,36 +14,6 @@ edges.yaml      # Edges (relationships) between objects
 links.yaml      # Drill-down navigation links between diagrams
 ```
 
-### `~/.config/tldiagram/tld.yaml` fields
-
-```yaml
-server_url: https://tldiagram.com
-api_key: <your-key>   # or set TLD_API_KEY env var
-org_id: <uuid>
-```
-
----
-
-## Commands
-
-### `tld init [dir]`
-Initialize a new workspace. Ensures global configuration exists at `~/.config/tldiagram/tld.yaml`.
-
-```bash
-tld init .
-tld init my-arch
-```
-
----
-
-### `tld login`
-Authenticate with the tlDiagram server via device authorization flow.
-
-**Flags:**
-- `--server` - Server URL (default: `$TLD_SERVER_URL` or `https://tldiagram.com`)
-- `--no-browser` - Print the auth URL instead of opening a browser
-
----
 
 ### `tld create diagram <name> [flags]`
 Create a new diagram entry in `diagrams.yaml`.
@@ -133,34 +96,6 @@ Validate workspace YAML for referential integrity, required fields, and parent d
 ```bash
 tld validate
 ```
-
----
-
-### `tld plan [-o file]`
-Show a markdown preview of what would be applied. Performs a server-side dry run to detect conflicts and drift.
-
-```bash
-tld plan
-tld plan -o plan.md
-```
-
----
-
-### `tld apply [--auto-approve]`
-Atomically sync the local workspace to the server. Prompts for confirmation unless `--auto-approve` is passed.
-
-If conflicts are detected (resources modified on the server since last sync), you'll be prompted to abort or force-apply.
-
-**Flags:**
-- `--auto-approve` - Skip the confirmation prompt
-- `--debug` - Log detailed network request/response info
-
-```bash
-tld apply
-tld apply --auto-approve
-```
-
----
 
 ## Slugify Rules
 
