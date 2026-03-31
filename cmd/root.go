@@ -33,7 +33,11 @@ and apply them atomically with 'tld apply'.`,
 	}
 
 	var wdir string
-	root.PersistentFlags().StringVarP(&wdir, "workspace", "w", ".", "workspace directory")
+	defaultWdir := "."
+	if _, err := os.Stat("tld"); err == nil {
+		defaultWdir = "tld"
+	}
+	root.PersistentFlags().StringVarP(&wdir, "workspace", "w", defaultWdir, "workspace directory")
 
 	// Define groups
 	resourceGroup := &cobra.Group{
@@ -58,6 +62,9 @@ and apply them atomically with 'tld apply'.`,
 
 	removeCmd := newRemoveCmd(&wdir)
 	removeCmd.GroupID = resourceGroup.ID
+
+	renameCmd := newRenameCmd(&wdir)
+	renameCmd.GroupID = resourceGroup.ID
 
 	// Secondary Commands
 	initCmd := newInitCmd()
@@ -84,6 +91,9 @@ and apply them atomically with 'tld apply'.`,
 	statusCmd := newStatusCmd(&wdir)
 	statusCmd.GroupID = secondaryGroup.ID
 
+	diffCmd := newDiffCmd(&wdir)
+	diffCmd.GroupID = secondaryGroup.ID
+
 	versionCmd := newVersionCmd()
 	versionCmd.GroupID = secondaryGroup.ID
 
@@ -96,10 +106,12 @@ and apply them atomically with 'tld apply'.`,
 		exportCmd,
 		pullCmd,
 		statusCmd,
+		diffCmd,
 		createCmd,
 		updateCmd,
 		connectCmd,
 		removeCmd,
+		renameCmd,
 		versionCmd,
 	)
 

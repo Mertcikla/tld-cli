@@ -45,6 +45,29 @@ any drift from manual changes in the frontend.`,
 						fmt.Fprintln(cmd.OutOrStdout(), "Local changes: Modified")
 					}
 				}
+
+				// Check for local merge conflicts
+				conflicts := 0
+				if ws.Meta != nil {
+					for _, m := range ws.Meta.Diagrams {
+						if m.Conflict {
+							conflicts++
+						}
+					}
+					for _, m := range ws.Meta.Objects {
+						if m.Conflict {
+							conflicts++
+						}
+					}
+					for _, m := range ws.Meta.Edges {
+						if m.Conflict {
+							conflicts++
+						}
+					}
+				}
+				if conflicts > 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "Merge conflicts: %d found (run 'tld diff' to review)\n", conflicts)
+				}
 			} else {
 				fmt.Fprintln(cmd.OutOrStdout(), "No sync history found.")
 			}

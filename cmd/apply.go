@@ -260,8 +260,14 @@ func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, r
 		return fmt.Errorf("calculate workspace hash: %w", err)
 	}
 
+	// Load current metadata from YAMLs to store in lockfile as the sync point
+	meta, err := workspace.LoadMetadata(wdir)
+	if err != nil {
+		return fmt.Errorf("load metadata for lockfile: %w", err)
+	}
+
 	// Update lock file
-	workspace.UpdateLockFile(lockFile, versionID, "cli", diagramCount, objectCount, edgeCount, linkCount, workspaceHash, nil)
+	workspace.UpdateLockFile(lockFile, versionID, "cli", diagramCount, objectCount, edgeCount, linkCount, workspaceHash, nil, meta)
 
 	if err := workspace.WriteLockFile(wdir, lockFile); err != nil {
 		return fmt.Errorf("write lock file: %w", err)
