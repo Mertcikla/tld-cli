@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mertcikla/tld-cli)](https://go.dev/) [![License](https://img.shields.io/github/license/mertcikla/tld-cli)](./LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/mertcikla/tld-cli/test.yml?branch=main)](https://github.com/mertcikla/tld-cli/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/mertcikla/tld-cli)](https://goreportcard.com/report/github.com/mertcikla/tld-cli)
 
-tld is a command-line interface for managing software architecture diagrams as code. It allows you to define your architecture in YAML, validate the consistency of your definitions, and sync them to  tlDiagram.com.
+tld is a command-line interface for managing software architecture diagrams as code. It allows you to define your architecture in YAML, validate the consistency of your definitions, and sync them to  [tlDiagram.com](http://tldiagram.com/).
 
 
 ## Features
