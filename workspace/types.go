@@ -44,6 +44,10 @@ type Object struct {
 	Technology  string      `yaml:"technology,omitempty"`
 	URL         string      `yaml:"url,omitempty"`
 	LogoURL     string      `yaml:"logo_url,omitempty"`
+	Repo        string      `yaml:"repo,omitempty"`
+	Branch      string      `yaml:"branch,omitempty"`
+	Language    string      `yaml:"language,omitempty"`
+	FilePath    string      `yaml:"file_path,omitempty"`
 	Diagrams    []Placement `yaml:"diagrams,omitempty"`
 }
 

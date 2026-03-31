@@ -9,8 +9,8 @@ import (
 // Workspace. baseWS supplies the Dir and Config fields.
 func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrganizationResponse) *workspace.Workspace {
 	newWS := &workspace.Workspace{
-		Dir:    baseWS.Dir,
-		Config: baseWS.Config,
+		Dir:      baseWS.Dir,
+		Config:   baseWS.Config,
 		Diagrams: make(map[string]*workspace.Diagram),
 		Objects:  make(map[string]*workspace.Object),
 		Edges:    make(map[string]*workspace.Edge),
