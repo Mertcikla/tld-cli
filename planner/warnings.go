@@ -168,7 +168,7 @@ func (ctx *warningContext) checkObjectsL1() {
 
 			if ctx.objectEdges[objRef][p.Diagram] == 0 {
 				if len(o.Diagrams) == 1 {
-					ctx.addWarning("Isolated Object", "Object has 0 edges in a diagram", "explore its relationships further and link it using \"tld add link --from --to\" etc.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
+					ctx.addWarning("Isolated Object", "Object has 0 edges in a diagram", "explore its relationships further and link it using \"tld create link --from --to\" etc.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
 				} else {
 					ctx.addWarning("Shared Context", "Shared object has no edges in sub-view", "Add edges to the shared object in this specific diagram or remove it from this view.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
 				}

@@ -394,8 +394,8 @@ func TestApplyCmd_LinksInRequest(t *testing.T) {
 	if _, _, err := runCmd(t, dir, "create", "object", "sys", "API", "service", "--ref", "api"); err != nil {
 		t.Fatalf("create obj: %v", err)
 	}
-	if _, _, err := runCmd(t, dir, "add", "link", "--object", "api", "--from", "sys", "--to", "con"); err != nil {
-		t.Fatalf("add link: %v", err)
+	if _, _, err := runCmd(t, dir, "create", "link", "--object", "api", "--from", "sys", "--to", "con"); err != nil {
+		t.Fatalf("create link: %v", err)
 	}
 
 	_, _, err := runCmd(t, dir, "apply", "--auto-approve")

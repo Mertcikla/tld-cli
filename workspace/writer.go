@@ -17,34 +17,58 @@ func WriteDiagram(dir, ref string, spec *Diagram) error {
 	return updateYAMLMap(path, ref, spec)
 }
 
+// UpdateDiagram overwrites a diagram in diagrams.yaml.
+func UpdateDiagram(dir, ref string, spec *Diagram) error {
+	path := filepath.Join(dir, "diagrams.yaml")
+	existing := make(map[string]*Diagram)
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+	}
+	existing[ref] = spec
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("marshal diagrams: %w", err)
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
 // WriteObject adds an object to objects.yaml. Errors if ref already exists.
 func WriteObject(dir, ref string, spec *Object) error {
 	path := filepath.Join(dir, "objects.yaml")
 	return updateYAMLMap(path, ref, spec)
 }
 
+// UpdateObject overwrites an object in objects.yaml.
+func UpdateObject(dir, ref string, spec *Object) error {
+	path := filepath.Join(dir, "objects.yaml")
+	existing := make(map[string]*Object)
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+	}
+	existing[ref] = spec
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("marshal objects: %w", err)
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
 // UpsertObject adds an object to objects.yaml or updates an existing one by adding a placement.
 func UpsertObject(dir, ref string, spec *Object) error {
 	path := filepath.Join(dir, "objects.yaml")
-
-	// Read existing objects
 	existing := make(map[string]*Object)
 	if data, err := os.ReadFile(path); err == nil {
 		_ = yaml.Unmarshal(data, &existing)
 	}
 
 	if old, ok := existing[ref]; ok {
-		// Validate type match to prevent accidental reuse of same ref for different things
 		if old.Type != spec.Type {
 			return fmt.Errorf("object %q already exists with type %q (tried to reuse as %q)", ref, old.Type, spec.Type)
 		}
-
-		// Check if placement already exists for this diagram
 		newPlacement := spec.Diagrams[0]
 		found := false
 		for i, p := range old.Diagrams {
 			if p.Diagram == newPlacement.Diagram {
-				// Update position if it's the same diagram
 				old.Diagrams[i].PositionX = newPlacement.PositionX
 				old.Diagrams[i].PositionY = newPlacement.PositionY
 				found = true
@@ -54,8 +78,6 @@ func UpsertObject(dir, ref string, spec *Object) error {
 		if !found {
 			old.Diagrams = append(old.Diagrams, newPlacement)
 		}
-
-		// Enrich metadata if currently empty
 		if old.Description == "" {
 			old.Description = spec.Description
 		}
@@ -66,18 +88,13 @@ func UpsertObject(dir, ref string, spec *Object) error {
 			old.URL = spec.URL
 		}
 	} else {
-		// New object
 		existing[ref] = spec
 	}
-
 	data, err := yaml.Marshal(existing)
 	if err != nil {
 		return fmt.Errorf("marshal objects: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
+	return os.WriteFile(path, data, 0600)
 }
 
 // AppendEdge adds an Edge to edges.yaml keyed by "diagram:source:target:label" (creates file if absent).
@@ -94,10 +111,22 @@ func AppendEdge(dir string, spec *Edge) error {
 	if err != nil {
 		return fmt.Errorf("marshal edges: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+	return os.WriteFile(path, data, 0600)
+}
+
+// UpdateEdge overwrites an edge in edges.yaml.
+func UpdateEdge(dir, key string, spec *Edge) error {
+	path := filepath.Join(dir, "edges.yaml")
+	existing := make(map[string]*Edge)
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
 	}
-	return nil
+	existing[key] = spec
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("marshal edges: %w", err)
+	}
+	return os.WriteFile(path, data, 0600)
 }
 
 // AppendLink appends a Link to links.yaml (creates file if absent).
