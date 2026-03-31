@@ -93,10 +93,21 @@ Update an edge's properties in the workspace YAML. Run `tld apply` to sync chang
 ### Workspace Workflow
 
 #### `tld validate`
-Validate the workspace YAML files to ensure semantic correctness, referential integrity, and required fields.
+Validate the workspace YAML files to ensure semantic correctness, referential integrity, and required fields. It also checks for duplicate names to prevent confusion and slug collisions.
+
+#### `tld status [flags]`
+Show the sync status between your local YAML files and the last known sync point (lock file).
+**Flags:**
+- `--check-server`: Perform a live dry-run on the server to detect drift from manual changes in the frontend UI.
+
+#### `tld pull [flags]`
+Fetch the latest state from tlDiagram.com and update local YAML files. This is the recommended way to sync changes made in the web UI back to your codebase. `tld` uses stable resource IDs (stored in `_meta`) to correctly handle renames and coordinate updates.
+**Flags:**
+- `--force`: Overwrite local changes without prompting.
+- `--dry-run`: Show what would be pulled without writing to files.
 
 #### `tld plan [flags]`
-Analyze the workspace and show what changes would be applied to the diag server. By default, it shows a high-level summary and the diagram hierarchy.
+Analyze the workspace and show what changes would be applied to the diag server. By default, it shows a high-level summary and the diagram hierarchy. It uses detailed drift analysis to show exactly what properties have changed.
 **Flags:**
 - `-v, --verbose`: Show detailed resource reporting, including all objects per diagram, edges, and links.
 - `-o, --output`: Write the plan to a specified file instead of printing to standard output.
@@ -108,7 +119,12 @@ Apply the generated plan or the current workspace state to the diag server.
 
 ---
 
-## Example: Building an E-commerce Platform Architecture
+## Diagram as Code Best Practices
+
+1. **Version Control**: Keep your `.yaml` files and `.tld.lock` in Git. This allows you to track architectural changes alongside code changes.
+2. **Stable Refs**: While `tld` automatically generates slugs from names, you can override them with `--ref`. Once a resource is created, its ref is stored in the YAML keys. `tld` tracks the underlying system ID in the `_meta` section, allowing you to rename resources without losing history.
+3. **Bi-directional Sync**: Use `tld pull` regularly if your team makes changes in the tlDiagram web UI. This ensures your local YAML files remain the source of truth for the latest layout and coordinates.
+4. **Validation**: Run `tld validate` in your CI/CD pipeline to ensure that any architectural changes proposed in Pull Requests are semantically correct.
 
 This example walks through building a system context architecture for an e-commerce platform from scratch using the `tld` CLI.
 

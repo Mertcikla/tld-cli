@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -173,35 +172,57 @@ func Save(ws *Workspace) error {
 }
 
 func writeFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata) error {
-	// Marshal items to a map
-	data, err := yaml.Marshal(items)
-	if err != nil {
-		return fmt.Errorf("marshal items %s: %w", path, err)
-	}
-	var yamlMap map[string]any
-	if err := yaml.Unmarshal(data, &yamlMap); err != nil {
-		return fmt.Errorf("unmarshal %s: %w", path, err)
-	}
-	if len(meta) > 0 {
-		metaSection := make(map[string]any)
-		for ref, m := range meta {
-			metaSection[ref] = map[string]any{
-				"id":         m.ID,
-				"updated_at": m.UpdatedAt.Format(time.RFC3339),
-			}
-		}
-		yamlMap["_meta"] = metaSection
+	// 1. Marshal items to a node
+	var node yaml.Node
+	if err := node.Encode(items); err != nil {
+		return fmt.Errorf("encode items for %s: %w", path, err)
 	}
 
-	// Write back to file
-	finalData, err := yaml.Marshal(yamlMap)
+	// 2. Add _meta section if present
+	if len(meta) > 0 {
+		var mapping *yaml.Node
+		if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+			mapping = node.Content[0]
+		} else if node.Kind == yaml.MappingNode {
+			mapping = &node
+		}
+
+		if mapping != nil && mapping.Kind == yaml.MappingNode {
+			// Add _meta key
+			mapping.Content = append(mapping.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "_meta"},
+				encodeMeta(meta),
+			)
+		}
+	}
+
+	// 3. Write back to file with specific indentation
+	f, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("re-marshal %s: %w", path, err)
+		return fmt.Errorf("create %s: %w", path, err)
 	}
-	if err := os.WriteFile(path, finalData, 0600); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+	defer f.Close()
+
+	enc := yaml.NewEncoder(f)
+	enc.SetIndent(2)
+	if err := enc.Encode(&node); err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
 	}
+
 	return nil
+}
+
+func encodeMeta(meta map[string]*ResourceMetadata) *yaml.Node {
+	metaNode := &yaml.Node{Kind: yaml.MappingNode}
+	// Sort keys for determinism (yaml.v3 does this anyway for maps, but we are building node)
+	// Actually, let's just use Encode and then move it into our node
+	data, _ := yaml.Marshal(meta)
+	var n yaml.Node
+	_ = yaml.Unmarshal(data, &n)
+	if len(n.Content) > 0 {
+		return n.Content[0]
+	}
+	return metaNode
 }
 
 var slugifyRegex = regexp.MustCompile(`[^a-z0-9]+`)

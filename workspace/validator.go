@@ -17,11 +17,17 @@ func (e ValidationError) Error() string {
 func (ws *Workspace) Validate() []ValidationError {
 	var errs []ValidationError
 
-	// Diagrams: required fields + parent ref integrity
+	// Diagrams: required fields + parent ref integrity + unique names
+	diagramNames := make(map[string]string) // name -> ref
 	for ref, d := range ws.Diagrams {
 		loc := fmt.Sprintf("diagrams.yaml[%s]", ref)
 		if d.Name == "" {
 			errs = append(errs, ValidationError{loc, "name is required"})
+		} else {
+			if existingRef, ok := diagramNames[d.Name]; ok {
+				errs = append(errs, ValidationError{loc, fmt.Sprintf("duplicate diagram name %q (also used by %q)", d.Name, existingRef)})
+			}
+			diagramNames[d.Name] = ref
 		}
 		if d.ParentDiagram != "" {
 			if _, ok := ws.Diagrams[d.ParentDiagram]; !ok {
@@ -42,11 +48,17 @@ func (ws *Workspace) Validate() []ValidationError {
 		}
 	}
 
-	// Objects: required fields + diagram placement refs
+	// Objects: required fields + diagram placement refs + unique names
+	objectNames := make(map[string]string) // name -> ref
 	for ref, o := range ws.Objects {
 		loc := fmt.Sprintf("objects.yaml[%s]", ref)
 		if o.Name == "" {
 			errs = append(errs, ValidationError{loc, "name is required"})
+		} else {
+			if existingRef, ok := objectNames[o.Name]; ok {
+				errs = append(errs, ValidationError{loc, fmt.Sprintf("duplicate object name %q (also used by %q)", o.Name, existingRef)})
+			}
+			objectNames[o.Name] = ref
 		}
 		if o.Type == "" {
 			errs = append(errs, ValidationError{loc, "type is required"})
