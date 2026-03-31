@@ -18,6 +18,8 @@ builds:
       - arm64
     main: .
     binary: tld
+    ldflags:
+      - -s -w -X github.com/mertcikla/tld-cli/cmd.Version={{.Version}}
 
 archives:
   - format: tar.gz
@@ -31,6 +33,19 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+
+brews:
+  - repository:
+      owner: Mertcikla
+      name: homebrew-tap
+    directory: Formula
+    homepage: "https://tldiagram.com"
+    description: "CLI for the tlDiagram architecture diagramming system"
+    license: "MIT"
+    install: |
+      bin.install "tld"
+    test: |
+      system "#{bin}/tld version"
 
 checksum:
   name_template: 'checksums.txt'

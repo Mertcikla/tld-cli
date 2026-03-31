@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mertcikla/tld-cli/internal/tech"
 	"github.com/mertcikla/tld-cli/workspace"
 )
 
@@ -188,6 +189,11 @@ func (ctx *warningContext) checkLevel2() {
 	for objRef, o := range ctx.ws.Objects {
 		if o.Technology == "" {
 			ctx.addWarning("Missing Tech", "No `technology` field", "Add a 'technology' field (e.g. Go, React) to clarify the stack.", fmt.Sprintf("Object %q", objRef))
+		} else {
+			missing := tech.Validate(o.Technology)
+			if len(missing) > 0 {
+				ctx.addWarning("Unknown Technology", "Catalog mismatch", "Use recognized technology names (e.g. Go, React) or double check spelling.", fmt.Sprintf("Object %q has unknown: %s", objRef, strings.Join(missing, ", ")))
+			}
 		}
 	}
 	for edgeRef, e := range ctx.ws.Edges {
@@ -225,7 +231,7 @@ func (ctx *warningContext) toSlice() []WarningGroup {
 	var result []WarningGroup
 	order := []string{
 		"High Density", "Isolated Object", "Shared Context", "Depth Mismatch", "Low Insight Ratio", "Dead-End Drilldown", "Abstraction Leak",
-		"Generic Labels", "Missing Tech",
+		"Generic Labels", "Missing Tech", "Unknown Technology",
 		"Missing Desc", "Generic Naming", "Missing Label",
 	}
 	for _, rule := range order {

@@ -29,6 +29,7 @@ Define your architecture in YAML, preview changes with 'tld plan',
 and apply them atomically with 'tld apply'.`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		Version:       Version,
 	}
 
 	var wdir string
@@ -83,6 +84,9 @@ and apply them atomically with 'tld apply'.`,
 	statusCmd := newStatusCmd(&wdir)
 	statusCmd.GroupID = secondaryGroup.ID
 
+	versionCmd := newVersionCmd()
+	versionCmd.GroupID = secondaryGroup.ID
+
 	root.AddCommand(
 		initCmd,
 		loginCmd,
@@ -96,6 +100,7 @@ and apply them atomically with 'tld apply'.`,
 		updateCmd,
 		connectCmd,
 		removeCmd,
+		versionCmd,
 	)
 
 	// Add completion and help explicitly to set their GroupID
