@@ -55,12 +55,40 @@ Add an edge (connection) between two objects on a specified diagram.
 - `--edge-type`: Visual style of the edge. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
 - `--url`: External URL for documentation related to this connection.
 
-#### `tld add link [flags]`
-Add a drill-down link between two diagrams via a specific object.
+#### `tld create link [flags]`
+Create a drill-down link between two diagrams via a specific object.
 **Flags:**
-- `--object`: Object reference that will trigger the drill-down **(required)**.
+- `--object`: Object reference that will trigger the drill-down **(optional)**.
 - `--from`: Source diagram reference **(required)**.
 - `--to`: Target diagram reference to drill down into **(required)**.
+
+#### `tld update object <ref> [flags]`
+Update an object's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
+**Flags:**
+- `--name`: New name for the object.
+- `--type`: New architectural type.
+- `--description`: New description.
+- `--technology`: New primary technology.
+- `--url`: New external URL.
+
+#### `tld update diagram <ref> [flags]`
+Update a diagram's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
+**Flags:**
+- `--name`: New name for the diagram.
+- `--description`: New description.
+- `--level-label`: New abstraction level label.
+
+#### `tld update edge [flags]`
+Update an edge's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
+**Flags:**
+- `--diagram`: Diagram reference (required).
+- `--from`: Source object reference (required).
+- `--to`: Target object reference (required).
+- `--label`: Current label (required if multiple edges exist between the same objects).
+- `--new-label`: New label for the edge.
+- `--description`: New description.
+- `--direction`: New direction (`forward`, `backward`, `both`, `none`).
+- `--edge-type`: New visual style (`bezier`, `straight`, `step`, `smoothstep`).
 
 ### Workspace Workflow
 
@@ -128,11 +156,12 @@ tld create diagram "Web App Containers" --level-label "Container" --parent "e-co
 ```
 *(This generates a diagram with the reference ID: `web-app-containers`)*
 
-### 6. Add a Drill-Down Link
+### 6. Create a Drill-Down Link
 Link the "Web App" object on the system context diagram to the detailed container diagram.
 ```bash
-tld add link --from "e-commerce-platform" --object "web-app" --to "web-app-containers"
+tld create link --from "e-commerce-platform" --object "web-app" --to "web-app-containers"
 ```
+
 
 ### 7. Validate and Apply
 Ensure everything is configured correctly, check the plan, and deploy the architecture.

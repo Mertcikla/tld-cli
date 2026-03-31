@@ -12,7 +12,7 @@ run:
 	go run .
 
 test:
-	go test ./... -v -race -shuffle=on -count=1 -timeout 60s
+	go test ./... -race -shuffle=on -count=1 -timeout 60s
 
 test-cover:
 	go test ./... -race -coverprofile=coverage.out -count=1 -timeout 60s
