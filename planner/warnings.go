@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mertcikla/tld-cli/internal/tech"
 	"github.com/mertcikla/tld-cli/workspace"
 )
 
@@ -168,7 +169,7 @@ func (ctx *warningContext) checkObjectsL1() {
 
 			if ctx.objectEdges[objRef][p.Diagram] == 0 {
 				if len(o.Diagrams) == 1 {
-					ctx.addWarning("Isolated Object", "Object has 0 edges in a diagram", "explore its relationships further and link it using \"tld add link --from --to\" etc.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
+					ctx.addWarning("Isolated Object", "Object has 0 edges in a diagram", "explore its relationships further and link it using \"tld create link --from --to\" etc.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
 				} else {
 					ctx.addWarning("Shared Context", "Shared object has no edges in sub-view", "Add edges to the shared object in this specific diagram or remove it from this view.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
 				}
@@ -188,6 +189,11 @@ func (ctx *warningContext) checkLevel2() {
 	for objRef, o := range ctx.ws.Objects {
 		if o.Technology == "" {
 			ctx.addWarning("Missing Tech", "No `technology` field", "Add a 'technology' field (e.g. Go, React) to clarify the stack.", fmt.Sprintf("Object %q", objRef))
+		} else {
+			missing := tech.Validate(o.Technology)
+			if len(missing) > 0 {
+				ctx.addWarning("Unknown Technology", "Catalog mismatch", "Use recognized technology names (e.g. Go, React) or double check spelling.", fmt.Sprintf("Object %q has unknown: %s", objRef, strings.Join(missing, ", ")))
+			}
 		}
 	}
 	for edgeRef, e := range ctx.ws.Edges {
@@ -225,7 +231,7 @@ func (ctx *warningContext) toSlice() []WarningGroup {
 	var result []WarningGroup
 	order := []string{
 		"High Density", "Isolated Object", "Shared Context", "Depth Mismatch", "Low Insight Ratio", "Dead-End Drilldown", "Abstraction Leak",
-		"Generic Labels", "Missing Tech",
+		"Generic Labels", "Missing Tech", "Unknown Technology",
 		"Missing Desc", "Generic Naming", "Missing Label",
 	}
 	for _, rule := range order {

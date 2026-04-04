@@ -6,11 +6,11 @@ import (
 )
 
 // convertExportResponse converts an ExportOrganizationResponse into a fully-populated
-// Workspace. baseWS supplies the Dir and Config fields.
+// Workspace. baseWS supplies the Dir and Config fields and is used to preserve existing refs.
 func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrganizationResponse) *workspace.Workspace {
 	newWS := &workspace.Workspace{
-		Dir:    baseWS.Dir,
-		Config: baseWS.Config,
+		Dir:      baseWS.Dir,
+		Config:   baseWS.Config,
 		Diagrams: make(map[string]*workspace.Diagram),
 		Objects:  make(map[string]*workspace.Object),
 		Edges:    make(map[string]*workspace.Edge),
@@ -21,10 +21,33 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 		},
 	}
 
-	// Build ID → ref maps using slugified names
+	// Reverse lookup for existing refs by ID
+	existingDiagramRefs := make(map[int32]string)
+	if baseWS.Meta != nil {
+		for ref, m := range baseWS.Meta.Diagrams {
+			existingDiagramRefs[int32(m.ID)] = ref
+		}
+	}
+	existingObjectRefs := make(map[int32]string)
+	if baseWS.Meta != nil {
+		for ref, m := range baseWS.Meta.Objects {
+			existingObjectRefs[int32(m.ID)] = ref
+		}
+	}
+	existingEdgeRefs := make(map[int32]string)
+	if baseWS.Meta != nil {
+		for ref, m := range baseWS.Meta.Edges {
+			existingEdgeRefs[int32(m.ID)] = ref
+		}
+	}
+
+	// Build ID → ref maps
 	diagramIDToRef := make(map[int32]string)
 	for _, d := range msg.Diagrams {
-		ref := workspace.Slugify(d.Name)
+		ref, ok := existingDiagramRefs[d.Id]
+		if !ok {
+			ref = workspace.Slugify(d.Name)
+		}
 		diagramIDToRef[d.Id] = ref
 		newWS.Diagrams[ref] = &workspace.Diagram{
 			Name:        d.Name,
@@ -41,14 +64,18 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 	for _, d := range msg.Diagrams {
 		if d.ParentDiagramId != nil && *d.ParentDiagramId != 0 {
 			if parentRef, ok := diagramIDToRef[*d.ParentDiagramId]; ok {
-				newWS.Diagrams[workspace.Slugify(d.Name)].ParentDiagram = parentRef
+				ref := diagramIDToRef[d.Id]
+				newWS.Diagrams[ref].ParentDiagram = parentRef
 			}
 		}
 	}
 
 	objectIDToRef := make(map[int32]string)
 	for _, o := range msg.Objects {
-		ref := workspace.Slugify(o.Name)
+		ref, ok := existingObjectRefs[o.Id]
+		if !ok {
+			ref = workspace.Slugify(o.Name)
+		}
 		objectIDToRef[o.Id] = ref
 		objType := ""
 		if o.Type != nil {
@@ -61,6 +88,10 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 			Technology:  o.GetTechnology(),
 			URL:         o.GetUrl(),
 			LogoURL:     o.GetLogoUrl(),
+			Repo:        o.GetRepo(),
+			Branch:      o.GetBranch(),
+			Language:    o.GetLanguage(),
+			FilePath:    o.GetFilePath(),
 		}
 		newWS.Meta.Objects[ref] = &workspace.ResourceMetadata{
 			ID:        workspace.ResourceID(o.Id),
@@ -89,7 +120,13 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
-		key := diagRef + ":" + srcRef + ":" + tgtRef + ":" + e.GetLabel()
+
+		// Try to find existing edge key by ID
+		key, ok := existingEdgeRefs[e.Id]
+		if !ok {
+			key = diagRef + ":" + srcRef + ":" + tgtRef + ":" + e.GetLabel()
+		}
+
 		newWS.Edges[key] = &workspace.Edge{
 			Diagram:          diagRef,
 			SourceObject:     srcRef,

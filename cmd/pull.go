@@ -79,8 +79,24 @@ you before overwriting them. Use --force to skip the prompt.`,
 				return nil
 			}
 
-			if err := workspace.Save(newWS); err != nil {
-				return fmt.Errorf("save workspace: %w", err)
+			// Perform surgical merge
+			lastSyncMeta := &workspace.Meta{
+				Diagrams: make(map[string]*workspace.ResourceMetadata),
+				Objects:  make(map[string]*workspace.ResourceMetadata),
+				Edges:    make(map[string]*workspace.ResourceMetadata),
+			}
+			if lockFile != nil && lockFile.Metadata != nil {
+				lastSyncMeta = lockFile.Metadata
+			}
+
+			if force {
+				if err := workspace.Save(newWS); err != nil {
+					return fmt.Errorf("force save workspace: %w", err)
+				}
+			} else {
+				if err := workspace.MergeWorkspace(*wdir, newWS, lastSyncMeta, ws.Meta); err != nil {
+					return fmt.Errorf("merge workspace: %w", err)
+				}
 			}
 
 			hash, err := workspace.CalculateWorkspaceHash(*wdir)
@@ -93,7 +109,7 @@ you before overwriting them. Use --force to skip the prompt.`,
 			versionID := fmt.Sprintf("pull-%s", time.Now().UTC().Format(time.RFC3339))
 			workspace.UpdateLockFile(lockFile, versionID, "pull",
 				len(newWS.Diagrams), len(newWS.Objects), len(newWS.Edges), len(newWS.Links),
-				hash, nil)
+				hash, nil, newWS.Meta)
 			if err := workspace.WriteLockFile(*wdir, lockFile); err != nil {
 				return fmt.Errorf("write lock file: %w", err)
 			}

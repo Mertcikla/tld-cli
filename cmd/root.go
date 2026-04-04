@@ -29,25 +29,101 @@ Define your architecture in YAML, preview changes with 'tld plan',
 and apply them atomically with 'tld apply'.`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		Version:       Version,
 	}
 
 	var wdir string
-	root.PersistentFlags().StringVarP(&wdir, "workspace", "w", ".", "workspace directory")
+	defaultWdir := "."
+	if _, err := os.Stat("tld"); err == nil {
+		defaultWdir = "tld"
+	}
+	root.PersistentFlags().StringVarP(&wdir, "workspace", "w", defaultWdir, "workspace directory")
+
+	// Define groups
+	resourceGroup := &cobra.Group{
+		ID:    "resource",
+		Title: "CRUD actions on resources:",
+	}
+	secondaryGroup := &cobra.Group{
+		ID:    "secondary",
+		Title: "Secondary actions:",
+	}
+	root.AddGroup(resourceGroup, secondaryGroup)
+
+	// CRUD Commands
+	createCmd := newCreateCmd(&wdir)
+	createCmd.GroupID = resourceGroup.ID
+
+	updateCmd := newUpdateCmd(&wdir)
+	updateCmd.GroupID = resourceGroup.ID
+
+	connectCmd := newConnectCmd(&wdir)
+	connectCmd.GroupID = resourceGroup.ID
+
+	removeCmd := newRemoveCmd(&wdir)
+	removeCmd.GroupID = resourceGroup.ID
+
+	renameCmd := newRenameCmd(&wdir)
+	renameCmd.GroupID = resourceGroup.ID
+
+	// Secondary Commands
+	initCmd := newInitCmd()
+	initCmd.GroupID = secondaryGroup.ID
+
+	loginCmd := newLoginCmd(&wdir)
+	loginCmd.GroupID = secondaryGroup.ID
+
+	validateCmd := newValidateCmd(&wdir)
+	validateCmd.GroupID = secondaryGroup.ID
+
+	planCmd := newPlanCmd(&wdir)
+	planCmd.GroupID = secondaryGroup.ID
+
+	applyCmd := newApplyCmd(&wdir)
+	applyCmd.GroupID = secondaryGroup.ID
+
+	exportCmd := newExportCmd(&wdir)
+	exportCmd.GroupID = secondaryGroup.ID
+
+	pullCmd := newPullCmd(&wdir)
+	pullCmd.GroupID = secondaryGroup.ID
+
+	statusCmd := newStatusCmd(&wdir)
+	statusCmd.GroupID = secondaryGroup.ID
+
+	diffCmd := newDiffCmd(&wdir)
+	diffCmd.GroupID = secondaryGroup.ID
+
+	versionCmd := newVersionCmd()
+	versionCmd.GroupID = secondaryGroup.ID
 
 	root.AddCommand(
-		newInitCmd(),
-		newLoginCmd(&wdir),
-		newValidateCmd(&wdir),
-		newPlanCmd(&wdir),
-		newApplyCmd(&wdir),
-		newExportCmd(&wdir),
-		newPullCmd(&wdir),
-		newStatusCmd(&wdir),
-		newCreateCmd(&wdir),
-		newConnectCmd(&wdir),
-		newAddCmd(&wdir),
-		newRemoveCmd(&wdir),
+		initCmd,
+		loginCmd,
+		validateCmd,
+		planCmd,
+		applyCmd,
+		exportCmd,
+		pullCmd,
+		statusCmd,
+		diffCmd,
+		createCmd,
+		updateCmd,
+		connectCmd,
+		removeCmd,
+		renameCmd,
+		versionCmd,
 	)
+
+	// Add completion and help explicitly to set their GroupID
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
+
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == "completion" || cmd.Name() == "help" {
+			cmd.GroupID = secondaryGroup.ID
+		}
+	}
 
 	return root
 }

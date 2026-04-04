@@ -59,7 +59,7 @@ func newExportCmd(wdir *string) *cobra.Command {
 			versionID := fmt.Sprintf("pull-%s", time.Now().UTC().Format(time.RFC3339))
 			workspace.UpdateLockFile(lockFile, versionID, "pull",
 				len(newWS.Diagrams), len(newWS.Objects), len(newWS.Edges), len(newWS.Links),
-				hash, nil)
+				hash, nil, newWS.Meta)
 			if err := workspace.WriteLockFile(*wdir, lockFile); err != nil {
 				return fmt.Errorf("write lock file: %w", err)
 			}

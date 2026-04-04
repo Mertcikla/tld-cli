@@ -56,7 +56,7 @@ The script is the complete, replayable record of every diagram decision. Never r
 Run this check after every batch of `tld create` or `tld connect` commands:
 
 - **New objects:** Do any just-created objects also appear in existing diagrams? Place and wire them there immediately.
-- **New diagrams:** Do any just-created diagrams connect to existing diagrams via drill-down? Add `tld add link` commands.
+- **New diagrams:** Do any just-created diagrams connect to existing diagrams via drill-down? Add `tld create link` commands.
 - **Cross-batch edges:** Are there interactions between objects from this batch and objects from a previous batch that aren't wired yet?
 
 Append any missing links or edges to `diagram.sh` and run them before moving on.
@@ -164,9 +164,9 @@ tld create diagram "Frontend" --ref frontend --parent interfaces
 tld create diagram "Storage" --ref storage --parent data
 
 # --- drill-down links ---
-tld add link --from domain --to backend
-tld add link --from interfaces --to frontend
-tld add link --from data --to storage
+tld create link --from domain --to backend
+tld create link --from interfaces --to frontend
+tld create link --from data --to storage
 ```
 
 **Batch checkpoint:** Are there additional root-to-root or root-to-subsystem links suggested by your inventory? Add them now.
@@ -252,7 +252,7 @@ For every subsystem, append one batch per sub-diagram and run it before starting
 ```bash
 # === API (L3) ===
 tld create diagram "API" --ref api --parent backend --level-label "Container"
-tld add link --object api --from backend --to api
+tld create link --object api --from backend --to api
 ```
 
 ### 6b. Populate with internal components

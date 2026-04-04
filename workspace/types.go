@@ -44,6 +44,10 @@ type Object struct {
 	Technology  string      `yaml:"technology,omitempty"`
 	URL         string      `yaml:"url,omitempty"`
 	LogoURL     string      `yaml:"logo_url,omitempty"`
+	Repo        string      `yaml:"repo,omitempty"`
+	Branch      string      `yaml:"branch,omitempty"`
+	Language    string      `yaml:"language,omitempty"`
+	FilePath    string      `yaml:"file_path,omitempty"`
 	Diagrams    []Placement `yaml:"diagrams,omitempty"`
 }
 
@@ -102,6 +106,7 @@ func (r *ResourceID) UnmarshalYAML(unmarshal func(any) error) error {
 type ResourceMetadata struct {
 	ID        ResourceID `yaml:"id"`
 	UpdatedAt time.Time  `yaml:"updated_at"`
+	Conflict  bool       `yaml:"conflict,omitempty"` // True if both local and server changed since last sync
 }
 
 // LockFile tracks workspace versioning and change history
@@ -113,6 +118,7 @@ type LockFile struct {
 	Resources     *ResourceCounts `yaml:"resources"`
 	WorkspaceHash string          `yaml:"workspace_hash"`           // Hash of all YAML files
 	ParentVersion *string         `yaml:"parent_version,omitempty"` // Previous version
+	Metadata      *Meta           `yaml:"metadata,omitempty"`       // Metadata at time of last sync
 }
 
 // ResourceCounts holds diagram, object, edge, and link counts for a workspace version.

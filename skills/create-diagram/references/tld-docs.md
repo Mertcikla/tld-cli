@@ -76,7 +76,7 @@ tld connect objects api-internals --from user-repo --to db --label "SQL"
 
 ---
 
-### `tld add link [flags]`
+### `tld create link [flags]`
 Create a drill-down navigation link. Clicking the anchor object in the UI navigates to the target diagram.
 
 **Flags:**
@@ -85,7 +85,7 @@ Create a drill-down navigation link. Clicking the anchor object in the UI naviga
 - `--object <ref>` - Object on the source diagram that acts as the drill-down anchor
 
 ```bash
-tld add link --object api --from system-context --to api-internals
+tld create link --object api --from system-context --to api-internals
 ```
 
 ---
@@ -126,7 +126,7 @@ tld connect objects system-context --from web-app --to payment-gateway --label "
 
 # 5. Drill down into Web App
 tld create diagram "Web App Containers" --ref web-app-containers --parent system-context --level-label "Container"
-tld add link --from system-context --object web-app --to web-app-containers
+tld create link --from system-context --object web-app --to web-app-containers
 
 # 6. Validate and apply
 tld validate

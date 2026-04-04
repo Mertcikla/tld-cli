@@ -92,7 +92,7 @@ A tld workspace consists of the following directory structure:
 - `tld create diagram <name>`: Create a new diagram definition.
 - `tld create object <diagram_ref> <name> <type>`: Define a new object and place it on a diagram.
 - `tld connect objects <diagram_ref> --from <source> --to <target> [--source-handle <name>] [--target-handle <name>]`: Define a relationship between two objects, optionally specifying connection handles.
-- `tld add link --from <diagram> --to <diagram> [--object <ref>]`: Create a navigation link between two diagrams.
+- `tld create link --from <diagram> --to <diagram> [--object <ref>]`: Create a navigation link between two diagrams.
 
 ### Removing Resources
 

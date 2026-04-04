@@ -43,7 +43,7 @@ func TestLockFile(t *testing.T) {
 
 	// Test Update
 	newVersionID := "v124"
-	UpdateLockFile(loaded, newVersionID, appliedBy, 2, 3, 4, 5, "hash123", &versionID)
+	UpdateLockFile(loaded, newVersionID, appliedBy, 2, 3, 4, 5, "hash123", &versionID, nil)
 	if loaded.VersionID != newVersionID {
 		t.Errorf("expected new version ID %s, got %s", newVersionID, loaded.VersionID)
 	}

@@ -153,7 +153,7 @@ func TestRemoveLinkCmd(t *testing.T) {
 	mustRunCmd(t, dir, "create", "diagram", "D1", "--ref", "d1")
 	mustRunCmd(t, dir, "create", "diagram", "D2", "--ref", "d2")
 	mustRunCmd(t, dir, "create", "object", "d1", "A", "service", "--ref", "a")
-	mustRunCmd(t, dir, "add", "link", "--object", "a", "--from", "d1", "--to", "d2")
+	mustRunCmd(t, dir, "create", "link", "--object", "a", "--from", "d1", "--to", "d2")
 
 	stdout, _, err := runCmd(t, dir, "remove", "link", "--object", "a", "--from", "d1", "--to", "d2")
 	if err != nil {

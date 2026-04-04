@@ -29,9 +29,9 @@ func TestAddLinkCmd_AppendsLink(t *testing.T) {
 	dir := t.TempDir()
 	setupWorkspaceForLinks(t, dir)
 
-	_, _, err := runCmd(t, dir, "add", "link", "--object", "api", "--from", "system", "--to", "container")
+	_, _, err := runCmd(t, dir, "create", "link", "--object", "api", "--from", "system", "--to", "container")
 	if err != nil {
-		t.Fatalf("add link: %v", err)
+		t.Fatalf("create link: %v", err)
 	}
 
 	data, err := os.ReadFile(filepath.Join(dir, "links.yaml"))
@@ -54,9 +54,9 @@ func TestAddLinkCmd_WithoutObject(t *testing.T) {
 	dir := t.TempDir()
 	setupWorkspaceForLinks(t, dir)
 
-	_, _, err := runCmd(t, dir, "add", "link", "--from", "system", "--to", "container")
+	_, _, err := runCmd(t, dir, "create", "link", "--from", "system", "--to", "container")
 	if err != nil {
-		t.Fatalf("add link without object: %v", err)
+		t.Fatalf("create link without object: %v", err)
 	}
 
 	data, err := os.ReadFile(filepath.Join(dir, "links.yaml"))
@@ -79,13 +79,13 @@ func TestAddLinkCmd_TwoCallsTwoEntries(t *testing.T) {
 	dir := t.TempDir()
 	setupWorkspaceForLinks(t, dir)
 
-	_, _, err := runCmd(t, dir, "add", "link", "--object", "api", "--from", "system", "--to", "container")
+	_, _, err := runCmd(t, dir, "create", "link", "--object", "api", "--from", "system", "--to", "container")
 	if err != nil {
-		t.Fatalf("first add link: %v", err)
+		t.Fatalf("first create link: %v", err)
 	}
-	_, _, err = runCmd(t, dir, "add", "link", "--from", "container", "--to", "system")
+	_, _, err = runCmd(t, dir, "create", "link", "--from", "container", "--to", "system")
 	if err != nil {
-		t.Fatalf("second add link: %v", err)
+		t.Fatalf("second create link: %v", err)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "links.yaml"))
@@ -101,7 +101,7 @@ func TestAddLinkCmd_MissingFromFlag(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 
-	_, _, err := runCmd(t, dir, "add", "link", "--object", "obj", "--to", "con")
+	_, _, err := runCmd(t, dir, "create", "link", "--object", "obj", "--to", "con")
 	if err == nil {
 		t.Fatal("expected error for missing --from")
 	}
@@ -111,7 +111,7 @@ func TestAddLinkCmd_MissingToFlag(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 
-	_, _, err := runCmd(t, dir, "add", "link", "--object", "obj", "--from", "sys")
+	_, _, err := runCmd(t, dir, "create", "link", "--object", "obj", "--from", "sys")
 	if err == nil {
 		t.Fatal("expected error for missing --to")
 	}

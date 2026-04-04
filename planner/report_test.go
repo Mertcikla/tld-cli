@@ -137,7 +137,6 @@ func TestRenderPlanMarkdown_VerboseHint(t *testing.T) {
 	}
 }
 
-
 func TestRenderPlanMarkdown_EmptyWorkspace(t *testing.T) {
 	w := ws(nil, nil, nil, nil)
 	plan := buildPlan(t, w)

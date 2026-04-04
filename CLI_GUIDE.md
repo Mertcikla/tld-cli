@@ -55,20 +55,59 @@ Add an edge (connection) between two objects on a specified diagram.
 - `--edge-type`: Visual style of the edge. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
 - `--url`: External URL for documentation related to this connection.
 
-#### `tld add link [flags]`
-Add a drill-down link between two diagrams via a specific object.
+#### `tld create link [flags]`
+Create a drill-down link between two diagrams via a specific object.
 **Flags:**
-- `--object`: Object reference that will trigger the drill-down **(required)**.
+- `--object`: Object reference that will trigger the drill-down **(optional)**.
 - `--from`: Source diagram reference **(required)**.
 - `--to`: Target diagram reference to drill down into **(required)**.
+
+#### `tld update object <ref> [flags]`
+Update an object's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
+**Flags:**
+- `--name`: New name for the object.
+- `--type`: New architectural type.
+- `--description`: New description.
+- `--technology`: New primary technology.
+- `--url`: New external URL.
+
+#### `tld update diagram <ref> [flags]`
+Update a diagram's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
+**Flags:**
+- `--name`: New name for the diagram.
+- `--description`: New description.
+- `--level-label`: New abstraction level label.
+
+#### `tld update edge [flags]`
+Update an edge's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
+**Flags:**
+- `--diagram`: Diagram reference (required).
+- `--from`: Source object reference (required).
+- `--to`: Target object reference (required).
+- `--label`: Current label (required if multiple edges exist between the same objects).
+- `--new-label`: New label for the edge.
+- `--description`: New description.
+- `--direction`: New direction (`forward`, `backward`, `both`, `none`).
+- `--edge-type`: New visual style (`bezier`, `straight`, `step`, `smoothstep`).
 
 ### Workspace Workflow
 
 #### `tld validate`
-Validate the workspace YAML files to ensure semantic correctness, referential integrity, and required fields.
+Validate the workspace YAML files to ensure semantic correctness, referential integrity, and required fields. It also checks for duplicate names to prevent confusion and slug collisions.
+
+#### `tld status [flags]`
+Show the sync status between your local YAML files and the last known sync point (lock file).
+**Flags:**
+- `--check-server`: Perform a live dry-run on the server to detect drift from manual changes in the frontend UI.
+
+#### `tld pull [flags]`
+Fetch the latest state from tlDiagram.com and update local YAML files. This is the recommended way to sync changes made in the web UI back to your codebase. `tld` uses stable resource IDs (stored in `_meta`) to correctly handle renames and coordinate updates.
+**Flags:**
+- `--force`: Overwrite local changes without prompting.
+- `--dry-run`: Show what would be pulled without writing to files.
 
 #### `tld plan [flags]`
-Analyze the workspace and show what changes would be applied to the diag server. By default, it shows a high-level summary and the diagram hierarchy.
+Analyze the workspace and show what changes would be applied to the diag server. By default, it shows a high-level summary and the diagram hierarchy. It uses detailed drift analysis to show exactly what properties have changed.
 **Flags:**
 - `-v, --verbose`: Show detailed resource reporting, including all objects per diagram, edges, and links.
 - `-o, --output`: Write the plan to a specified file instead of printing to standard output.
@@ -80,7 +119,12 @@ Apply the generated plan or the current workspace state to the diag server.
 
 ---
 
-## Example: Building an E-commerce Platform Architecture
+## Diagram as Code Best Practices
+
+1. **Version Control**: Keep your `.yaml` files and `.tld.lock` in Git. This allows you to track architectural changes alongside code changes.
+2. **Stable Refs**: While `tld` automatically generates slugs from names, you can override them with `--ref`. Once a resource is created, its ref is stored in the YAML keys. `tld` tracks the underlying system ID in the `_meta` section, allowing you to rename resources without losing history.
+3. **Bi-directional Sync**: Use `tld pull` regularly if your team makes changes in the tlDiagram web UI. This ensures your local YAML files remain the source of truth for the latest layout and coordinates.
+4. **Validation**: Run `tld validate` in your CI/CD pipeline to ensure that any architectural changes proposed in Pull Requests are semantically correct.
 
 This example walks through building a system context architecture for an e-commerce platform from scratch using the `tld` CLI.
 
@@ -128,11 +172,12 @@ tld create diagram "Web App Containers" --level-label "Container" --parent "e-co
 ```
 *(This generates a diagram with the reference ID: `web-app-containers`)*
 
-### 6. Add a Drill-Down Link
+### 6. Create a Drill-Down Link
 Link the "Web App" object on the system context diagram to the detailed container diagram.
 ```bash
-tld add link --from "e-commerce-platform" --object "web-app" --to "web-app-containers"
+tld create link --from "e-commerce-platform" --object "web-app" --to "web-app-containers"
 ```
+
 
 ### 7. Validate and Apply
 Ensure everything is configured correctly, check the plan, and deploy the architecture.

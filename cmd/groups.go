@@ -9,6 +9,7 @@ func newCreateCmd(wdir *string) *cobra.Command {
 	}
 	c.AddCommand(newCreateDiagramCmd(wdir))
 	c.AddCommand(newCreateObjectCmd(wdir))
+	c.AddCommand(newCreateLinkCmd(wdir))
 	return c
 }
 
@@ -18,15 +19,6 @@ func newConnectCmd(wdir *string) *cobra.Command {
 		Short: "Connect resources in the workspace",
 	}
 	c.AddCommand(newConnectObjectsCmd(wdir))
-	return c
-}
-
-func newAddCmd(wdir *string) *cobra.Command {
-	c := &cobra.Command{
-		Use:   "add",
-		Short: "Add resources to the workspace",
-	}
-	c.AddCommand(newAddLinkCmd(wdir))
 	return c
 }
 

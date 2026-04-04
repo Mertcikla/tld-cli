@@ -36,7 +36,7 @@ go test ./workspace/... -run TestLoader -count=1
 ### Data flow
 
 ```
-YAML files in workspace/
+YAML files in workspace/ (usually ./tld/)
   → workspace.Load()     - parse all YAML into a Workspace struct
   → ws.Validate()        - check refs, cycles, required fields
   → planner.Build()      - convert to gRPC ApplyPlanRequest + topo-sorted DiagramOrder
@@ -47,21 +47,27 @@ YAML files in workspace/
 
 ### Packages
 
-- **`workspace/`** - load/validate/write/delete workspace YAML. Types mirror gRPC protos. `writer.go` contains `Slugify()` for name → ref conversion. `deleter.go` handles cascade deletion (removing a diagram/object removes dependent edges, links, and placements).
-- **`planner/`** - `Build()` maps workspace to `ApplyPlanRequest`; `topoSortDiagrams()` (Kahn's algorithm) ensures parents are created before children.
-- **`reporter/`** - renders execution result markdown (planned vs. created counts, drift items).
+- **`workspace/`** - load/validate/write/delete workspace YAML. `merger.go` handles surgical three-way merges using `yaml.Node`. `writer.go` handles cascading renames.
+- **`planner/`** - `Build()` maps workspace to `ApplyPlanRequest`.
+- **`reporter/`** - renders execution result markdown.
 - **`client/`** - gRPC client factory with bearer-token interceptor.
-- **`cmd/`** - Cobra commands; each command validates then plans/applies. `groups.go` registers `create`, `connect`, `add`, and `remove` subcommand groups.
+- **`cmd/`** - Cobra commands. `root.go` auto-detects `./tld/` directory.
 
 ### Command tree
 
 ```
 tld
-├── init [dir]
+├── init [dir]         - initializes ./tld/ with diagrams.yaml, objects.yaml, etc.
 ├── login
 ├── validate
 ├── plan [-o file]
 ├── apply [--auto-approve]
+├── pull               - surgical three-way merge from server state
+├── diff               - git-style diff between local and server state
+├── status             - show sync status and merge conflicts
+├── rename
+│   ├── diagram <old> <new> - rename diagram ref and update all usages
+│   └── object <old> <new>  - rename object ref and update all usages
 ├── create
 │   ├── diagram <name> [--ref --description --level-label --parent]
 │   └── object <diagram_ref> <name> <type> [--ref --description --technology --url --position-x --position-y]
@@ -79,18 +85,21 @@ tld
 ### Workspace file layout
 
 ```
-~/.config/tldiagram/tld.yaml              # Config: server URL, API key, org slug
-diagrams.yaml          # All diagrams in one map
-objects.yaml           # All objects in one map
-edges.yaml             # All edges in one list
-links.yaml             # All drill-down links in one list
+~/.config/tldiagram/tld.yaml  # Global config: API key, org slug
+./tld/
+  ├── diagrams.yaml           # All diagrams
+  ├── objects.yaml            # All objects
+  ├── edges.yaml              # All edges
+  ├── links.yaml              # All drill-down links
+  └── .tld.lock               # Sync state, hash, and metadata at last sync
 ```
 
 ### Key patterns
 
-- All commands accept `-w <dir>` (default `.`) for the workspace root.
-- `apply` prompts for confirmation unless `--auto-approve` is passed.
-- API key can be set via `TLD_API_KEY` env var instead of `~/.config/tldiagram/tld.yaml`.
-- `remove diagram` and `remove object` cascade: they remove the entry and filter out all dependent edges, links, and placements from the consolidated files.
+- All commands accept `-w <dir>` (defaults to `./tld` if it exists, else `.`).
+- `pull` uses surgical merging to preserve local comments and formatting.
+- `rename` cascades changes to all files locally.
+- Version conflicts are detected during `pull` (merge conflicts) and `apply` (server-side version check).
+- `diff` uses `git diff --no-index` to compare local state with a temporary export of the server state.
 
-- Tests use `t.TempDir()` + helper functions from `cmd/testhelper_test.go`; `apply_test.go` spins up a mock Connect RPC server in-process.
+- Tests use `t.TempDir()` + helper functions from `cmd/testhelper_test.go`.

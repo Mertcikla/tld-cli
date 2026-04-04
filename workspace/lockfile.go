@@ -92,7 +92,7 @@ func CreateLockFile(versionID, appliedBy string, diagramCount, objectCount, edge
 }
 
 // UpdateLockFile updates an existing lock file with new resource counts and hash
-func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCount, objectCount, edgeCount, linkCount int, workspaceHash string, parentVersion *string) {
+func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCount, objectCount, edgeCount, linkCount int, workspaceHash string, parentVersion *string, metadata *Meta) {
 	lockFile.VersionID = versionID
 	lockFile.LastApply = time.Now()
 	lockFile.AppliedBy = appliedBy
@@ -104,6 +104,7 @@ func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCoun
 	}
 	lockFile.WorkspaceHash = workspaceHash
 	lockFile.ParentVersion = parentVersion
+	lockFile.Metadata = metadata
 }
 
 // LoadMetadata loads metadata from the _meta sections of YAML files

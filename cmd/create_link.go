@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newAddLinkCmd(wdir *string) *cobra.Command {
+func newCreateLinkCmd(wdir *string) *cobra.Command {
 	var (
 		object      string
 		fromDiagram string
@@ -17,7 +17,7 @@ func newAddLinkCmd(wdir *string) *cobra.Command {
 
 	c := &cobra.Command{
 		Use:   "link",
-		Short: "Add a drill-down link between two diagrams (optionally anchored to an object)",
+		Short: "Create a drill-down link between two diagrams (optionally anchored to an object)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			spec := &workspace.Link{
 				Object:      object,
