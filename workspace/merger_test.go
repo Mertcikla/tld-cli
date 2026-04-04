@@ -33,7 +33,9 @@ d2:
   name: D2
   description: original
 `
-	os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte(localContent), 0600)
+	if err := os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte(localContent), 0600); err != nil {
+		t.Fatal(err)
+	}
 	currentMeta := &workspace.Meta{
 		Diagrams: map[string]*workspace.ResourceMetadata{
 			"d1": {ID: 1, UpdatedAt: time.Now()}, // Local change
@@ -66,7 +68,10 @@ d2:
 	}
 
 	// Verify results
-	data, _ := os.ReadFile(filepath.Join(dir, "diagrams.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, "diagrams.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	content := string(data)
 
 	// Check if comment is preserved
@@ -75,7 +80,9 @@ d2:
 	}
 
 	var gotDiags map[string]workspace.Diagram
-	yaml.Unmarshal(data, &gotDiags)
+	if err := yaml.Unmarshal(data, &gotDiags); err != nil {
+		t.Fatal(err)
+	}
 
 	// d1 should keep local change (Server didn't change it since last sync)
 	if gotDiags["d1"].Name != "Local D1" {
@@ -104,7 +111,9 @@ func TestMergeWorkspace_ConflictDetection(t *testing.T) {
 	}
 
 	// Local change
-	os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte("d1: {name: Local}"), 0600)
+	if err := os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte("d1: {name: Local}"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	currentMeta := &workspace.Meta{
 		Diagrams: map[string]*workspace.ResourceMetadata{
 			"d1": {ID: 1, UpdatedAt: time.Now()},
@@ -125,12 +134,19 @@ func TestMergeWorkspace_ConflictDetection(t *testing.T) {
 	}
 
 	// Merge
-	workspace.MergeWorkspace(dir, newWS, lastSyncMeta, currentMeta)
+	if err := workspace.MergeWorkspace(dir, newWS, lastSyncMeta, currentMeta); err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify: Local should win on disk, but meta should mark conflict
-	data, _ := os.ReadFile(filepath.Join(dir, "diagrams.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, "diagrams.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	var gotDiags map[string]any
-	yaml.Unmarshal(data, &gotDiags)
+	if err := yaml.Unmarshal(data, &gotDiags); err != nil {
+		t.Fatal(err)
+	}
 
 	if gotDiags["d1"].(map[string]any)["name"] != "Local" {
 		t.Error("Local change should be preserved on conflict")

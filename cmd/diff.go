@@ -32,7 +32,7 @@ func newDiffCmd(wdir *string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("create temp dir: %w", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 			resp, err := c.ExportOrganization(cmd.Context(), connect.NewRequest(&diagv1.ExportOrganizationRequest{

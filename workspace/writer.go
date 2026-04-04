@@ -27,7 +27,10 @@ func UpdateDiagram(dir, ref string, spec *Diagram) error {
 	if err != nil {
 		return fmt.Errorf("marshal diagrams: %w", err)
 	}
-	return os.WriteFile(path, data, 0600)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write diagrams.yaml: %w", err)
+	}
+	return nil
 }
 
 // WriteObject adds an object to objects.yaml. Errors if ref already exists.
@@ -48,7 +51,10 @@ func UpdateObject(dir, ref string, spec *Object) error {
 	if err != nil {
 		return fmt.Errorf("marshal objects: %w", err)
 	}
-	return os.WriteFile(path, data, 0600)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write objects.yaml: %w", err)
+	}
+	return nil
 }
 
 // UpsertObject adds an object to objects.yaml or updates an existing one by adding a placement.
@@ -92,7 +98,10 @@ func UpsertObject(dir, ref string, spec *Object) error {
 	if err != nil {
 		return fmt.Errorf("marshal objects: %w", err)
 	}
-	return os.WriteFile(path, data, 0600)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write objects.yaml: %w", err)
+	}
+	return nil
 }
 
 // AppendEdge adds an Edge to edges.yaml keyed by "diagram:source:target:label" (creates file if absent).
@@ -109,7 +118,10 @@ func AppendEdge(dir string, spec *Edge) error {
 	if err != nil {
 		return fmt.Errorf("marshal edges: %w", err)
 	}
-	return os.WriteFile(path, data, 0600)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write edges.yaml: %w", err)
+	}
+	return nil
 }
 
 // UpdateEdge overwrites an edge in edges.yaml.
@@ -124,7 +136,10 @@ func UpdateEdge(dir, key string, spec *Edge) error {
 	if err != nil {
 		return fmt.Errorf("marshal edges: %w", err)
 	}
-	return os.WriteFile(path, data, 0600)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write edges.yaml: %w", err)
+	}
+	return nil
 }
 
 // AppendLink appends a Link to links.yaml (creates file if absent).
@@ -170,6 +185,7 @@ func Save(ws *Workspace) error {
 	return nil
 }
 
+// WriteFullYAMLMap writes a map of items to a YAML file, including an optional _meta section.
 func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata) error {
 	// 1. Marshal items to a node
 	var node yaml.Node
@@ -187,10 +203,14 @@ func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata)
 		}
 
 		if mapping != nil && mapping.Kind == yaml.MappingNode {
+			metaNode, err := EncodeMeta(meta)
+			if err != nil {
+				return fmt.Errorf("encode meta for %s: %w", path, err)
+			}
 			// Add _meta key
 			mapping.Content = append(mapping.Content,
 				&yaml.Node{Kind: yaml.ScalarNode, Value: "_meta"},
-				EncodeMeta(meta),
+				metaNode,
 			)
 		}
 	}
@@ -200,7 +220,9 @@ func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	enc := yaml.NewEncoder(f)
 	enc.SetIndent(2)
@@ -208,20 +230,30 @@ func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata)
 		return fmt.Errorf("encode %s: %w", path, err)
 	}
 
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", path, err)
+	}
+
 	return nil
 }
 
-func EncodeMeta(meta map[string]*ResourceMetadata) *yaml.Node {
+// EncodeMeta converts ResourceMetadata map into a yaml.Node.
+func EncodeMeta(meta map[string]*ResourceMetadata) (*yaml.Node, error) {
 	metaNode := &yaml.Node{Kind: yaml.MappingNode}
 	// Sort keys for determinism (yaml.v3 does this anyway for maps, but we are building node)
 	// Actually, let's just use Encode and then move it into our node
-	data, _ := yaml.Marshal(meta)
-	var n yaml.Node
-	_ = yaml.Unmarshal(data, &n)
-	if len(n.Content) > 0 {
-		return n.Content[0]
+	data, err := yaml.Marshal(meta)
+	if err != nil {
+		return nil, fmt.Errorf("marshal meta: %w", err)
 	}
-	return metaNode
+	var n yaml.Node
+	if err := yaml.Unmarshal(data, &n); err != nil {
+		return nil, fmt.Errorf("unmarshal meta: %w", err)
+	}
+	if len(n.Content) > 0 {
+		return n.Content[0], nil
+	}
+	return metaNode, nil
 }
 
 // RenameDiagram changes a diagram ref in diagrams.yaml and cascades to all references.
@@ -231,6 +263,29 @@ func RenameDiagram(dir, oldRef, newRef string) error {
 	}
 
 	// 1. Update diagrams.yaml
+	if err := updateDiagramsYamlForRename(dir, oldRef, newRef); err != nil {
+		return err
+	}
+
+	// 2. Update objects.yaml (placements)
+	if err := updateObjectsYamlForDiagramRename(dir, oldRef, newRef); err != nil {
+		return err
+	}
+
+	// 3. Update edges.yaml (diagram field and keys)
+	if err := updateEdgesYamlForDiagramRename(dir, oldRef, newRef); err != nil {
+		return err
+	}
+
+	// 4. Update links.yaml
+	if err := updateLinksYamlForDiagramRename(dir, oldRef, newRef); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateDiagramsYamlForRename(dir, oldRef, newRef string) error {
 	path := filepath.Join(dir, "diagrams.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -265,94 +320,123 @@ func RenameDiagram(dir, oldRef, newRef string) error {
 	if err := os.WriteFile(path, out, 0600); err != nil {
 		return fmt.Errorf("write diagrams.yaml: %w", err)
 	}
+	return nil
+}
 
-	// 2. Update objects.yaml (placements)
+func updateObjectsYamlForDiagramRename(dir, oldRef, newRef string) error {
 	objPath := filepath.Join(dir, "objects.yaml")
-	if data, err := os.ReadFile(objPath); err == nil {
-		var objects map[string]*Object
-		if err := yaml.Unmarshal(data, &objects); err == nil {
-			changed := false
-			for _, o := range objects {
-				for i, p := range o.Diagrams {
-					if p.Diagram == oldRef {
-						o.Diagrams[i].Diagram = newRef
-						changed = true
-					}
-				}
-			}
-			if changed {
-				out, _ := yaml.Marshal(objects)
-				_ = os.WriteFile(objPath, out, 0600)
+	data, err := os.ReadFile(objPath)
+	if err != nil {
+		return nil // File might not exist, which is fine
+	}
+	var objects map[string]*Object
+	if err := yaml.Unmarshal(data, &objects); err != nil {
+		return nil // Invalid YAML or not objects.yaml, skip
+	}
+	changed := false
+	for _, o := range objects {
+		for i, p := range o.Diagrams {
+			if p.Diagram == oldRef {
+				o.Diagrams[i].Diagram = newRef
+				changed = true
 			}
 		}
 	}
+	if changed {
+		out, err := yaml.Marshal(objects)
+		if err != nil {
+			return fmt.Errorf("marshal objects: %w", err)
+		}
+		if err := os.WriteFile(objPath, out, 0600); err != nil {
+			return fmt.Errorf("write objects.yaml: %w", err)
+		}
+	}
+	return nil
+}
 
-	// 3. Update edges.yaml (diagram field and keys)
+func updateEdgesYamlForDiagramRename(dir, oldRef, newRef string) error {
 	edgePath := filepath.Join(dir, "edges.yaml")
-	if data, err := os.ReadFile(edgePath); err == nil {
-		var edges map[string]any
-		if err := yaml.Unmarshal(data, &edges); err == nil {
-			newEdges := make(map[string]any)
-			changed := false
-			for k, v := range edges {
-				if k == "_meta" {
-					newEdges[k] = v
-					// Update _meta keys if needed
-					if meta, ok := v.(map[string]any); ok {
-						for mk, mv := range meta {
-							if strings.HasPrefix(mk, oldRef+":") {
-								newMk := newRef + mk[len(oldRef):]
-								meta[newMk] = mv
-								delete(meta, mk)
-								changed = true
-							}
-						}
-					}
-					continue
-				}
-				if m, ok := v.(map[string]any); ok {
-					if d, ok := m["diagram"].(string); ok && d == oldRef {
-						m["diagram"] = newRef
-						newKey := newRef + k[len(oldRef):]
-						newEdges[newKey] = m
+	data, err := os.ReadFile(edgePath)
+	if err != nil {
+		return nil
+	}
+	var edges map[string]any
+	if err := yaml.Unmarshal(data, &edges); err != nil {
+		return nil
+	}
+	newEdges := make(map[string]any)
+	changed := false
+	for k, v := range edges {
+		if k == "_meta" {
+			newEdges[k] = v
+			// Update _meta keys if needed
+			if meta, ok := v.(map[string]any); ok {
+				for mk, mv := range meta {
+					if strings.HasPrefix(mk, oldRef+":") {
+						newMk := newRef + mk[len(oldRef):]
+						meta[newMk] = mv
+						delete(meta, mk)
 						changed = true
-					} else {
-						newEdges[k] = v
 					}
-				} else {
-					newEdges[k] = v
 				}
 			}
-			if changed {
-				out, _ := yaml.Marshal(newEdges)
-				_ = os.WriteFile(edgePath, out, 0600)
+			continue
+		}
+		if m, ok := v.(map[string]any); ok {
+			if d, ok := m["diagram"].(string); ok && d == oldRef {
+				m["diagram"] = newRef
+				newKey := newRef + k[len(oldRef):]
+				newEdges[newKey] = m
+				changed = true
+			} else {
+				newEdges[k] = v
 			}
+		} else {
+			newEdges[k] = v
 		}
 	}
+	if changed {
+		out, err := yaml.Marshal(newEdges)
+		if err != nil {
+			return fmt.Errorf("marshal edges: %w", err)
+		}
+		if err := os.WriteFile(edgePath, out, 0600); err != nil {
+			return fmt.Errorf("write edges.yaml: %w", err)
+		}
+	}
+	return nil
+}
 
-	// 4. Update links.yaml
+func updateLinksYamlForDiagramRename(dir, oldRef, newRef string) error {
 	linkPath := filepath.Join(dir, "links.yaml")
-	if data, err := os.ReadFile(linkPath); err == nil {
-		var links []map[string]any
-		if err := yaml.Unmarshal(data, &links); err == nil {
-			changed := false
-			for _, l := range links {
-				if f, ok := l["from_diagram"].(string); ok && f == oldRef {
-					l["from_diagram"] = newRef
-					changed = true
-				}
-				if t, ok := l["to_diagram"].(string); ok && t == oldRef {
-					l["to_diagram"] = newRef
-					changed = true
-				}
-			}
-			if changed {
-				out, _ := yaml.Marshal(links)
-				_ = os.WriteFile(linkPath, out, 0600)
-			}
+	data, err := os.ReadFile(linkPath)
+	if err != nil {
+		return nil
+	}
+	var links []map[string]any
+	if err := yaml.Unmarshal(data, &links); err != nil {
+		return nil
+	}
+	changed := false
+	for _, l := range links {
+		if f, ok := l["from_diagram"].(string); ok && f == oldRef {
+			l["from_diagram"] = newRef
+			changed = true
+		}
+		if t, ok := l["to_diagram"].(string); ok && t == oldRef {
+			l["to_diagram"] = newRef
+			changed = true
 		}
 	}
-
+	if changed {
+		out, err := yaml.Marshal(links)
+		if err != nil {
+			return fmt.Errorf("marshal links: %w", err)
+		}
+		if err := os.WriteFile(linkPath, out, 0600); err != nil {
+			return fmt.Errorf("write links.yaml: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -363,6 +447,24 @@ func RenameObject(dir, oldRef, newRef string) error {
 	}
 
 	// 1. Update objects.yaml
+	if err := updateObjectsYamlForRename(dir, oldRef, newRef); err != nil {
+		return err
+	}
+
+	// 2. Update edges.yaml (source_object and target_object fields and keys)
+	if err := updateEdgesYamlForObjectRename(dir, oldRef, newRef); err != nil {
+		return err
+	}
+
+	// 3. Update links.yaml
+	if err := updateLinksYamlForObjectRename(dir, oldRef, newRef); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateObjectsYamlForRename(dir, oldRef, newRef string) error {
 	path := filepath.Join(dir, "objects.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -397,107 +499,126 @@ func RenameObject(dir, oldRef, newRef string) error {
 	if err := os.WriteFile(path, out, 0600); err != nil {
 		return fmt.Errorf("write objects.yaml: %w", err)
 	}
+	return nil
+}
 
-	// 2. Update edges.yaml (source_object and target_object fields and keys)
+func updateEdgesYamlForObjectRename(dir, oldRef, newRef string) error {
 	edgePath := filepath.Join(dir, "edges.yaml")
-	if data, err := os.ReadFile(edgePath); err == nil {
-		var edges map[string]any
-		if err := yaml.Unmarshal(data, &edges); err == nil {
-			newEdges := make(map[string]any)
-			changed := false
-			for k, v := range edges {
-				if k == "_meta" {
-					newEdges[k] = v
-					// Update _meta keys if needed
-					if meta, ok := v.(map[string]any); ok {
-						for mk, mv := range meta {
-							parts := strings.Split(mk, ":")
-							if len(parts) >= 3 {
-								diag, src, tgt := parts[0], parts[1], parts[2]
-								label := ""
-								if len(parts) > 3 {
-									label = strings.Join(parts[3:], ":")
-								}
-								newSrc, newTgt := src, tgt
-								metaChanged := false
-								if src == oldRef {
-									newSrc = newRef
-									metaChanged = true
-								}
-								if tgt == oldRef {
-									newTgt = newRef
-									metaChanged = true
-								}
-								if metaChanged {
-									newMk := diag + ":" + newSrc + ":" + newTgt + ":" + label
-									meta[newMk] = mv
-									delete(meta, mk)
-									changed = true
-								}
-							}
+	data, err := os.ReadFile(edgePath)
+	if err != nil {
+		return nil
+	}
+	var edges map[string]any
+	if err := yaml.Unmarshal(data, &edges); err != nil {
+		return nil
+	}
+	newEdges := make(map[string]any)
+	changed := false
+	for k, v := range edges {
+		if k == "_meta" {
+			newEdges[k] = v
+			// Update _meta keys if needed
+			if meta, ok := v.(map[string]any); ok {
+				for mk, mv := range meta {
+					parts := strings.Split(mk, ":")
+					if len(parts) >= 3 {
+						diag, src, tgt := parts[0], parts[1], parts[2]
+						label := ""
+						if len(parts) > 3 {
+							label = strings.Join(parts[3:], ":")
 						}
-					}
-					continue
-				}
-				if m, ok := v.(map[string]any); ok {
-					src, _ := m["source_object"].(string)
-					tgt, _ := m["target_object"].(string)
-					edgeChanged := false
-					if src == oldRef {
-						m["source_object"] = newRef
-						edgeChanged = true
-					}
-					if tgt == oldRef {
-						m["target_object"] = newRef
-						edgeChanged = true
-					}
-					if edgeChanged {
-						parts := strings.Split(k, ":")
-						if len(parts) >= 3 {
-							diag := parts[0]
-							label := ""
-							if len(parts) > 3 {
-								label = strings.Join(parts[3:], ":")
-							}
-							newKey := diag + ":" + m["source_object"].(string) + ":" + m["target_object"].(string) + ":" + label
-							newEdges[newKey] = m
+						newSrc, newTgt := src, tgt
+						metaChanged := false
+						if src == oldRef {
+							newSrc = newRef
+							metaChanged = true
+						}
+						if tgt == oldRef {
+							newTgt = newRef
+							metaChanged = true
+						}
+						if metaChanged {
+							newMk := diag + ":" + newSrc + ":" + newTgt + ":" + label
+							meta[newMk] = mv
+							delete(meta, mk)
 							changed = true
-						} else {
-							newEdges[k] = m
 						}
-					} else {
-						newEdges[k] = v
 					}
-				} else {
-					newEdges[k] = v
 				}
 			}
-			if changed {
-				out, _ := yaml.Marshal(newEdges)
-				_ = os.WriteFile(edgePath, out, 0600)
-			}
+			continue
 		}
-	}
-
-	// 3. Update links.yaml
-	linkPath := filepath.Join(dir, "links.yaml")
-	if data, err := os.ReadFile(linkPath); err == nil {
-		var links []map[string]any
-		if err := yaml.Unmarshal(data, &links); err == nil {
-			changed := false
-			for _, l := range links {
-				if o, ok := l["object"].(string); ok && o == oldRef {
-					l["object"] = newRef
+		if m, ok := v.(map[string]any); ok {
+			src, _ := m["source_object"].(string)
+			tgt, _ := m["target_object"].(string)
+			edgeChanged := false
+			if src == oldRef {
+				m["source_object"] = newRef
+				edgeChanged = true
+			}
+			if tgt == oldRef {
+				m["target_object"] = newRef
+				edgeChanged = true
+			}
+			if edgeChanged {
+				parts := strings.Split(k, ":")
+				if len(parts) >= 3 {
+					diag := parts[0]
+					label := ""
+					if len(parts) > 3 {
+						label = strings.Join(parts[3:], ":")
+					}
+					newKey := diag + ":" + m["source_object"].(string) + ":" + m["target_object"].(string) + ":" + label
+					newEdges[newKey] = m
 					changed = true
+				} else {
+					newEdges[k] = m
 				}
+			} else {
+				newEdges[k] = v
 			}
-			if changed {
-				out, _ := yaml.Marshal(links)
-				_ = os.WriteFile(linkPath, out, 0600)
-			}
+		} else {
+			newEdges[k] = v
 		}
 	}
+	if changed {
+		out, err := yaml.Marshal(newEdges)
+		if err != nil {
+			return fmt.Errorf("marshal edges: %w", err)
+		}
+		if err := os.WriteFile(edgePath, out, 0600); err != nil {
+			return fmt.Errorf("write edges.yaml: %w", err)
+		}
+	}
+	return nil
+}
 
+func updateLinksYamlForObjectRename(dir, oldRef, newRef string) error {
+	linkPath := filepath.Join(dir, "links.yaml")
+	data, err := os.ReadFile(linkPath)
+	if err != nil {
+		return nil
+	}
+	var links []map[string]any
+	if err := yaml.Unmarshal(data, &links); err != nil {
+		return nil
+	}
+	changed := false
+	for _, l := range links {
+		if o, ok := l["object"].(string); ok && o == oldRef {
+			l["object"] = newRef
+			changed = true
+		}
+	}
+	if changed {
+		out, err := yaml.Marshal(links)
+		if err != nil {
+			return fmt.Errorf("marshal links: %w", err)
+		}
+		if err := os.WriteFile(linkPath, out, 0600); err != nil {
+			return fmt.Errorf("write links.yaml: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -525,7 +646,9 @@ func updateYAMLMap(path, ref string, item any) error {
 	// Read existing map (if any)
 	existing := make(map[string]any)
 	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
+		if err := yaml.Unmarshal(data, &existing); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
 	}
 
 	if _, ok := existing[ref]; ok {
@@ -557,7 +680,9 @@ func appendYAMLList(path string, item any) error {
 	// Read existing list (if any)
 	var existing []map[string]any
 	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
+		if err := yaml.Unmarshal(data, &existing); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
 	}
 
 	// Marshal item to a map so we can append it

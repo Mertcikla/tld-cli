@@ -50,11 +50,11 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 		if os.IsNotExist(err) {
 			return WriteFullYAMLMap(path, serverItems, serverMeta)
 		}
-		return err
+		return fmt.Errorf("read %s: %w", path, err)
 	}
 
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return err
+		return fmt.Errorf("unmarshal %s: %w", path, err)
 	}
 
 	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
@@ -112,13 +112,12 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 		} else {
 			// Resource exists locally but not on server.
 			// Was it deleted on server or created locally?
-			if lMeta != nil {
-				// Was on server before (last sync), so it was deleted on server.
-				// Remove locally too.
-			} else {
+			if lMeta == nil {
 				// Was never on server, so it's a new local resource. Keep it.
 				newContent = append(newContent, keyNode, valNode)
 			}
+			// Else: Was on server before (last sync), so it was deleted on server.
+			// Remove locally too by NOT adding to newContent.
 		}
 	}
 
@@ -137,7 +136,10 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 	if len(serverMeta) > 0 {
 		var metaKeyNode yaml.Node
 		_ = metaKeyNode.Encode("_meta")
-		metaValNode := EncodeMeta(serverMeta)
+		metaValNode, err := EncodeMeta(serverMeta)
+		if err != nil {
+			return err
+		}
 		newContent = append(newContent, &metaKeyNode, metaValNode)
 	}
 
@@ -146,11 +148,14 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 	// Write back
 	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("create %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	enc := yaml.NewEncoder(f)
 	enc.SetIndent(2)
-	return enc.Encode(&root)
+	if err := enc.Encode(&root); err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	return nil
 }

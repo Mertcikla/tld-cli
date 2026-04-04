@@ -27,7 +27,9 @@ func TestDiffCmd(t *testing.T) {
 
 	// Create a local diagram that is different from server
 	diagYAML := "local-diag: {name: Local Diagram}\n"
-	os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte(diagYAML), 0600)
+	if err := os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte(diagYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Run diff
 	// Note: since it calls 'git diff', it might fail in environments without git or if git is not configured.
@@ -44,7 +46,7 @@ func TestDiffCmd(t *testing.T) {
 	// Given we diff FROM temp TO local:
 	// - server state items should be prefixed with '-'
 	// + local state items should be prefixed with '+'
-	
+
 	// We just check for some expected strings in diff
 	// (git diff might include filenames and line changes)
 }
