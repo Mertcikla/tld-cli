@@ -13,10 +13,10 @@ import (
 func TestPullCmd_PreserveRefs(t *testing.T) {
 	// 1. Setup workspace with a custom ref
 	dir := t.TempDir()
-	
+
 	// Set TLD_CONFIG_DIR to use our temp dir for tld.yaml
 	t.Setenv("TLD_CONFIG_DIR", dir)
-	
+
 	// Create tld.yaml in the temp dir
 	err := os.WriteFile(filepath.Join(dir, "tld.yaml"), []byte("server_url: http://localhost\napi_key: test\norg_id: test-org\n"), 0600)
 	if err != nil {
@@ -56,7 +56,7 @@ _meta:
 			return resp, nil
 		},
 	}
-	
+
 	serverURL := newMockServer(t, svc)
 	// Update config with mock server URL
 	err = os.WriteFile(filepath.Join(dir, "tld.yaml"), []byte("server_url: "+serverURL+"\napi_key: test\norg_id: test-org\n"), 0600)
@@ -84,7 +84,7 @@ _meta:
 	if _, ok := result["my-custom-ref"]; !ok {
 		t.Errorf("objects.yaml lost custom ref 'my-custom-ref'. Keys: %v", getMapKeys(result))
 	}
-	
+
 	obj := result["my-custom-ref"].(map[string]any)
 	if obj["name"] != "API Service Updated" {
 		t.Errorf("Expected name 'API Service Updated', got %q", obj["name"])

@@ -12,7 +12,7 @@ import (
 
 func TestSave_Deterministic(t *testing.T) {
 	dir := t.TempDir()
-	
+
 	ws := &workspace.Workspace{
 		Dir: dir,
 		Diagrams: map[string]*workspace.Diagram{
@@ -49,7 +49,7 @@ func TestSave_Deterministic(t *testing.T) {
 	if aIdx > zIdx {
 		t.Errorf("a-ref should come before z-ref in sorted YAML:\n%s", s)
 	}
-	
+
 	if metaIdx < zIdx {
 		t.Errorf("_meta should come after resources in YAML:\n%s", s)
 	}

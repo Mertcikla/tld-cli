@@ -102,7 +102,7 @@ func TestUpdateSourceCmd_LineLinking(t *testing.T) {
 	setupDiagram(t, dir)
 
 	// Create an object
-	runCmd(t, dir, "create", "object", "system", "API Gateway", "service")
+	mustRunCmd(t, dir, "create", "object", "system", "API Gateway", "service")
 
 	// Update source with line
 	_, _, err := runCmd(t, dir, "update", "source", "api-gateway",
@@ -135,7 +135,7 @@ func TestUpdateSourceCmd_DatabaseFormat(t *testing.T) {
 	setupDiagram(t, dir)
 
 	// Create an object
-	runCmd(t, dir, "create", "object", "system", "PytorchTest", "service")
+	mustRunCmd(t, dir, "create", "object", "system", "PytorchTest", "service")
 
 	// Update source with the specific format
 	_, _, err := runCmd(t, dir, "update", "source", "pytorchtest",

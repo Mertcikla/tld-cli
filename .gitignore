@@ -1,3 +1,4 @@
 build/
 workdir/
 coverage.out
+.DS_Store

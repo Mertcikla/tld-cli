@@ -16,8 +16,13 @@ func TestRenameDiagram(t *testing.T) {
 	diagrams := map[string]workspace.Diagram{
 		"old-diag": {Name: "Old Diagram"},
 	}
-	diagData, _ := yaml.Marshal(diagrams)
-	os.WriteFile(filepath.Join(dir, "diagrams.yaml"), diagData, 0600)
+	diagData, err := yaml.Marshal(diagrams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "diagrams.yaml"), diagData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	objects := map[string]workspace.Object{
 		"obj1": {
@@ -27,8 +32,13 @@ func TestRenameDiagram(t *testing.T) {
 			},
 		},
 	}
-	objData, _ := yaml.Marshal(objects)
-	os.WriteFile(filepath.Join(dir, "objects.yaml"), objData, 0600)
+	objData, err := yaml.Marshal(objects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "objects.yaml"), objData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	edges := map[string]workspace.Edge{
 		"old-diag:src:tgt:": {
@@ -37,15 +47,25 @@ func TestRenameDiagram(t *testing.T) {
 			TargetObject: "tgt",
 		},
 	}
-	edgeData, _ := yaml.Marshal(edges)
-	os.WriteFile(filepath.Join(dir, "edges.yaml"), edgeData, 0600)
+	edgeData, err := yaml.Marshal(edges)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "edges.yaml"), edgeData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	links := []workspace.Link{
 		{FromDiagram: "old-diag", ToDiagram: "other"},
 		{FromDiagram: "other", ToDiagram: "old-diag"},
 	}
-	linkData, _ := yaml.Marshal(links)
-	os.WriteFile(filepath.Join(dir, "links.yaml"), linkData, 0600)
+	linkData, err := yaml.Marshal(links)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "links.yaml"), linkData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Perform rename
 	if err := workspace.RenameDiagram(dir, "old-diag", "new-diag"); err != nil {
@@ -54,8 +74,13 @@ func TestRenameDiagram(t *testing.T) {
 
 	// Verify diagrams.yaml
 	var gotDiags map[string]workspace.Diagram
-	data, _ := os.ReadFile(filepath.Join(dir, "diagrams.yaml"))
-	yaml.Unmarshal(data, &gotDiags)
+	data, err := os.ReadFile(filepath.Join(dir, "diagrams.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &gotDiags); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := gotDiags["old-diag"]; ok {
 		t.Error("old-diag still exists in diagrams.yaml")
 	}
@@ -65,16 +90,26 @@ func TestRenameDiagram(t *testing.T) {
 
 	// Verify objects.yaml
 	var gotObjs map[string]workspace.Object
-	data, _ = os.ReadFile(filepath.Join(dir, "objects.yaml"))
-	yaml.Unmarshal(data, &gotObjs)
+	data, err = os.ReadFile(filepath.Join(dir, "objects.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &gotObjs); err != nil {
+		t.Fatal(err)
+	}
 	if gotObjs["obj1"].Diagrams[0].Diagram != "new-diag" {
 		t.Errorf("object placement not updated: got %q, want %q", gotObjs["obj1"].Diagrams[0].Diagram, "new-diag")
 	}
 
 	// Verify edges.yaml
 	var gotEdges map[string]workspace.Edge
-	data, _ = os.ReadFile(filepath.Join(dir, "edges.yaml"))
-	yaml.Unmarshal(data, &gotEdges)
+	data, err = os.ReadFile(filepath.Join(dir, "edges.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &gotEdges); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := gotEdges["old-diag:src:tgt:"]; ok {
 		t.Error("old edge key still exists in edges.yaml")
 	}
@@ -86,8 +121,13 @@ func TestRenameDiagram(t *testing.T) {
 
 	// Verify links.yaml
 	var gotLinks []workspace.Link
-	data, _ = os.ReadFile(filepath.Join(dir, "links.yaml"))
-	yaml.Unmarshal(data, &gotLinks)
+	data, err = os.ReadFile(filepath.Join(dir, "links.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &gotLinks); err != nil {
+		t.Fatal(err)
+	}
 	if gotLinks[0].FromDiagram != "new-diag" {
 		t.Errorf("link from_diagram not updated: got %q, want %q", gotLinks[0].FromDiagram, "new-diag")
 	}
@@ -103,8 +143,13 @@ func TestRenameObject(t *testing.T) {
 	objects := map[string]workspace.Object{
 		"old-obj": {Name: "Old Object", Type: "service"},
 	}
-	objData, _ := yaml.Marshal(objects)
-	os.WriteFile(filepath.Join(dir, "objects.yaml"), objData, 0600)
+	objData, err := yaml.Marshal(objects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "objects.yaml"), objData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	edges := map[string]workspace.Edge{
 		"diag:old-obj:tgt:": {
@@ -118,14 +163,24 @@ func TestRenameObject(t *testing.T) {
 			TargetObject: "old-obj",
 		},
 	}
-	edgeData, _ := yaml.Marshal(edges)
-	os.WriteFile(filepath.Join(dir, "edges.yaml"), edgeData, 0600)
+	edgeData, err := yaml.Marshal(edges)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "edges.yaml"), edgeData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	links := []workspace.Link{
 		{Object: "old-obj", FromDiagram: "f", ToDiagram: "t"},
 	}
-	linkData, _ := yaml.Marshal(links)
-	os.WriteFile(filepath.Join(dir, "links.yaml"), linkData, 0600)
+	linkData, err := yaml.Marshal(links)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "links.yaml"), linkData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Perform rename
 	if err := workspace.RenameObject(dir, "old-obj", "new-obj"); err != nil {
@@ -134,8 +189,13 @@ func TestRenameObject(t *testing.T) {
 
 	// Verify objects.yaml
 	var gotObjs map[string]workspace.Object
-	data, _ := os.ReadFile(filepath.Join(dir, "objects.yaml"))
-	yaml.Unmarshal(data, &gotObjs)
+	data, err := os.ReadFile(filepath.Join(dir, "objects.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &gotObjs); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := gotObjs["old-obj"]; ok {
 		t.Error("old-obj still exists in objects.yaml")
 	}
@@ -145,8 +205,13 @@ func TestRenameObject(t *testing.T) {
 
 	// Verify edges.yaml
 	var gotEdges map[string]workspace.Edge
-	data, _ = os.ReadFile(filepath.Join(dir, "edges.yaml"))
-	yaml.Unmarshal(data, &gotEdges)
+	data, err = os.ReadFile(filepath.Join(dir, "edges.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &gotEdges); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := gotEdges["diag:old-obj:tgt:"]; ok {
 		t.Error("old edge key (source) still exists")
 	}
@@ -167,8 +232,13 @@ func TestRenameObject(t *testing.T) {
 
 	// Verify links.yaml
 	var gotLinks []workspace.Link
-	data, _ = os.ReadFile(filepath.Join(dir, "links.yaml"))
-	yaml.Unmarshal(data, &gotLinks)
+	data, err = os.ReadFile(filepath.Join(dir, "links.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &gotLinks); err != nil {
+		t.Fatal(err)
+	}
 	if gotLinks[0].Object != "new-obj" {
 		t.Errorf("link object not updated: got %q", gotLinks[0].Object)
 	}
@@ -188,8 +258,13 @@ func TestRename_Errors(t *testing.T) {
 		"diag1": {Name: "D1"},
 		"diag2": {Name: "D2"},
 	}
-	data, _ := yaml.Marshal(diagrams)
-	os.WriteFile(filepath.Join(dir, "diagrams.yaml"), data, 0600)
+	data, err := yaml.Marshal(diagrams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "diagrams.yaml"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	err = workspace.RenameDiagram(dir, "diag1", "diag2")
 	if err == nil {

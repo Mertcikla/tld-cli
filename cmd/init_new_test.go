@@ -12,12 +12,17 @@ func TestInitCmd_CreatesTldDirectory(t *testing.T) {
 	t.Setenv("TLD_CONFIG_DIR", configDir)
 
 	// Change to temp dir to test default "tld" directory creation
-	oldWd, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	// Run init without args
-	_, _, err := runCmd(t, ".", "init")
+	_, _, err = runCmd(t, ".", "init")
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}

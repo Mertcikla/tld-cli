@@ -27,7 +27,7 @@ func newRenameDiagramCmd(wdir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			oldRef, newRef := args[0], args[1]
 			if err := workspace.RenameDiagram(*wdir, oldRef, newRef); err != nil {
-				return err
+				return fmt.Errorf("rename diagram: %w", err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Renamed diagram %q to %q and updated all references.\n", oldRef, newRef)
 			return nil
@@ -43,7 +43,7 @@ func newRenameObjectCmd(wdir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			oldRef, newRef := args[0], args[1]
 			if err := workspace.RenameObject(*wdir, oldRef, newRef); err != nil {
-				return err
+				return fmt.Errorf("rename object: %w", err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Renamed object %q to %q and updated all references.\n", oldRef, newRef)
 			return nil

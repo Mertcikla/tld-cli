@@ -1,3 +1,4 @@
+// Package tech provides technology icon and name validation logic.
 package tech
 
 import (
@@ -61,7 +62,7 @@ func initializeCatalog() {
 	catalogCache = cache
 }
 
-// IsKnown returns true if the technology string or any of its parts (if separated)
+// Validate returns true if the technology string or any of its parts (if separated)
 // matches a known technology in the catalog.
 // It follows the separator logic: , / ;
 func Validate(techStr string) (missing []string) {
