@@ -56,9 +56,15 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			}
 
 			req := plan.Request
-			total := len(req.Diagrams) + len(req.Objects) + len(req.Edges) + len(req.Links)
-			fmt.Fprintf(cmd.OutOrStdout(), "Plan: %d diagrams, %d objects, %d edges, %d links (%d total resources)\n",
-				len(req.Diagrams), len(req.Objects), len(req.Edges), len(req.Links), total)
+			viewCount := 0
+			for _, element := range req.Elements {
+				if element.GetHasView() {
+					viewCount++
+				}
+			}
+			total := len(req.Elements) + viewCount + len(req.Connectors)
+			fmt.Fprintf(cmd.OutOrStdout(), "Plan: %d elements, %d views, %d connectors (%d total resources)\n",
+				len(req.Elements), viewCount, len(req.Connectors), total)
 
 			// Check for version conflicts if lock file exists
 			scanner := bufio.NewScanner(cmd.InOrStdin())
@@ -81,7 +87,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			}
 
 			c := client.New(ws.Config.ServerURL, ws.Config.APIKey, debug)
-			resp, err := c.ApplyPlan(cmd.Context(), connect.NewRequest(req))
+			resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
 				fmt.Fprintln(cmd.ErrOrStderr(), "Apply failed:", err)
 				fmt.Fprintf(cmd.ErrOrStderr(), "  Target URL: %s\n", client.NormalizeURL(ws.Config.ServerURL))
@@ -101,13 +107,11 @@ func newApplyCmd(wdir *string) *cobra.Command {
 				return fmt.Errorf("apply failed: %w", err)
 			}
 
-			// Update metadata with response data
-			if err := updateMetadataFromResponse(*wdir, meta, resp.Msg); err != nil {
+			if err := updatePlanMetadataFromResponse(*wdir, meta, ws, plan, resp.Msg); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update metadata: %v\n", err)
 			}
 
-			// Create or update lock file
-			if err := updateLockFileFromResponse(*wdir, lockFile, resp.Msg); err != nil {
+			if err := updateLockFileFromResponse(*wdir, lockFile, ws, resp.Msg); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update lock file: %v\n", err)
 			}
 
@@ -133,7 +137,7 @@ func detectAndHandleConflicts(cmd *cobra.Command, ws *workspace.Workspace, _ *wo
 	// Perform dry run on the server
 	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 	plan.Request.DryRun = proto.Bool(true)
-	resp, err := c.ApplyPlan(cmd.Context(), connect.NewRequest(plan.Request))
+	resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(plan.Request))
 	plan.Request.DryRun = nil // reset so the real apply is not also a dry run
 	if err != nil {
 		return fmt.Errorf("server plan failed: %w", err)
@@ -180,66 +184,67 @@ func detectAndHandleConflicts(cmd *cobra.Command, ws *workspace.Workspace, _ *wo
 	}
 }
 
-// updateMetadataFromResponse updates workspace metadata with response data
-func updateMetadataFromResponse(wdir string, meta *workspace.Meta, respMsg *diagv1.ApplyPlanResponse) error {
+func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *workspace.Workspace, plan *planner.Plan, respMsg *diagv1.ApplyPlanResponse) error {
+	_ = plan
 	if meta == nil {
-		meta = &workspace.Meta{
-			Diagrams: make(map[string]*workspace.ResourceMetadata),
-			Objects:  make(map[string]*workspace.ResourceMetadata),
-			Edges:    make(map[string]*workspace.ResourceMetadata),
+		meta = &workspace.Meta{}
+	}
+	if meta.Elements == nil {
+		meta.Elements = make(map[string]*workspace.ResourceMetadata)
+	}
+	if meta.Views == nil {
+		meta.Views = make(map[string]*workspace.ResourceMetadata)
+	}
+	if meta.Connectors == nil {
+		meta.Connectors = make(map[string]*workspace.ResourceMetadata)
+	}
+
+	for ref := range ws.Elements {
+		if metadata, ok := resourceMetadataFromMap(respMsg.GetElementMetadata(), ref); ok {
+			meta.Elements[ref] = metadata
+		}
+	}
+	for ref, element := range ws.Elements {
+		if !element.HasView {
+			continue
+		}
+		if metadata, ok := resourceMetadataFromMap(respMsg.GetViewMetadata(), ref); ok {
+			meta.Views[ref] = metadata
+		}
+	}
+	for ref := range ws.Connectors {
+		if metadata, ok := resourceMetadataFromMap(respMsg.GetConnectorMetadata(), ref); ok {
+			meta.Connectors[ref] = metadata
 		}
 	}
 
-	// Create lookup maps for IDs to types
-	diagramIDs := make(map[int32]bool)
-	for _, d := range respMsg.CreatedDiagrams {
-		diagramIDs[d.Id] = true
+	if err := workspace.WriteMetadataSection(wdir, "elements.yaml", "_meta_elements", meta.Elements); err != nil {
+		return fmt.Errorf("write elements metadata: %w", err)
 	}
-	objectIDs := make(map[int32]bool)
-	for _, o := range respMsg.CreatedObjects {
-		objectIDs[o.Id] = true
+	if err := workspace.WriteMetadataSection(wdir, "elements.yaml", "_meta_views", meta.Views); err != nil {
+		return fmt.Errorf("write view metadata: %w", err)
 	}
-	edgeIDs := make(map[int32]bool)
-	for _, e := range respMsg.CreatedEdges {
-		edgeIDs[e.Id] = true
-	}
-
-	for ref, resourceMeta := range respMsg.Metadata {
-		m := &workspace.ResourceMetadata{
-			ID:        workspace.ResourceID(resourceMeta.Id),
-			UpdatedAt: resourceMeta.UpdatedAt.AsTime(),
-		}
-
-		if diagramIDs[resourceMeta.Id] {
-			meta.Diagrams[ref] = m
-		} else if objectIDs[resourceMeta.Id] {
-			meta.Objects[ref] = m
-		} else if edgeIDs[resourceMeta.Id] {
-			meta.Edges[ref] = m
-		}
-	}
-
-	// Write back metadata
-	if err := workspace.WriteMetadata(wdir, "diagrams.yaml", meta.Diagrams); err != nil {
-		return fmt.Errorf("write diagrams metadata: %w", err)
-	}
-	if err := workspace.WriteMetadata(wdir, "objects.yaml", meta.Objects); err != nil {
-		return fmt.Errorf("write objects metadata: %w", err)
-	}
-	if err := workspace.WriteMetadata(wdir, "edges.yaml", meta.Edges); err != nil {
-		return fmt.Errorf("write edges metadata: %w", err)
+	if err := workspace.WriteMetadataSection(wdir, "connectors.yaml", "_meta_connectors", meta.Connectors); err != nil {
+		return fmt.Errorf("write connector metadata: %w", err)
 	}
 
 	return nil
 }
 
 // updateLockFileFromResponse updates lock file with response data
-func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, respMsg *diagv1.ApplyPlanResponse) error {
-	// Count resources
-	diagramCount := len(respMsg.CreatedDiagrams)
-	objectCount := len(respMsg.CreatedObjects)
-	edgeCount := len(respMsg.CreatedEdges)
-	linkCount := len(respMsg.CreatedLinks)
+func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, ws *workspace.Workspace, respMsg *diagv1.ApplyPlanResponse) error {
+	summary := respMsg.GetSummary()
+	viewCount := len(respMsg.GetCreatedViews())
+	elementCount := len(respMsg.GetCreatedElements())
+	connectorCount := len(respMsg.GetCreatedConnectors())
+	legacyViewCount := viewCount
+	legacyElementCount := elementCount
+	legacyConnectorCount := connectorCount
+	if summary != nil {
+		legacyViewCount = int(summary.GetViewsCreated())
+		legacyElementCount = int(summary.GetElementsCreated())
+		legacyConnectorCount = int(summary.GetConnectorsCreated())
+	}
 
 	var lockFile *workspace.LockFile
 	if existingLock != nil {
@@ -249,7 +254,7 @@ func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, r
 	}
 
 	// Generate new version ID
-	versionID := fmt.Sprintf("v%d", diagramCount+objectCount+edgeCount+linkCount)
+	versionID := fmt.Sprintf("v%d", legacyViewCount+legacyElementCount+legacyConnectorCount)
 	if respMsg.Version != nil {
 		versionID = respMsg.Version.VersionId
 	}
@@ -267,10 +272,25 @@ func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, r
 	}
 
 	// Update lock file
-	workspace.UpdateLockFile(lockFile, versionID, "cli", diagramCount, objectCount, edgeCount, linkCount, workspaceHash, nil, meta)
+	workspace.UpdateLockFile(lockFile, versionID, "cli", 0, 0, 0, 0, workspaceHash, nil, meta)
+	lockFile.Resources.Elements = len(ws.Elements)
+	lockFile.Resources.Views = viewCount
+	lockFile.Resources.Connectors = len(ws.Connectors)
 
 	if err := workspace.WriteLockFile(wdir, lockFile); err != nil {
 		return fmt.Errorf("write lock file: %w", err)
 	}
 	return nil
+}
+
+func resourceMetadataFromMap(source map[string]*diagv1.ResourceMetadata, ref string) (*workspace.ResourceMetadata, bool) {
+	resourceMeta, ok := source[ref]
+	if !ok || resourceMeta == nil {
+		return nil, false
+	}
+	metadata := &workspace.ResourceMetadata{ID: workspace.ResourceID(resourceMeta.Id)}
+	if resourceMeta.UpdatedAt != nil {
+		metadata.UpdatedAt = resourceMeta.UpdatedAt.AsTime()
+	}
+	return metadata, true
 }

@@ -52,7 +52,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 			req := plan.Request
 			req.DryRun = proto.Bool(true)
 
-			resp, err := c.ApplyPlan(cmd.Context(), connect.NewRequest(req))
+			resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
 				return fmt.Errorf("server plan failed: %w", err)
 			}

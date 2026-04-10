@@ -51,7 +51,7 @@ func CalculateWorkspaceHash(dir string) (string, error) {
 	hash := sha256.New()
 
 	// Hash each YAML file in order for deterministic results
-	files := []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"}
+	files := []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml", "elements.yaml", "connectors.yaml"}
 
 	for _, filename := range files {
 		path := filepath.Join(dir, filename)
@@ -110,31 +110,46 @@ func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCoun
 // LoadMetadata loads metadata from the _meta sections of YAML files
 func LoadMetadata(dir string) (*Meta, error) {
 	meta := &Meta{
-		Diagrams: make(map[string]*ResourceMetadata),
-		Objects:  make(map[string]*ResourceMetadata),
-		Edges:    make(map[string]*ResourceMetadata),
+		Diagrams:   make(map[string]*ResourceMetadata),
+		Objects:    make(map[string]*ResourceMetadata),
+		Edges:      make(map[string]*ResourceMetadata),
+		Elements:   make(map[string]*ResourceMetadata),
+		Views:      make(map[string]*ResourceMetadata),
+		Connectors: make(map[string]*ResourceMetadata),
 	}
 
 	// Load diagrams metadata
-	if err := loadYAMLMetadata(filepath.Join(dir, "diagrams.yaml"), meta.Diagrams); err != nil {
+	if err := loadYAMLMetadataSection(filepath.Join(dir, "diagrams.yaml"), "_meta", meta.Diagrams); err != nil {
 		return nil, fmt.Errorf("load diagrams metadata: %w", err)
 	}
 
 	// Load objects metadata
-	if err := loadYAMLMetadata(filepath.Join(dir, "objects.yaml"), meta.Objects); err != nil {
+	if err := loadYAMLMetadataSection(filepath.Join(dir, "objects.yaml"), "_meta", meta.Objects); err != nil {
 		return nil, fmt.Errorf("load objects metadata: %w", err)
 	}
 
 	// Load edges metadata
-	if err := loadYAMLMetadata(filepath.Join(dir, "edges.yaml"), meta.Edges); err != nil {
+	if err := loadYAMLMetadataSection(filepath.Join(dir, "edges.yaml"), "_meta", meta.Edges); err != nil {
 		return nil, fmt.Errorf("load edges metadata: %w", err)
+	}
+
+	if err := loadYAMLMetadataSection(filepath.Join(dir, "elements.yaml"), "_meta_elements", meta.Elements); err != nil {
+		return nil, fmt.Errorf("load elements metadata: %w", err)
+	}
+
+	if err := loadYAMLMetadataSection(filepath.Join(dir, "elements.yaml"), "_meta_views", meta.Views); err != nil {
+		return nil, fmt.Errorf("load view metadata: %w", err)
+	}
+
+	if err := loadYAMLMetadataSection(filepath.Join(dir, "connectors.yaml"), "_meta_connectors", meta.Connectors); err != nil {
+		return nil, fmt.Errorf("load connector metadata: %w", err)
 	}
 
 	return meta, nil
 }
 
-// loadYAMLMetadata loads the _meta section from a YAML file
-func loadYAMLMetadata(filepath string, target map[string]*ResourceMetadata) error {
+// loadYAMLMetadataSection loads a metadata section from a YAML file.
+func loadYAMLMetadataSection(filepath, sectionName string, target map[string]*ResourceMetadata) error {
 	data, err := os.ReadFile(filepath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -148,8 +163,7 @@ func loadYAMLMetadata(filepath string, target map[string]*ResourceMetadata) erro
 		return fmt.Errorf("parse %s: %w", filepath, err)
 	}
 
-	// Look for _meta section
-	if metaSection, ok := yamlMap["_meta"].(map[string]any); ok {
+	if metaSection, ok := yamlMap[sectionName].(map[string]any); ok {
 		for ref, metaData := range metaSection {
 			if metaMap, ok := metaData.(map[string]any); ok {
 				metadata := &ResourceMetadata{}
@@ -173,6 +187,11 @@ func loadYAMLMetadata(filepath string, target map[string]*ResourceMetadata) erro
 
 // WriteMetadata writes the _meta section to a YAML file
 func WriteMetadata(dir, filename string, metadata map[string]*ResourceMetadata) error {
+	return WriteMetadataSection(dir, filename, "_meta", metadata)
+}
+
+// WriteMetadataSection writes a named metadata section to a YAML file.
+func WriteMetadataSection(dir, filename, sectionName string, metadata map[string]*ResourceMetadata) error {
 	path := filepath.Join(dir, filename)
 
 	// Read existing file
@@ -196,7 +215,7 @@ func WriteMetadata(dir, filename string, metadata map[string]*ResourceMetadata) 
 		}
 		metaSection[ref] = metaMap
 	}
-	yamlMap["_meta"] = metaSection
+	yamlMap[sectionName] = metaSection
 
 	// Write back to file
 	data, err := yaml.Marshal(yamlMap)

@@ -35,7 +35,7 @@ func newDiffCmd(wdir *string) *cobra.Command {
 			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
-			resp, err := c.ExportOrganization(cmd.Context(), connect.NewRequest(&diagv1.ExportOrganizationRequest{
+			resp, err := c.ExportWorkspace(cmd.Context(), connect.NewRequest(&diagv1.ExportOrganizationRequest{
 				OrgId: targetOrg,
 			}))
 			if err != nil {

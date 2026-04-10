@@ -62,12 +62,12 @@ func newRemoveObjectCmd(wdir *string) *cobra.Command {
 			}
 
 			c := client.New(ws.Config.ServerURL, apiKey, false)
-			req := connect.NewRequest(&diagv1.DeleteObjectRequest{
+			req := connect.NewRequest(&diagv1.DeleteElementRequest{
 				OrgId:    ws.Config.OrgID,
 				ObjectId: int32(serverID),
 			})
 
-			_, err = c.DeleteObject(cmd.Context(), req)
+			_, err = c.DeleteElement(cmd.Context(), req)
 			if err != nil {
 				if connectErr, ok := err.(*connect.Error); ok && connectErr.Code() == connect.CodeNotFound {
 					fmt.Fprintln(cmd.OutOrStdout(), "  server: object not found (already deleted or never applied)")

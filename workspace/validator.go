@@ -17,6 +17,55 @@ func (e ValidationError) Error() string {
 func (ws *Workspace) Validate() []ValidationError {
 	var errs []ValidationError
 
+	// Elements: required fields + placement refs
+	elementNames := make(map[string]string)
+	for ref, element := range ws.Elements {
+		loc := fmt.Sprintf("elements.yaml[%s]", ref)
+		if element.Name == "" {
+			errs = append(errs, ValidationError{loc, "name is required"})
+		} else {
+			if existingRef, ok := elementNames[element.Name]; ok {
+				errs = append(errs, ValidationError{loc, fmt.Sprintf("duplicate element name %q (also used by %q)", element.Name, existingRef)})
+			}
+			elementNames[element.Name] = ref
+		}
+		if element.Kind == "" {
+			errs = append(errs, ValidationError{loc, "kind is required"})
+		}
+		for index, placement := range element.Placements {
+			ploc := fmt.Sprintf("elements.yaml[%s][placements][%d]", ref, index)
+			if placement.ParentRef == "" {
+				errs = append(errs, ValidationError{ploc, "parent is required"})
+				continue
+			}
+			if placement.ParentRef != "root" {
+				if _, ok := ws.Elements[placement.ParentRef]; !ok {
+					errs = append(errs, ValidationError{ploc, fmt.Sprintf("parent ref %q not found", placement.ParentRef)})
+				}
+			}
+		}
+	}
+
+	// Connectors: required fields + ref integrity
+	for ref, connector := range ws.Connectors {
+		loc := fmt.Sprintf("connectors.yaml[%s]", ref)
+		if connector.View == "" {
+			errs = append(errs, ValidationError{loc, "view is required"})
+		} else if _, ok := ws.Elements[connector.View]; !ok {
+			errs = append(errs, ValidationError{loc, fmt.Sprintf("view ref %q not found", connector.View)})
+		}
+		if connector.Source == "" {
+			errs = append(errs, ValidationError{loc, "source is required"})
+		} else if _, ok := ws.Elements[connector.Source]; !ok {
+			errs = append(errs, ValidationError{loc, fmt.Sprintf("source ref %q not found", connector.Source)})
+		}
+		if connector.Target == "" {
+			errs = append(errs, ValidationError{loc, "target is required"})
+		} else if _, ok := ws.Elements[connector.Target]; !ok {
+			errs = append(errs, ValidationError{loc, fmt.Sprintf("target ref %q not found", connector.Target)})
+		}
+	}
+
 	// Diagrams: required fields + parent ref integrity + unique names
 	diagramNames := make(map[string]string) // name -> ref
 	for ref, d := range ws.Diagrams {

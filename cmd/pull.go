@@ -64,7 +64,7 @@ you before overwriting them. Use --force to skip the prompt.`,
 			}
 
 			c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
-			resp, err := c.ExportOrganization(cmd.Context(), connect.NewRequest(&diagv1.ExportOrganizationRequest{
+			resp, err := c.ExportWorkspace(cmd.Context(), connect.NewRequest(&diagv1.ExportOrganizationRequest{
 				OrgId: targetOrg,
 			}))
 			if err != nil {

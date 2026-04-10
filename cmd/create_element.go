@@ -1,0 +1,71 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/mertcikla/tld-cli/workspace"
+	"github.com/spf13/cobra"
+)
+
+func newCreateElementCmd(wdir *string) *cobra.Command {
+	var (
+		description string
+		technology  string
+		url         string
+		positionX   float64
+		positionY   float64
+		ref         string
+		kind        string
+		parent      string
+		hasView     bool
+		viewLabel   string
+	)
+
+	c := &cobra.Command{
+		Use:   "element <name>",
+		Short: "Create or update an element in elements.yaml",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			r := ref
+			if r == "" {
+				r = workspace.Slugify(name)
+			}
+			placementParent := parent
+			if placementParent == "" {
+				placementParent = "root"
+			}
+			spec := &workspace.Element{
+				Name:        name,
+				Kind:        kind,
+				Description: description,
+				Technology:  technology,
+				URL:         url,
+				HasView:     hasView,
+				ViewLabel:   viewLabel,
+				Placements: []workspace.ViewPlacement{{
+					ParentRef: placementParent,
+					PositionX: positionX,
+					PositionY: positionY,
+				}},
+			}
+			if err := workspace.UpsertElement(*wdir, r, spec); err != nil {
+				return fmt.Errorf("upsert element: %w", err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Updated elements.yaml (upserted %s)\n", r)
+			return nil
+		},
+	}
+
+	c.Flags().StringVar(&kind, "kind", "service", "element kind")
+	c.Flags().StringVar(&description, "description", "", "description")
+	c.Flags().StringVar(&technology, "technology", "", "primary technology")
+	c.Flags().StringVar(&url, "url", "", "external URL")
+	c.Flags().Float64Var(&positionX, "position-x", 0, "horizontal canvas position")
+	c.Flags().Float64Var(&positionY, "position-y", 0, "vertical canvas position")
+	c.Flags().StringVar(&ref, "ref", "", "override generated ref (default: slugified name)")
+	c.Flags().StringVar(&parent, "parent", "root", "parent element ref or root")
+	c.Flags().BoolVar(&hasView, "with-view", false, "mark the element as owning a canonical internal view")
+	c.Flags().StringVar(&viewLabel, "view-label", "", "optional label for the canonical internal view")
+	return c
+}

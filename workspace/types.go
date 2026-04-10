@@ -36,6 +36,14 @@ type Placement struct {
 	PositionY float64 `yaml:"position_y,omitempty"`
 }
 
+// ViewPlacement is an element placement within another element's internal view.
+// Parent "root" means the synthetic workspace root.
+type ViewPlacement struct {
+	ParentRef string  `yaml:"parent"`
+	PositionX float64 `yaml:"position_x,omitempty"`
+	PositionY float64 `yaml:"position_y,omitempty"`
+}
+
 // Object represents an entry in objects.yaml
 type Object struct {
 	Name        string      `yaml:"name"`
@@ -71,6 +79,39 @@ type Link struct {
 	Object      string `yaml:"object,omitempty"`
 	FromDiagram string `yaml:"from_diagram"`
 	ToDiagram   string `yaml:"to_diagram"`
+}
+
+// Element is the primary workspace resource.
+// It combines reusable identity with optional internal view metadata.
+type Element struct {
+	Name        string          `yaml:"name"`
+	Kind        string          `yaml:"kind"`
+	Description string          `yaml:"description,omitempty"`
+	Technology  string          `yaml:"technology,omitempty"`
+	URL         string          `yaml:"url,omitempty"`
+	LogoURL     string          `yaml:"logo_url,omitempty"`
+	Repo        string          `yaml:"repo,omitempty"`
+	Branch      string          `yaml:"branch,omitempty"`
+	Language    string          `yaml:"language,omitempty"`
+	FilePath    string          `yaml:"file_path,omitempty"`
+	HasView     bool            `yaml:"has_view,omitempty"`
+	ViewLabel   string          `yaml:"view_label,omitempty"`
+	Placements  []ViewPlacement `yaml:"placements,omitempty"`
+}
+
+// Connector is one entry in connectors.yaml.
+type Connector struct {
+	View         string `yaml:"view"`
+	Source       string `yaml:"source"`
+	Target       string `yaml:"target"`
+	Label        string `yaml:"label,omitempty"`
+	Description  string `yaml:"description,omitempty"`
+	Relationship string `yaml:"relationship,omitempty"`
+	Direction    string `yaml:"direction,omitempty"`
+	Style        string `yaml:"style,omitempty"`
+	URL          string `yaml:"url,omitempty"`
+	SourceHandle string `yaml:"source_handle,omitempty"`
+	TargetHandle string `yaml:"target_handle,omitempty"`
 }
 
 // ResourceID is an int32 that serializes to Hashids in YAML
@@ -123,26 +164,34 @@ type LockFile struct {
 
 // ResourceCounts holds diagram, object, edge, and link counts for a workspace version.
 type ResourceCounts struct {
-	Diagrams int `yaml:"diagrams"`
-	Objects  int `yaml:"objects"`
-	Edges    int `yaml:"edges"`
-	Links    int `yaml:"links"`
+	Diagrams   int `yaml:"diagrams"`
+	Objects    int `yaml:"objects"`
+	Edges      int `yaml:"edges"`
+	Links      int `yaml:"links"`
+	Elements   int `yaml:"elements,omitempty"`
+	Views      int `yaml:"views,omitempty"`
+	Connectors int `yaml:"connectors,omitempty"`
 }
 
 // Workspace holds the fully loaded workspace state
 type Workspace struct {
-	Dir      string
-	Config   Config
-	Diagrams map[string]*Diagram // key = ref
-	Objects  map[string]*Object  // key = ref
-	Edges    map[string]*Edge
-	Links    []Link
-	Meta     *Meta // Loaded from separate _meta sections
+	Dir        string
+	Config     Config
+	Diagrams   map[string]*Diagram // key = ref
+	Objects    map[string]*Object  // key = ref
+	Edges      map[string]*Edge
+	Links      []Link
+	Elements   map[string]*Element // key = ref
+	Connectors map[string]*Connector
+	Meta       *Meta // Loaded from separate _meta sections
 }
 
 // Meta contains metadata for all resources in the workspace.
 type Meta struct {
-	Diagrams map[string]*ResourceMetadata
-	Objects  map[string]*ResourceMetadata
-	Edges    map[string]*ResourceMetadata // key = "diagramRef:srcRef:tgtRef:label"
+	Diagrams   map[string]*ResourceMetadata
+	Objects    map[string]*ResourceMetadata
+	Edges      map[string]*ResourceMetadata // key = "diagramRef:srcRef:tgtRef:label"
+	Elements   map[string]*ResourceMetadata
+	Views      map[string]*ResourceMetadata
+	Connectors map[string]*ResourceMetadata
 }

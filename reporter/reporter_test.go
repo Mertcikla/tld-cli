@@ -13,8 +13,8 @@ import (
 func emptyPlan(t *testing.T) *planner.Plan {
 	t.Helper()
 	plan, err := planner.Build(&workspace.Workspace{
-		Diagrams: map[string]*workspace.Diagram{},
-		Objects:  map[string]*workspace.Object{},
+		Elements:   map[string]*workspace.Element{},
+		Connectors: map[string]*workspace.Connector{},
 	}, false)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -51,14 +51,12 @@ func TestRenderExecutionMarkdown_NilResponseNoCrash(t *testing.T) {
 func TestRenderExecutionMarkdown_SummaryTable(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
 		Summary: &diagv1.PlanSummary{
-			DiagramsPlanned: 2,
-			DiagramsCreated: 2,
-			ObjectsPlanned:  3,
-			ObjectsCreated:  3,
-			EdgesPlanned:    1,
-			EdgesCreated:    1,
-			LinksPlanned:    1,
-			LinksCreated:    1,
+			ElementsPlanned:   3,
+			ElementsCreated:   3,
+			ViewsPlanned:      2,
+			ViewsCreated:      2,
+			ConnectorsPlanned: 1,
+			ConnectorsCreated: 1,
 		},
 	}
 	var buf strings.Builder
@@ -68,17 +66,17 @@ func TestRenderExecutionMarkdown_SummaryTable(t *testing.T) {
 	if !strings.Contains(out, "## Planned vs Created") {
 		t.Errorf("missing summary section: %q", out)
 	}
-	if !strings.Contains(out, "| Diagrams | 2 | 2 |") {
-		t.Errorf("wrong diagram count: %q", out)
+	if !strings.Contains(out, "| Elements | 3 | 3 |") {
+		t.Errorf("wrong element count: %q", out)
 	}
-	if !strings.Contains(out, "| Objects  | 3 | 3 |") {
-		t.Errorf("wrong object count: %q", out)
+	if !strings.Contains(out, "| Views    | 2 | 2 |") {
+		t.Errorf("wrong view count: %q", out)
 	}
 }
 
-func TestRenderExecutionMarkdown_CreatedDiagramsSection(t *testing.T) {
+func TestRenderExecutionMarkdown_CreatedViewsSection(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
-		CreatedDiagrams: []*diagv1.Diagram{
+		CreatedViews: []*diagv1.View{
 			{Id: 1, Name: "System"},
 			{Id: 2, Name: "Container"},
 		},
@@ -87,8 +85,8 @@ func TestRenderExecutionMarkdown_CreatedDiagramsSection(t *testing.T) {
 	reporter.RenderExecutionMarkdown(&buf, emptyPlan(t), resp, true, true)
 	out := buf.String()
 
-	if !strings.Contains(out, "### Diagrams") {
-		t.Errorf("missing Diagrams section: %q", out)
+	if !strings.Contains(out, "### Views") {
+		t.Errorf("missing Views section: %q", out)
 	}
 	if !strings.Contains(out, "1") || !strings.Contains(out, "System") {
 		t.Errorf("diagram 1 not in output: %q", out)
@@ -100,7 +98,7 @@ func TestRenderExecutionMarkdown_CreatedDiagramsSection(t *testing.T) {
 
 func TestRenderExecutionMarkdown_CreatedSectionsAbsentOnFailure(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
-		CreatedDiagrams: []*diagv1.Diagram{{Id: 1, Name: "System"}},
+		CreatedViews: []*diagv1.View{{Id: 1, Name: "System"}},
 	}
 	var buf strings.Builder
 	reporter.RenderExecutionMarkdown(&buf, emptyPlan(t), resp, false, true)
@@ -113,18 +111,18 @@ func TestRenderExecutionMarkdown_CreatedSectionsAbsentOnFailure(t *testing.T) {
 
 func ptrString(s string) *string { return &s }
 
-func TestRenderExecutionMarkdown_CreatedObjectsSection(t *testing.T) {
+func TestRenderExecutionMarkdown_CreatedElementsSection(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
-		CreatedObjects: []*diagv1.Object{
-			{Id: 10, Name: "API Gateway", Type: ptrString("service")},
+		CreatedElements: []*diagv1.Element{
+			{Id: 10, Name: "API Gateway", Kind: ptrString("service")},
 		},
 	}
 	var buf strings.Builder
 	reporter.RenderExecutionMarkdown(&buf, emptyPlan(t), resp, true, true)
 	out := buf.String()
 
-	if !strings.Contains(out, "### Objects") {
-		t.Errorf("missing Objects section: %q", out)
+	if !strings.Contains(out, "### Elements") {
+		t.Errorf("missing Elements section: %q", out)
 	}
 	if !strings.Contains(out, "10") || !strings.Contains(out, "API Gateway") {
 		t.Errorf("object not in output: %q", out)
@@ -162,38 +160,20 @@ func TestRenderExecutionMarkdown_DriftAbsent(t *testing.T) {
 	}
 }
 
-func TestRenderExecutionMarkdown_CreatedEdgesSection(t *testing.T) {
+func TestRenderExecutionMarkdown_CreatedConnectorsSection(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
-		CreatedEdges: []*diagv1.Edge{
-			{Id: 100, SourceObjectId: 10, TargetObjectId: 20},
+		CreatedConnectors: []*diagv1.Connector{
+			{Id: 100, SourceElementId: 10, TargetElementId: 20},
 		},
 	}
 	var buf strings.Builder
 	reporter.RenderExecutionMarkdown(&buf, emptyPlan(t), resp, true, true)
 	out := buf.String()
 
-	if !strings.Contains(out, "### Edges") {
-		t.Errorf("missing Edges section: %q", out)
+	if !strings.Contains(out, "### Connectors") {
+		t.Errorf("missing Connectors section: %q", out)
 	}
 	if !strings.Contains(out, "100") {
 		t.Errorf("edge ID not in output: %q", out)
-	}
-}
-
-func TestRenderExecutionMarkdown_CreatedLinksSection(t *testing.T) {
-	resp := &diagv1.ApplyPlanResponse{
-		CreatedLinks: []*diagv1.ObjectLink{
-			{Id: 1000, ObjectId: 10, FromDiagramId: 1, ToDiagramId: 2},
-		},
-	}
-	var buf strings.Builder
-	reporter.RenderExecutionMarkdown(&buf, emptyPlan(t), resp, true, true)
-	out := buf.String()
-
-	if !strings.Contains(out, "### Links") {
-		t.Errorf("missing Links section: %q", out)
-	}
-	if !strings.Contains(out, "1000") {
-		t.Errorf("link ID not in output: %q", out)
 	}
 }

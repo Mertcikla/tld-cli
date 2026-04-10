@@ -30,11 +30,87 @@ type warningContext struct {
 // AnalyzePlan evaluates the workspace against architectural best practices and
 // returns grouped warnings based on the configured strictness level.
 func AnalyzePlan(ws *workspace.Workspace) []WarningGroup {
+	if usesElementWorkspace(ws) {
+		ws = projectForWarnings(ws)
+	}
+
 	ctx := newWarningContext(ws)
 	ctx.prepareData()
 	ctx.checkAll()
 
 	return ctx.toSlice()
+}
+
+func projectForWarnings(ws *workspace.Workspace) *workspace.Workspace {
+	projected := &workspace.Workspace{
+		Config:   ws.Config,
+		Diagrams: make(map[string]*workspace.Diagram),
+		Objects:  make(map[string]*workspace.Object),
+		Edges:    make(map[string]*workspace.Edge),
+	}
+
+	for ref, element := range ws.Elements {
+		projected.Objects[ref] = &workspace.Object{
+			Name:        element.Name,
+			Type:        element.Kind,
+			Description: element.Description,
+			Technology:  element.Technology,
+			URL:         element.URL,
+			LogoURL:     element.LogoURL,
+			Repo:        element.Repo,
+			Branch:      element.Branch,
+			Language:    element.Language,
+			FilePath:    element.FilePath,
+		}
+		if element.HasView {
+			projected.Diagrams[ref] = &workspace.Diagram{
+				Name:        element.Name,
+				Description: element.Description,
+				LevelLabel:  element.ViewLabel,
+			}
+		}
+		for _, placement := range element.Placements {
+			parentRef := placement.ParentRef
+			if parentRef == "" || parentRef == "root" || parentRef == syntheticRootViewRef {
+				parentRef = syntheticRootViewRef
+				if _, ok := projected.Diagrams[parentRef]; !ok {
+					projected.Diagrams[parentRef] = &workspace.Diagram{Name: "Workspace Root", LevelLabel: "Root"}
+				}
+			} else if element.HasView {
+				projected.Diagrams[ref].ParentDiagram = parentRef
+			}
+			projected.Objects[ref].Diagrams = append(projected.Objects[ref].Diagrams, workspace.Placement{
+				Diagram:   parentRef,
+				PositionX: placement.PositionX,
+				PositionY: placement.PositionY,
+			})
+		}
+	}
+
+	for ref, connector := range ws.Connectors {
+		viewRef := connector.View
+		if viewRef == "" || viewRef == "root" {
+			viewRef = syntheticRootViewRef
+			if _, ok := projected.Diagrams[viewRef]; !ok {
+				projected.Diagrams[viewRef] = &workspace.Diagram{Name: "Workspace Root", LevelLabel: "Root"}
+			}
+		}
+		projected.Edges[ref] = &workspace.Edge{
+			Diagram:          viewRef,
+			SourceObject:     connector.Source,
+			TargetObject:     connector.Target,
+			Label:            connector.Label,
+			Description:      connector.Description,
+			RelationshipType: connector.Relationship,
+			Direction:        connector.Direction,
+			EdgeType:         connector.Style,
+			URL:              connector.URL,
+			SourceHandle:     connector.SourceHandle,
+			TargetHandle:     connector.TargetHandle,
+		}
+	}
+
+	return projected
 }
 
 func newWarningContext(ws *workspace.Workspace) *warningContext {

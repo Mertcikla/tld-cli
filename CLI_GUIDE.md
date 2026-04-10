@@ -1,13 +1,13 @@
 # TLD CLI Guide
 
-`tld` is a CLI for tlDiagram.com. It allows you to define, plan, and apply your system architecture diagrams using configuration files and commands.
+`tld` is a CLI for tlDiagram.com. It allows you to define, plan, and apply your system architecture using configuration files and commands.
 
 # Usage guide
-To efficiently map your codebase with this app, adopt a top-down architectural mapping workflow centered on the "Infinite Zoom" feature. Start by creating a root diagram that defines your system's high-level boundaries-such as your API gateway, main services, and external dependencies. Identify the primary entry points (e.g., main.go or App.tsx) and add them as the first set of objects. Use the tld CLI to define these programmatically in YAML, which allows you to version-control your architecture alongside your source code and ensures that your "source of truth" for the system design remains as dynamic as the code itself.
+To efficiently map your codebase with this app, adopt a top-down workflow centered on element-owned views. Start by creating a root element that defines your system's high-level boundaries, such as your API gateway, main services, and external dependencies. Identify the primary entry points (for example `main.go` or `App.tsx`) and add them as the first set of child elements. Use the tld CLI to define these programmatically in YAML, which allows you to version-control your architecture alongside your source code and keeps your architectural source of truth as dynamic as the code itself.
 
-Once the high-level actors are connected via edges that represent data flow or dependencies, use the object-linking capability to drill down. Instead of overcrowding a single canvas, link a complex object (like a specific microservice or a core module) to its own sub-diagram. This creates a nested hierarchy where an object on the root canvas acts as a portal to a more granular view of its internal components. Because the data model separates the object definition from its placement, you can reuse the same actor (like a shared database or auth service) across multiple sub-diagrams, with the UI providing a "Find" action to quickly locate where else that component exists in your architecture.
+Once the high-level actors are connected via connectors that represent data flow or dependencies, give the complex elements their own canonical internal views. Instead of overcrowding a single canvas, enter the view owned by a specific service or module and model its internal components there. Because the data model separates element identity from placement, you can reuse the same actor, such as a shared database or auth service, across multiple parent views.
 
-As your codebase evolves, iterate by refining these sub-diagrams and adding new links for emerging complexity. This recursive approach-identifying actors, connecting them, and then "expanding" the most complex nodes into their own diagrams-prevents visual clutter and mirrors the natural mental model of software abstraction. By leveraging the tld plan/apply workflow, you can automate parts of this process, such as parsing directory structures to generate initial objects, making it the most scalable way to keep your documentation in sync with a rapidly growing project.
+As your codebase evolves, iterate by refining these nested views and adding new connectors for emerging complexity. This recursive approach, identifying actors, connecting them, and then opening the most complex elements into their own views, prevents visual clutter and mirrors the natural mental model of software abstraction. By leveraging the `tld plan` and `tld apply` workflow, you can automate parts of this process and keep your documentation in sync with a rapidly growing project.
 
 ## Global Options
 
@@ -22,8 +22,37 @@ Initialize a new `tld` workspace. This command ensures the global configuration 
 
 ### Resource Creation
 
+#### `tld create element <name> [flags]`
+Create or update an element in `elements.yaml`.
+**Flags:**
+- `--kind`: Element kind (default: `service`).
+- `--description`: Description of the element.
+- `--technology`: Primary technology used by the element.
+- `--url`: External URL for further reference.
+- `--position-x`: Horizontal canvas position inside the parent view.
+- `--position-y`: Vertical canvas position inside the parent view.
+- `--parent`: Parent element reference or `root` (default: `root`).
+- `--with-view`: Mark the element as owning a canonical internal view.
+- `--view-label`: Optional label for that canonical internal view.
+- `--ref`: Override the generated reference ID.
+
+#### `tld connect elements [flags]`
+Add a connector between two elements inside an element-owned view.
+**Flags:**
+- `--view`: Owner element reference of the view **(required)**.
+- `--from`: Source element reference **(required)**.
+- `--to`: Target element reference **(required)**.
+- `--label`: Connector label.
+- `--description`: Connector description.
+- `--relationship`: Semantic relationship type.
+- `--direction`: Direction of the arrow. Options: `forward`, `backward`, `both`, `none` (default: `forward`).
+- `--style`: Visual style of the connector. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
+- `--url`: External URL for documentation related to this connection.
+
+The legacy `create diagram`, `create object`, `connect objects`, and `create link` commands are still present during the migration bridge, but new work should prefer `element` and `connector` commands.
+
 #### `tld create diagram <name> [flags]`
-Create a new diagram YAML file.
+Create a new diagram YAML file. This is legacy-only during the migration.
 **Flags:**
 - `--description`: Description of the diagram.
 - `--level-label`: Abstraction level label (e.g., System, Container, Component).
@@ -31,7 +60,7 @@ Create a new diagram YAML file.
 - `--ref`: Override the automatically generated reference ID (default is the slugified name).
 
 #### `tld create object <diagram_ref> <name> <type> [flags]`
-Create a new object YAML file and place it on the specified diagram.
+Create a new object YAML file and place it on the specified diagram. This is legacy-only during the migration.
 **Note:** This command is idempotent. If the object (identified by its reference ID) already exists, `tld` will simply add a new placement for that object on the specified diagram, allowing you to easily reuse the same object across multiple diagrams.
 **Flags:**
 - `--description`: Description of the object.
@@ -56,7 +85,7 @@ Add an edge (connection) between two objects on a specified diagram.
 - `--url`: External URL for documentation related to this connection.
 
 #### `tld create link [flags]`
-Create a drill-down link between two diagrams via a specific object.
+Create a drill-down link between two diagrams via a specific object. This is legacy-only during the migration bridge.
 **Flags:**
 - `--object`: Object reference that will trigger the drill-down **(optional)**.
 - `--from`: Source diagram reference **(required)**.
@@ -135,51 +164,37 @@ mkdir ecom-arch && cd ecom-arch
 tld init .
 ```
 
-### 2. Create the System Context Diagram
-Create the high-level system context diagram.
+### 2. Create the System Context Element
+Create the high-level system context element and give it a canonical view.
 ```bash
-tld create diagram "E-commerce Platform" --level-label "System Context" --description "High-level overview of the e-commerce system."
+tld create element "E-commerce Platform" --kind workspace --with-view --view-label "System Context" --description "High-level overview of the e-commerce system."
 ```
-*(This generates a diagram with the reference ID: `e-commerce-platform`)*
+*(This generates an element with the reference ID: `e-commerce-platform`)*
 
-### 3. Add Objects (Actors and Systems)
-Add the primary users and systems to the diagram.
+### 3. Add Elements (Actors and Systems)
+Add the primary users and systems to the root view.
 ```bash
 # Add a Customer actor
-tld create object e-commerce-platform "Customer" "person" --description "A customer of the e-commerce platform." --position-x 100 --position-y 300
+tld create element "Customer" --parent e-commerce-platform --kind person --description "A customer of the e-commerce platform." --position-x 100 --position-y 300
 
 # Add the main E-commerce Web Application
-tld create object e-commerce-platform "Web App" "software_system" --description "The core e-commerce web application." --position-x 400 --position-y 300
+tld create element "Web App" --parent e-commerce-platform --kind software_system --with-view --description "The core e-commerce web application." --position-x 400 --position-y 300
 
 # Add an external Payment Gateway
-tld create object e-commerce-platform "Payment Gateway" "software_system" --description "External payment processor (e.g., Stripe)." --position-x 700 --position-y 300
+tld create element "Payment Gateway" --parent e-commerce-platform --kind software_system --description "External payment processor (e.g., Stripe)." --position-x 700 --position-y 300
 ```
 
-### 4. Connect the Objects
+### 4. Connect the Elements
 Define how these systems and actors interact.
 ```bash
 # Customer interacts with the Web App
-tld connect objects e-commerce-platform --from "customer" --to "web-app" --label "Browses and buys products" --relationship-type "uses"
+tld connect elements --view e-commerce-platform --from "customer" --to "web-app" --label "Browses and buys products" --relationship "uses"
 
 # Web App integrates with the Payment Gateway
-tld connect objects e-commerce-platform --from "web-app" --to "payment-gateway" --label "Processes payments using" --relationship-type "integrates"
+tld connect elements --view e-commerce-platform --from "web-app" --to "payment-gateway" --label "Processes payments using" --relationship "integrates"
 ```
 
-### 5. Create a Drill-Down Diagram
-Create a more detailed container-level diagram for the Web App.
-```bash
-tld create diagram "Web App Containers" --level-label "Container" --parent "e-commerce-platform"
-```
-*(This generates a diagram with the reference ID: `web-app-containers`)*
-
-### 6. Create a Drill-Down Link
-Link the "Web App" object on the system context diagram to the detailed container diagram.
-```bash
-tld create link --from "e-commerce-platform" --object "web-app" --to "web-app-containers"
-```
-
-
-### 7. Validate and Apply
+### 5. Validate and Apply
 Ensure everything is configured correctly, check the plan, and deploy the architecture.
 ```bash
 # Check for any configuration errors
@@ -193,3 +208,5 @@ tld plan -v
 # Apply the changes to the diag server
 tld apply --auto-approve
 ```
+
+`plan` and `apply` currently bridge the element/view/connector workspace onto the legacy backend request shape. That bridge is temporary and will be removed once the backend contract is migrated.

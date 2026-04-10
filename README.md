@@ -1,12 +1,14 @@
-# tld - CLI for diagrams as code 
+# tld - CLI for diagrams as code
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mertcikla/tld-cli)](https://go.dev/) [![License](https://img.shields.io/github/license/mertcikla/tld-cli)](./LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/mertcikla/tld-cli/test.yml?branch=main)](https://github.com/mertcikla/tld-cli/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/mertcikla/tld-cli)](https://goreportcard.com/report/github.com/mertcikla/tld-cli)
 
-tld is a command-line interface for managing software architecture diagrams as code. It is a companion app designed for use with [tlDiagram.com](http://tldiagram.com/) but the diagrams it generates can be useful somewhere else? maybe?. It allows you to define your architecture in YAML, validate the consistency of your definitions, and sync them to  [tlDiagram.com](http://tldiagram.com/).
+tld is a command-line interface for managing software architecture diagrams as code. It is a companion app designed for use with [tlDiagram.com](http://tldiagram.com/). It lets you define your architecture in YAML, validate the consistency of your definitions, and sync them to [tlDiagram.com](http://tldiagram.com/).
+
+The workspace is currently migrating from the legacy `diagram/object/edge/link` model to the new `element/view/connector` model. The new CLI workflow writes `elements.yaml` and `connectors.yaml`, while `tld plan` and `tld apply` temporarily bridge that model onto the legacy backend contract.
 
 
 ## Features
 
-- **Diagrams as Code**: Define diagrams, objects, edges, and drill-down links in human-readable YAML.
+- **Architecture as Code**: Define elements, views, and connectors in human-readable YAML.
 - **Integrity Validation**: Check workspace integrity (e.g., checking for broken references).
 - **Plan & Apply Workflow**: Preview changes with a markdown-based plan and apply them atomically.
 - **Idempotent Upserts**: Safely re-run applies; the CLI tracks system IDs to update existing resources instead of duplicating them.
@@ -44,14 +46,14 @@ This will install the `tld` binary into your `$GOPATH/bin` directory.
    tld login
    ```
 
-3. Create your first diagram:
+3. Create your first element:
    ```bash
-   tld create diagram "System Overview" --ref system-overview
+   tld create element "System Overview" --ref system-overview --kind workspace --with-view --view-label "System Context"
    ```
 
-4. Add an object to the diagram:
+4. Add elements to that view:
    ```bash
-   tld create object system-overview "Web API" Service --technology "Go / Gin"
+   tld create element "Web API" --parent system-overview --kind service --technology "Go / Gin"
    ```
 
 5. Validate your workspace:
@@ -71,10 +73,9 @@ A tld workspace consists of the following directory structure:
 
 - `~/.config/tldiagram/tld.yaml` (or your OS equivalent): Configuration file for server connection and organization details.
 - `.tld.lock`: (Generated) Lock file for workspace versioning and change tracking.
-- `diagrams.yaml`: YAML file defining diagram metadata and system IDs (`_meta`).
-- `objects.yaml`: YAML file defining objects and their placements on diagrams.
-- `edges.yaml`: Relationship definitions between objects.
-- `links.yaml`: Drill-down navigation links between diagrams.
+- `elements.yaml`: YAML file defining elements, their canonical-view capability, and their placements.
+- `connectors.yaml`: Relationship definitions inside an element-owned view.
+- `diagrams.yaml`, `objects.yaml`, `edges.yaml`, `links.yaml`: Legacy files retained only during the migration bridge.
 
 ## Commands
 
@@ -89,10 +90,11 @@ A tld workspace consists of the following directory structure:
 
 ### Resource Creation
 
-- `tld create diagram <name>`: Create a new diagram definition.
-- `tld create object <diagram_ref> <name> <type>`: Define a new object and place it on a diagram.
-- `tld connect objects <diagram_ref> --from <source> --to <target> [--source-handle <name>] [--target-handle <name>]`: Define a relationship between two objects, optionally specifying connection handles.
-- `tld create link --from <diagram> --to <diagram> [--object <ref>]`: Create a navigation link between two diagrams.
+- `tld create element <name>`: Define a new element and optionally give it a canonical internal view.
+- `tld connect elements --view <element_ref> --from <source> --to <target>`: Define a connector inside an element-owned view.
+- `tld remove element <ref>`: Remove an element from the workspace.
+- `tld remove connector --view <ref> --from <source_ref> --to <target_ref>`: Remove matching connector(s).
+- The legacy `diagram/object/edge/link` commands still exist during the migration bridge, but new work should use the element/connectors workflow.
 
 ### Removing Resources
 

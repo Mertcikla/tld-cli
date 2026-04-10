@@ -26,10 +26,12 @@ func newInitCmd() *cobra.Command {
 
 			// Create empty YAML files if they don't exist
 			files := map[string]string{
-				"diagrams.yaml": "{}\n",
-				"objects.yaml":  "{}\n",
-				"edges.yaml":    "{}\n",
-				"links.yaml":    "[]\n",
+				"diagrams.yaml":   "{}\n",
+				"objects.yaml":    "{}\n",
+				"edges.yaml":      "{}\n",
+				"links.yaml":      "[]\n",
+				"elements.yaml":   "{}\n",
+				"connectors.yaml": "{}\n",
 			}
 			for f, content := range files {
 				path := filepath.Join(dir, f)

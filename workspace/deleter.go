@@ -115,6 +115,23 @@ func RemoveLink(dir, object, fromDiagram, toDiagram string) (int, error) {
 	)
 }
 
+// RemoveElement removes an element from elements.yaml.
+func RemoveElement(dir, ref string) error {
+	return filterYAMLMap(filepath.Join(dir, "elements.yaml"), func(k string, _ any) bool { return k != ref })
+}
+
+// RemoveConnector removes connectors from connectors.yaml where view == view AND source == source AND target == target.
+func RemoveConnector(dir, view, source, target string) (int, error) {
+	return filterEdgesYAMLMap(
+		filepath.Join(dir, "connectors.yaml"),
+		func(m map[string]any) bool {
+			return strVal(m, "view") != view ||
+				strVal(m, "source") != source ||
+				strVal(m, "target") != target
+		},
+	)
+}
+
 // filterEdgesYAMLMap reads edges.yaml as map[string]any, skips the _meta key,
 // calls keep(edgeFields) for each edge entry, removes entries where keep returns false,
 // writes back (preserving _meta), and returns count removed. Safe: returns 0,nil if file absent.

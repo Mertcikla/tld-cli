@@ -12,9 +12,11 @@ import (
 // Load reads the workspace from dir. The global configuration is read from tld.yaml.
 func Load(dir string) (*Workspace, error) {
 	ws := &Workspace{
-		Dir:      dir,
-		Diagrams: make(map[string]*Diagram),
-		Objects:  make(map[string]*Object),
+		Dir:        dir,
+		Diagrams:   make(map[string]*Diagram),
+		Objects:    make(map[string]*Object),
+		Elements:   make(map[string]*Element),
+		Connectors: make(map[string]*Connector),
 	}
 
 	// Load config
@@ -68,6 +70,27 @@ func Load(dir string) (*Workspace, error) {
 		if err := yaml.Unmarshal(data, &ws.Links); err != nil {
 			return nil, fmt.Errorf("parse links.yaml: %w", err)
 		}
+	}
+
+	// Load elements from elements.yaml
+	elementsFile := filepath.Join(dir, "elements.yaml")
+	if data, err := os.ReadFile(elementsFile); err == nil {
+		if err := yaml.Unmarshal(data, &ws.Elements); err != nil {
+			return nil, fmt.Errorf("parse elements.yaml: %w", err)
+		}
+		delete(ws.Elements, "_meta")
+		delete(ws.Elements, "_meta_elements")
+		delete(ws.Elements, "_meta_views")
+	}
+
+	// Load connectors from connectors.yaml
+	connectorsFile := filepath.Join(dir, "connectors.yaml")
+	if data, err := os.ReadFile(connectorsFile); err == nil {
+		if err := yaml.Unmarshal(data, &ws.Connectors); err != nil {
+			return nil, fmt.Errorf("parse connectors.yaml: %w", err)
+		}
+		delete(ws.Connectors, "_meta")
+		delete(ws.Connectors, "_meta_connectors")
 	}
 
 	// Load metadata

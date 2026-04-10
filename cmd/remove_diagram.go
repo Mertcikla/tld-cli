@@ -71,12 +71,12 @@ func newRemoveDiagramCmd(wdir *string) *cobra.Command {
 			}
 
 			c := client.New(ws.Config.ServerURL, apiKey, false)
-			req := connect.NewRequest(&diagv1.DeleteDiagramRequest{
+			req := connect.NewRequest(&diagv1.DeleteViewRequest{
 				OrgId:     ws.Config.OrgID,
 				DiagramId: int32(serverID),
 			})
 
-			_, err = c.DeleteDiagram(cmd.Context(), req)
+			_, err = c.DeleteView(cmd.Context(), req)
 			if err != nil {
 				if connectErr, ok := err.(*connect.Error); ok && connectErr.Code() == connect.CodeNotFound {
 					fmt.Fprintln(cmd.OutOrStdout(), "  server: diagram not found (already deleted or never applied)")

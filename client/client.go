@@ -20,8 +20,8 @@ func NormalizeURL(serverURL string) string {
 	return baseURL
 }
 
-// New creates a DiagramServiceClient with bearer token authentication.
-func New(serverURL, apiKey string, debug bool) diagv1connect.DiagramServiceClient {
+// New creates a WorkspaceServiceClient with bearer token authentication.
+func New(serverURL, apiKey string, debug bool) diagv1connect.WorkspaceServiceClient {
 	interceptors := []connect.Interceptor{
 		newBearerInterceptor(apiKey),
 	}
@@ -29,7 +29,7 @@ func New(serverURL, apiKey string, debug bool) diagv1connect.DiagramServiceClien
 		interceptors = append(interceptors, newDebugInterceptor())
 	}
 
-	return diagv1connect.NewDiagramServiceClient(
+	return diagv1connect.NewWorkspaceServiceClient(
 		&http.Client{},
 		NormalizeURL(serverURL),
 		connect.WithInterceptors(interceptors...),

@@ -148,6 +148,108 @@ func AppendLink(dir string, spec *Link) error {
 	return appendYAMLList(path, spec)
 }
 
+// WriteElement adds an element to elements.yaml. Errors if ref already exists.
+func WriteElement(dir, ref string, spec *Element) error {
+	path := filepath.Join(dir, "elements.yaml")
+	return updateYAMLMap(path, ref, spec)
+}
+
+// UpdateElement overwrites an element in elements.yaml.
+func UpdateElement(dir, ref string, spec *Element) error {
+	path := filepath.Join(dir, "elements.yaml")
+	existing := make(map[string]*Element)
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+	}
+	existing[ref] = spec
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("marshal elements: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write elements.yaml: %w", err)
+	}
+	return nil
+}
+
+// UpsertElement adds an element to elements.yaml or updates placements on an existing one.
+func UpsertElement(dir, ref string, spec *Element) error {
+	path := filepath.Join(dir, "elements.yaml")
+	existing := make(map[string]*Element)
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+	}
+
+	if old, ok := existing[ref]; ok {
+		if old.Kind != spec.Kind {
+			return fmt.Errorf("element %q already exists with kind %q (tried to reuse as %q)", ref, old.Kind, spec.Kind)
+		}
+		if old.Name == "" {
+			old.Name = spec.Name
+		}
+		if old.Description == "" {
+			old.Description = spec.Description
+		}
+		if old.Technology == "" {
+			old.Technology = spec.Technology
+		}
+		if old.URL == "" {
+			old.URL = spec.URL
+		}
+		if spec.HasView {
+			old.HasView = true
+			if old.ViewLabel == "" {
+				old.ViewLabel = spec.ViewLabel
+			}
+		}
+		for _, newPlacement := range spec.Placements {
+			found := false
+			for index, placement := range old.Placements {
+				if placement.ParentRef == newPlacement.ParentRef {
+					old.Placements[index].PositionX = newPlacement.PositionX
+					old.Placements[index].PositionY = newPlacement.PositionY
+					found = true
+					break
+				}
+			}
+			if !found {
+				old.Placements = append(old.Placements, newPlacement)
+			}
+		}
+	} else {
+		existing[ref] = spec
+	}
+
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("marshal elements: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write elements.yaml: %w", err)
+	}
+	return nil
+}
+
+// AppendConnector adds a connector to connectors.yaml keyed by view:source:target:label.
+func AppendConnector(dir string, spec *Connector) error {
+	path := filepath.Join(dir, "connectors.yaml")
+	existing := make(map[string]*Connector)
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, &existing)
+		delete(existing, "_meta")
+	}
+	key := spec.View + ":" + spec.Source + ":" + spec.Target + ":" + spec.Label
+	existing[key] = spec
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("marshal connectors: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write connectors.yaml: %w", err)
+	}
+	return nil
+}
+
 // Save writes the entire workspace state to YAML files in ws.Dir.
 func Save(ws *Workspace) error {
 	// Write diagrams

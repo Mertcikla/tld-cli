@@ -80,7 +80,7 @@ any drift from manual changes in the frontend.`,
 					return fmt.Errorf("build plan: %w", err)
 				}
 				plan.Request.DryRun = proto.Bool(true)
-				resp, err := c.ApplyPlan(cmd.Context(), connect.NewRequest(plan.Request))
+				resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(plan.Request))
 				if err != nil {
 					return fmt.Errorf("server check failed: %w", err)
 				}

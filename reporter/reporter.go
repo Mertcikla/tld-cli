@@ -29,10 +29,9 @@ func RenderExecutionMarkdown(w io.Writer, _ *planner.Plan, resp *diagv1.ApplyPla
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "| Resource | Planned | Created |")
 		fmt.Fprintln(w, "|----------|---------|---------|")
-		fmt.Fprintf(w, "| Diagrams | %d | %d |\n", s.DiagramsPlanned, s.DiagramsCreated)
-		fmt.Fprintf(w, "| Objects  | %d | %d |\n", s.ObjectsPlanned, s.ObjectsCreated)
-		fmt.Fprintf(w, "| Edges    | %d | %d |\n", s.EdgesPlanned, s.EdgesCreated)
-		fmt.Fprintf(w, "| Links    | %d | %d |\n", s.LinksPlanned, s.LinksCreated)
+		fmt.Fprintf(w, "| Elements | %d | %d |\n", s.ElementsPlanned, s.ElementsCreated)
+		fmt.Fprintf(w, "| Views    | %d | %d |\n", s.ViewsPlanned, s.ViewsCreated)
+		fmt.Fprintf(w, "| Connectors | %d | %d |\n", s.ConnectorsPlanned, s.ConnectorsCreated)
 		fmt.Fprintln(w)
 	}
 
@@ -40,46 +39,36 @@ func RenderExecutionMarkdown(w io.Writer, _ *planner.Plan, resp *diagv1.ApplyPla
 		fmt.Fprintln(w, "## Created Resources")
 		fmt.Fprintln(w)
 
-		if len(resp.CreatedDiagrams) > 0 {
-			fmt.Fprintln(w, "### Diagrams")
+		if len(resp.CreatedViews) > 0 {
+			fmt.Fprintln(w, "### Views")
 			fmt.Fprintln(w, "| ID | Name |")
 			fmt.Fprintln(w, "|----|------|")
-			for _, d := range resp.CreatedDiagrams {
+			for _, d := range resp.CreatedViews {
 				fmt.Fprintf(w, "| %d | %s |\n", d.Id, d.Name)
 			}
 			fmt.Fprintln(w)
 		}
 
-		if len(resp.CreatedObjects) > 0 {
-			fmt.Fprintln(w, "### Objects")
-			fmt.Fprintln(w, "| ID | Name | Type |")
+		if len(resp.CreatedElements) > 0 {
+			fmt.Fprintln(w, "### Elements")
+			fmt.Fprintln(w, "| ID | Name | Kind |")
 			fmt.Fprintln(w, "|----|------|------|")
-			for _, o := range resp.CreatedObjects {
-				objType := ""
-				if o.Type != nil {
-					objType = *o.Type
+			for _, o := range resp.CreatedElements {
+				kind := ""
+				if o.Kind != nil {
+					kind = *o.Kind
 				}
-				fmt.Fprintf(w, "| %d | %s | %s |\n", o.Id, o.Name, objType)
+				fmt.Fprintf(w, "| %d | %s | %s |\n", o.Id, o.Name, kind)
 			}
 			fmt.Fprintln(w)
 		}
 
-		if len(resp.CreatedEdges) > 0 {
-			fmt.Fprintln(w, "### Edges")
+		if len(resp.CreatedConnectors) > 0 {
+			fmt.Fprintln(w, "### Connectors")
 			fmt.Fprintln(w, "| ID | Source -> Target |")
 			fmt.Fprintln(w, "|----|-----------------|")
-			for _, e := range resp.CreatedEdges {
-				fmt.Fprintf(w, "| %d | %d -> %d |\n", e.Id, e.SourceObjectId, e.TargetObjectId)
-			}
-			fmt.Fprintln(w)
-		}
-
-		if len(resp.CreatedLinks) > 0 {
-			fmt.Fprintln(w, "### Links")
-			fmt.Fprintln(w, "| ID | Object | From -> To |")
-			fmt.Fprintln(w, "|----|--------|-----------|")
-			for _, l := range resp.CreatedLinks {
-				fmt.Fprintf(w, "| %d | %d | %d -> %d |\n", l.Id, l.ObjectId, l.FromDiagramId, l.ToDiagramId)
+			for _, e := range resp.CreatedConnectors {
+				fmt.Fprintf(w, "| %d | %d -> %d |\n", e.Id, e.SourceElementId, e.TargetElementId)
 			}
 			fmt.Fprintln(w)
 		}

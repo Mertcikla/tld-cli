@@ -39,6 +39,15 @@ func newValidateCmd(wdir *string) *cobra.Command {
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Workspace valid: %d diagrams, %d objects, %d edges, %d links\n",
 				len(ws.Diagrams), len(ws.Objects), len(ws.Edges), len(ws.Links))
+			if len(ws.Elements) > 0 || len(ws.Connectors) > 0 {
+				viewCount := 0
+				for _, element := range ws.Elements {
+					if element.HasView {
+						viewCount++
+					}
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Element workspace: %d elements, %d views, %d connectors\n", len(ws.Elements), viewCount, len(ws.Connectors))
+			}
 
 			// Evaluate Diagram warnings
 			warnings := planner.AnalyzePlan(ws)

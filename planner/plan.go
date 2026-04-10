@@ -2,6 +2,7 @@
 package planner
 
 import (
+	"fmt"
 	"sort"
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
@@ -9,191 +10,170 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const syntheticRootViewRef = "__workspace_root__"
+
 // Plan holds the resolved ApplyPlanRequest and a topologically-sorted list of
 // diagram refs (parents before children).
 type Plan struct {
 	Request      *diagv1.ApplyPlanRequest
 	DiagramOrder []string // sorted refs
+	Model        string
 }
 
 // Build resolves workspace refs into an ApplyPlanRequest, ordering diagrams
 // topologically (parents before children) so the server can resolve
 // parent_diagram_ref in insertion order.
 func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
-	ordered := topoSortDiagrams(ws)
-
-	req := &diagv1.ApplyPlanRequest{
-		OrgId: ws.Config.OrgID,
+	if usesElementWorkspace(ws) {
+		return buildFromElements(ws, recreateIDs)
 	}
 
-	// Diagrams
-	for _, ref := range ordered {
-		d := ws.Diagrams[ref]
-		pd := &diagv1.PlanDiagram{
-			Ref:  ref,
-			Name: d.Name,
-		}
-		if d.Description != "" {
-			pd.Description = &d.Description
-		}
-		if d.LevelLabel != "" {
-			pd.LevelLabel = &d.LevelLabel
-		}
-		if d.ParentDiagram != "" {
-			pd.ParentDiagramRef = &d.ParentDiagram
-		}
-
-		// Add metadata if available and not recreating IDs
-		if !recreateIDs && ws.Meta != nil {
-			if meta, ok := ws.Meta.Diagrams[ref]; ok {
-				id := int32(meta.ID)
-				pd.Id = &id
-				pd.UpdatedAt = timestamppb.New(meta.UpdatedAt)
-			}
-		}
-
-		req.Diagrams = append(req.Diagrams, pd)
+	if len(ws.Diagrams) > 0 || len(ws.Objects) > 0 || len(ws.Edges) > 0 || len(ws.Links) > 0 {
+		return nil, fmt.Errorf("legacy diagram/object/edge/link workspaces are no longer supported; migrate to elements.yaml and connectors.yaml")
 	}
 
-	// Objects
-	for ref, o := range ws.Objects {
-		po := &diagv1.PlanObject{
-			Ref:  ref,
-			Name: o.Name,
-		}
-		if o.Type != "" {
-			po.Type = &o.Type
-		}
-		if o.Description != "" {
-			po.Description = &o.Description
-		}
-		if o.Technology != "" {
-			po.Technology = &o.Technology
-		}
-		if o.URL != "" {
-			po.Url = &o.URL
-		}
-		if o.LogoURL != "" {
-			po.LogoUrl = &o.LogoURL
-		}
-		for _, p := range o.Diagrams {
-			pp := &diagv1.PlanObjectPlacement{DiagramRef: p.Diagram}
-			if p.PositionX != 0 {
-				pp.PositionX = &p.PositionX
-			}
-			if p.PositionY != 0 {
-				pp.PositionY = &p.PositionY
-			}
-			po.Placements = append(po.Placements, pp)
-		}
-
-		// Add metadata if available and not recreating IDs
-		if !recreateIDs && ws.Meta != nil {
-			if meta, ok := ws.Meta.Objects[ref]; ok {
-				id := int32(meta.ID)
-				po.Id = &id
-				po.UpdatedAt = timestamppb.New(meta.UpdatedAt)
-			}
-		}
-
-		req.Objects = append(req.Objects, po)
-	}
-
-	// Edges
-	for edgeRef, e := range ws.Edges {
-		pe := &diagv1.PlanEdge{
-			DiagramRef:      e.Diagram,
-			SourceObjectRef: e.SourceObject,
-			TargetObjectRef: e.TargetObject,
-		}
-		if e.Label != "" {
-			pe.Label = &e.Label
-		}
-		if e.Description != "" {
-			pe.Description = &e.Description
-		}
-		if e.RelationshipType != "" {
-			pe.RelationshipType = &e.RelationshipType
-		}
-		if e.Direction != "" {
-			pe.Direction = &e.Direction
-		}
-		if e.EdgeType != "" {
-			pe.EdgeType = &e.EdgeType
-		}
-		if e.URL != "" {
-			pe.Url = &e.URL
-		}
-		if e.SourceHandle != "" {
-			pe.SourceHandle = &e.SourceHandle
-		}
-		if e.TargetHandle != "" {
-			pe.TargetHandle = &e.TargetHandle
-		}
-
-		// Attach metadata for idempotent upserts using the map key as the stable ref
-		if !recreateIDs && ws.Meta != nil {
-			if meta, ok := ws.Meta.Edges[edgeRef]; ok {
-				id := int32(meta.ID)
-				pe.Id = &id
-				pe.UpdatedAt = timestamppb.New(meta.UpdatedAt)
-			}
-		}
-
-		req.Edges = append(req.Edges, pe)
-	}
-
-	// Links
-	for _, l := range ws.Links {
-		req.Links = append(req.Links, &diagv1.PlanLink{
-			ObjectRef:      l.Object,
-			FromDiagramRef: l.FromDiagram,
-			ToDiagramRef:   l.ToDiagram,
-		})
-	}
-
-	return &Plan{Request: req, DiagramOrder: ordered}, nil
+	return &Plan{
+		Request: &diagv1.ApplyPlanRequest{OrgId: ws.Config.OrgID},
+		Model:   "workspace",
+	}, nil
 }
 
-// topoSortDiagrams returns diagram refs ordered so parents appear before
-// children (stable: root nodes first in alphabetical order within each level).
-func topoSortDiagrams(ws *workspace.Workspace) []string {
-	inDegree := make(map[string]int)
-	children := make(map[string][]string)
-
-	for ref, d := range ws.Diagrams {
-		if _, ok := inDegree[ref]; !ok {
-			inDegree[ref] = 0
-		}
-		if d.ParentDiagram != "" {
-			inDegree[ref]++
-			children[d.ParentDiagram] = append(children[d.ParentDiagram], ref)
-		}
+func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
+	elementRefs := make([]string, 0, len(ws.Elements))
+	for ref := range ws.Elements {
+		elementRefs = append(elementRefs, ref)
 	}
+	sort.Strings(elementRefs)
 
-	// Kahn's algorithm
-	var queue []string
-	for ref, deg := range inDegree {
-		if deg == 0 {
-			queue = append(queue, ref)
-		}
+	connectorRefs := make([]string, 0, len(ws.Connectors))
+	for ref := range ws.Connectors {
+		connectorRefs = append(connectorRefs, ref)
 	}
-	// Sort for determinism
-	sort.Strings(queue)
+	sort.Strings(connectorRefs)
 
-	var result []string
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		result = append(result, cur)
-		ch := children[cur]
-		sort.Strings(ch)
-		for _, c := range ch {
-			inDegree[c]--
-			if inDegree[c] == 0 {
-				queue = append(queue, c)
+	req := &diagv1.ApplyPlanRequest{OrgId: ws.Config.OrgID}
+
+	for _, ref := range elementRefs {
+		element := ws.Elements[ref]
+		planElement := &diagv1.PlanElement{
+			Ref:     ref,
+			Name:    element.Name,
+			HasView: element.HasView,
+		}
+		if element.Kind != "" {
+			planElement.Kind = &element.Kind
+		}
+		if element.Description != "" {
+			planElement.Description = &element.Description
+		}
+		if element.Technology != "" {
+			planElement.Technology = &element.Technology
+		}
+		if element.URL != "" {
+			planElement.Url = &element.URL
+		}
+		if element.LogoURL != "" {
+			planElement.LogoUrl = &element.LogoURL
+		}
+		if element.Repo != "" {
+			planElement.Repo = &element.Repo
+		}
+		if element.Branch != "" {
+			planElement.Branch = &element.Branch
+		}
+		if element.Language != "" {
+			planElement.Language = &element.Language
+		}
+		if element.FilePath != "" {
+			planElement.FilePath = &element.FilePath
+		}
+		if element.ViewLabel != "" {
+			planElement.ViewLabel = &element.ViewLabel
+		}
+		for _, placement := range element.Placements {
+			parentRef := placement.ParentRef
+			if parentRef == "" {
+				parentRef = syntheticRootViewRef
+			}
+			planPlacement := &diagv1.PlanViewPlacement{ParentRef: parentRef}
+			if placement.PositionX != 0 {
+				planPlacement.PositionX = &placement.PositionX
+			}
+			if placement.PositionY != 0 {
+				planPlacement.PositionY = &placement.PositionY
+			}
+			planElement.Placements = append(planElement.Placements, planPlacement)
+		}
+
+		if !recreateIDs && ws.Meta != nil {
+			if meta, ok := ws.Meta.Elements[ref]; ok {
+				id := int32(meta.ID)
+				planElement.Id = &id
+				planElement.UpdatedAt = timestamppb.New(meta.UpdatedAt)
+			}
+			if element.HasView {
+				if meta, ok := ws.Meta.Views[ref]; ok {
+					id := int32(meta.ID)
+					planElement.ViewId = &id
+					planElement.ViewUpdatedAt = timestamppb.New(meta.UpdatedAt)
+				}
 			}
 		}
+
+		req.Elements = append(req.Elements, planElement)
 	}
-	return result
+
+	for _, ref := range connectorRefs {
+		connector := ws.Connectors[ref]
+		viewRef := connector.View
+		if viewRef == "" {
+			viewRef = syntheticRootViewRef
+		}
+		planConnector := &diagv1.PlanConnector{
+			Ref:              ref,
+			ViewRef:          viewRef,
+			SourceElementRef: connector.Source,
+			TargetElementRef: connector.Target,
+		}
+		if connector.Label != "" {
+			planConnector.Label = &connector.Label
+		}
+		if connector.Description != "" {
+			planConnector.Description = &connector.Description
+		}
+		if connector.Relationship != "" {
+			planConnector.Relationship = &connector.Relationship
+		}
+		if connector.Direction != "" {
+			planConnector.Direction = &connector.Direction
+		}
+		if connector.Style != "" {
+			planConnector.Style = &connector.Style
+		}
+		if connector.URL != "" {
+			planConnector.Url = &connector.URL
+		}
+		if connector.SourceHandle != "" {
+			planConnector.SourceHandle = &connector.SourceHandle
+		}
+		if connector.TargetHandle != "" {
+			planConnector.TargetHandle = &connector.TargetHandle
+		}
+
+		if !recreateIDs && ws.Meta != nil {
+			if meta, ok := ws.Meta.Connectors[ref]; ok {
+				id := int32(meta.ID)
+				planConnector.Id = &id
+				planConnector.UpdatedAt = timestamppb.New(meta.UpdatedAt)
+			}
+		}
+
+		req.Connectors = append(req.Connectors, planConnector)
+	}
+
+	return &Plan{Request: req, Model: "workspace"}, nil
+}
+
+func usesElementWorkspace(ws *workspace.Workspace) bool {
+	return len(ws.Elements) > 0 || len(ws.Connectors) > 0
 }

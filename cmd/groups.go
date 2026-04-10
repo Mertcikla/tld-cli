@@ -7,6 +7,7 @@ func newCreateCmd(wdir *string) *cobra.Command {
 		Use:   "create",
 		Short: "Create workspace resources",
 	}
+	c.AddCommand(newCreateElementCmd(wdir))
 	c.AddCommand(newCreateDiagramCmd(wdir))
 	c.AddCommand(newCreateObjectCmd(wdir))
 	c.AddCommand(newCreateLinkCmd(wdir))
@@ -18,6 +19,7 @@ func newConnectCmd(wdir *string) *cobra.Command {
 		Use:   "connect",
 		Short: "Connect resources in the workspace",
 	}
+	c.AddCommand(newConnectElementsCmd(wdir))
 	c.AddCommand(newConnectObjectsCmd(wdir))
 	return c
 }
@@ -27,6 +29,8 @@ func newRemoveCmd(wdir *string) *cobra.Command {
 		Use:   "remove",
 		Short: "Remove workspace resources",
 	}
+	c.AddCommand(newRemoveElementCmd(wdir))
+	c.AddCommand(newRemoveConnectorCmd(wdir))
 	c.AddCommand(newRemoveDiagramCmd(wdir))
 	c.AddCommand(newRemoveObjectCmd(wdir))
 	c.AddCommand(newRemoveEdgeCmd(wdir))

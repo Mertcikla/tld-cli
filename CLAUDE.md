@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**tld** is a CLI for the tlDiagram.com architecture diagramming system. Users define diagrams, objects, edges, and drill-down links as YAML files, preview changes with `tld plan`, and apply them atomically to a diag backend server via gRPC.
+**tld** is a CLI for the tlDiagram.com architecture diagramming system. The workspace is migrating from the legacy `diagram/object/edge/link` model to the unified `element/view/connector` model. New work should prefer `elements.yaml` and `connectors.yaml`; `tld plan` and `tld apply` currently bridge that workspace onto the legacy backend request shape.
 
 ## Development commands
 
@@ -39,7 +39,7 @@ go test ./workspace/... -run TestLoader -count=1
 YAML files in workspace/ (usually ./tld/)
   → workspace.Load()     - parse all YAML into a Workspace struct
   → ws.Validate()        - check refs, cycles, required fields
-  → planner.Build()      - convert to gRPC ApplyPlanRequest + topo-sorted DiagramOrder
+  → planner.Build()      - convert to gRPC ApplyPlanRequest + topo-sorted view order
   → planner.RenderPlanMarkdown() - human-readable preview
   → client.ApplyPlan()   - gRPC call to diag backend
   → reporter.RenderExecutionMarkdown() - execution summary
@@ -48,7 +48,7 @@ YAML files in workspace/ (usually ./tld/)
 ### Packages
 
 - **`workspace/`** - load/validate/write/delete workspace YAML. `merger.go` handles surgical three-way merges using `yaml.Node`. `writer.go` handles cascading renames.
-- **`planner/`** - `Build()` maps workspace to `ApplyPlanRequest`.
+- **`planner/`** - `Build()` maps workspace to `ApplyPlanRequest`. During migration it can bridge `elements.yaml` and `connectors.yaml` onto the legacy backend contract.
 - **`reporter/`** - renders execution result markdown.
 - **`client/`** - gRPC client factory with bearer-token interceptor.
 - **`cmd/`** - Cobra commands. `root.go` auto-detects `./tld/` directory.
@@ -57,7 +57,7 @@ YAML files in workspace/ (usually ./tld/)
 
 ```
 tld
-├── init [dir]         - initializes ./tld/ with diagrams.yaml, objects.yaml, etc.
+├── init [dir]         - initializes ./tld/ with elements.yaml, connectors.yaml, and legacy bridge files
 ├── login
 ├── validate
 ├── plan [-o file]
@@ -66,16 +66,18 @@ tld
 ├── diff               - git-style diff between local and server state
 ├── status             - show sync status and merge conflicts
 ├── rename
-│   ├── diagram <old> <new> - rename diagram ref and update all usages
-│   └── object <old> <new>  - rename object ref and update all usages
+│   ├── diagram <old> <new> - legacy rename path
+│   └── object <old> <new>  - legacy rename path
 ├── create
-│   ├── diagram <name> [--ref --description --level-label --parent]
-│   └── object <diagram_ref> <name> <type> [--ref --description --technology --url --position-x --position-y]
+│   ├── element <name> [--ref --kind --description --technology --url --parent --with-view --view-label --position-x --position-y]
+│   ├── diagram <name> [--ref --description --level-label --parent]  # legacy
+│   └── object <diagram_ref> <name> <type> [--ref --description --technology --url --position-x --position-y]  # legacy
 ├── connect
-│   └── objects <diagram_ref> --from --to [--label --relationship-type --direction --edge-type]
-├── add
-│   └── link --from --to [--object]
+│   ├── elements --view --from --to [--label --relationship --direction --style]
+│   └── objects <diagram_ref> --from --to [--label --relationship-type --direction --edge-type]  # legacy
 └── remove
+  ├── element <ref>
+  ├── connector --view --from --to
     ├── diagram <ref>
     ├── object <ref>
     ├── edge --diagram --from --to
@@ -87,10 +89,12 @@ tld
 ```
 ~/.config/tldiagram/tld.yaml  # Global config: API key, org slug
 ./tld/
-  ├── diagrams.yaml           # All diagrams
-  ├── objects.yaml            # All objects
-  ├── edges.yaml              # All edges
-  ├── links.yaml              # All drill-down links
+  ├── elements.yaml           # Elements + placements + canonical-view ownership
+  ├── connectors.yaml         # Connectors inside element-owned views
+  ├── diagrams.yaml           # Legacy bridge file during migration
+  ├── objects.yaml            # Legacy bridge file during migration
+  ├── edges.yaml              # Legacy bridge file during migration
+  ├── links.yaml              # Legacy bridge file during migration
   └── .tld.lock               # Sync state, hash, and metadata at last sync
 ```
 
