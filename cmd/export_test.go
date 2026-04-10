@@ -25,7 +25,7 @@ func TestExportCmd(t *testing.T) {
 					{Id: 2, Name: "O1", Type: protoPtr("service"), UpdatedAt: timestamppb.Now()},
 				},
 				Placements: []*diagv1.ObjectPlacement{
-					{DiagramId: 1, ObjectId: 2, PositionX: 10, PositionY: 20},
+					{ViewId: 1, ElementId: 2, PositionX: 10, PositionY: 20},
 				},
 			}
 			return resp, nil

@@ -63,8 +63,8 @@ func newRemoveObjectCmd(wdir *string) *cobra.Command {
 
 			c := client.New(ws.Config.ServerURL, apiKey, false)
 			req := connect.NewRequest(&diagv1.DeleteElementRequest{
-				OrgId:    ws.Config.OrgID,
-				ObjectId: int32(serverID),
+				OrgId:     ws.Config.OrgID,
+				ElementId: int32(serverID),
 			})
 
 			_, err = c.DeleteElement(cmd.Context(), req)

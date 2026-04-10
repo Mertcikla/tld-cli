@@ -72,8 +72,8 @@ func newRemoveDiagramCmd(wdir *string) *cobra.Command {
 
 			c := client.New(ws.Config.ServerURL, apiKey, false)
 			req := connect.NewRequest(&diagv1.DeleteViewRequest{
-				OrgId:     ws.Config.OrgID,
-				DiagramId: int32(serverID),
+				OrgId:  ws.Config.OrgID,
+				ViewId: int32(serverID),
 			})
 
 			_, err = c.DeleteView(cmd.Context(), req)
