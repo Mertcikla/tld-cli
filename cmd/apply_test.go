@@ -24,7 +24,7 @@ type mockDiagramService struct {
 	lastRequest       *diagv1.ApplyPlanRequest
 	lastHeader        http.Header
 	applyFunc         func(*diagv1.ApplyPlanRequest) (*diagv1.ApplyPlanResponse, error)
-	deleteDiagramFunc func(*diagv1.DeleteViewRequest) (*diagv1.DeleteViewResponse, error)
+	deleteDiagramFunc func(*diagv1.DeleteDiagramRequest) (*diagv1.DeleteDiagramResponse, error)
 	deleteObjectFunc  func(*diagv1.DeleteElementRequest) (*diagv1.DeleteElementResponse, error)
 	exportFunc        func(*diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error)
 }
@@ -56,7 +56,7 @@ func (m *mockDiagramService) ApplyWorkspacePlan(_ context.Context, req *connect.
 	return connect.NewResponse(successResponse(req.Msg)), nil
 }
 
-func (m *mockDiagramService) DeleteView(_ context.Context, req *connect.Request[diagv1.DeleteViewRequest]) (*connect.Response[diagv1.DeleteViewResponse], error) {
+func (m *mockDiagramService) DeleteDiagram(_ context.Context, req *connect.Request[diagv1.DeleteDiagramRequest]) (*connect.Response[diagv1.DeleteDiagramResponse], error) {
 	if m.deleteDiagramFunc != nil {
 		resp, err := m.deleteDiagramFunc(req.Msg)
 		if err != nil {
@@ -64,7 +64,7 @@ func (m *mockDiagramService) DeleteView(_ context.Context, req *connect.Request[
 		}
 		return connect.NewResponse(resp), nil
 	}
-	return connect.NewResponse(&diagv1.DeleteViewResponse{}), nil
+	return connect.NewResponse(&diagv1.DeleteDiagramResponse{}), nil
 }
 
 func (m *mockDiagramService) DeleteElement(_ context.Context, req *connect.Request[diagv1.DeleteElementRequest]) (*connect.Response[diagv1.DeleteElementResponse], error) {
@@ -87,37 +87,38 @@ func successResponse(req *diagv1.ApplyPlanRequest) *diagv1.ApplyPlanResponse {
 			ConnectorsCreated: int32(len(req.Connectors)),
 		},
 		ElementMetadata:   make(map[string]*diagv1.ResourceMetadata),
-		ViewMetadata:      make(map[string]*diagv1.ResourceMetadata),
+		DiagramMetadata:   make(map[string]*diagv1.ResourceMetadata),
 		ConnectorMetadata: make(map[string]*diagv1.ResourceMetadata),
 	}
 
-	var viewCount int32
+	var diagramCount int32
 	var nextID int32 = 1
 	for _, element := range req.Elements {
 		elementID := nextID
 		nextID++
 		resp.CreatedElements = append(resp.CreatedElements, &diagv1.Element{
-			Id:      elementID,
-			Name:    element.Name,
-			Kind:    element.Kind,
-			HasView: element.HasView,
+			Id:           elementID,
+			Name:         element.Name,
+			Kind:         element.Kind,
+			HasDiagram:   element.HasDiagram,
+			DiagramLabel: element.DiagramLabel,
 		})
 		resp.ElementMetadata[element.Ref] = &diagv1.ResourceMetadata{Id: elementID, UpdatedAt: timestamppb.Now()}
-		if element.HasView {
-			viewID := nextID
+		if element.HasDiagram {
+			diagramID := nextID
 			nextID++
-			viewCount++
-			resp.CreatedViews = append(resp.CreatedViews, &diagv1.View{
-				Id:             viewID,
+			diagramCount++
+			resp.CreatedDiagrams = append(resp.CreatedDiagrams, &diagv1.DiagramSummary{
+				Id:             diagramID,
 				OwnerElementId: &elementID,
 				Name:           element.Name,
-				Label:          element.ViewLabel,
+				Label:          element.DiagramLabel,
 			})
-			resp.ViewMetadata[element.Ref] = &diagv1.ResourceMetadata{Id: viewID, UpdatedAt: timestamppb.Now()}
+			resp.DiagramMetadata[element.Ref] = &diagv1.ResourceMetadata{Id: diagramID, UpdatedAt: timestamppb.Now()}
 		}
 	}
-	resp.Summary.ViewsPlanned = viewCount
-	resp.Summary.ViewsCreated = viewCount
+	resp.Summary.DiagramsPlanned = diagramCount
+	resp.Summary.DiagramsCreated = diagramCount
 
 	for _, connector := range req.Connectors {
 		connectorID := nextID
@@ -272,7 +273,7 @@ func TestApplyCmd_ElementWorkspacePersistsMetadata(t *testing.T) {
 			break
 		}
 	}
-	if api == nil || api.Id == nil || *api.Id == 0 || api.ViewId == nil || *api.ViewId == 0 {
+	if api == nil || api.Id == nil || *api.Id == 0 || api.DiagramId == nil || *api.DiagramId == 0 {
 		t.Fatalf("expected id reuse, got %#v", api)
 	}
 	if len(svc.lastRequest.Connectors) != 1 || svc.lastRequest.Connectors[0].Id == nil || *svc.lastRequest.Connectors[0].Id == 0 {
@@ -360,7 +361,7 @@ func TestApplyCmd_CreatedResourcesInOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if !strings.Contains(stdout, "### Views") || !strings.Contains(stdout, "### Elements") || !strings.Contains(stdout, "### Connectors") {
+	if !strings.Contains(stdout, "### Diagrams") || !strings.Contains(stdout, "### Elements") || !strings.Contains(stdout, "### Connectors") {
 		t.Fatalf("unexpected verbose output: %q", stdout)
 	}
 }

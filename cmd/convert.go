@@ -62,8 +62,8 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 
 	// Second pass: resolve parent diagram refs
 	for _, d := range msg.Diagrams {
-		if d.ParentViewId != nil && *d.ParentViewId != 0 {
-			if parentRef, ok := diagramIDToRef[*d.ParentViewId]; ok {
+		if d.ParentDiagramId != nil && *d.ParentDiagramId != 0 {
+			if parentRef, ok := diagramIDToRef[*d.ParentDiagramId]; ok {
 				ref := diagramIDToRef[d.Id]
 				newWS.Diagrams[ref].ParentDiagram = parentRef
 			}
@@ -102,7 +102,7 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 	// Placements
 	for _, p := range msg.Placements {
 		objRef, ok1 := objectIDToRef[p.ElementId]
-		diagRef, ok2 := diagramIDToRef[p.ViewId]
+		diagRef, ok2 := diagramIDToRef[p.DiagramId]
 		if ok1 && ok2 {
 			newWS.Objects[objRef].Diagrams = append(newWS.Objects[objRef].Diagrams, workspace.Placement{
 				Diagram:   diagRef,
@@ -114,7 +114,7 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 
 	// Edges (keyed by "diagram:src:tgt:label")
 	for _, e := range msg.Edges {
-		diagRef, ok1 := diagramIDToRef[e.ViewId]
+		diagRef, ok1 := diagramIDToRef[e.DiagramId]
 		srcRef, ok2 := objectIDToRef[e.SourceElementId]
 		tgtRef, ok3 := objectIDToRef[e.TargetElementId]
 		if !ok1 || !ok2 || !ok3 {
@@ -148,8 +148,8 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 
 	// Links
 	for _, l := range msg.Links {
-		fromRef, ok1 := diagramIDToRef[l.FromViewId]
-		toRef, ok2 := diagramIDToRef[l.ToViewId]
+		fromRef, ok1 := diagramIDToRef[l.FromDiagramId]
+		toRef, ok2 := diagramIDToRef[l.ToDiagramId]
 		if !ok1 || !ok2 {
 			continue
 		}

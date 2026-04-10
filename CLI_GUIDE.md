@@ -24,6 +24,7 @@ Initialize a new `tld` workspace. This command ensures the global configuration 
 
 #### `tld create element <name> [flags]`
 Create or update an element in `elements.yaml`.
+Each created element owns a single canonical diagram.
 **Flags:**
 - `--kind`: Element kind (default: `service`).
 - `--description`: Description of the element.
@@ -32,14 +33,13 @@ Create or update an element in `elements.yaml`.
 - `--position-x`: Horizontal canvas position inside the parent view.
 - `--position-y`: Vertical canvas position inside the parent view.
 - `--parent`: Parent element reference or `root` (default: `root`).
-- `--with-view`: Mark the element as owning a canonical internal view.
-- `--view-label`: Optional label for that canonical internal view.
+- `--diagram-label`: Optional label for that canonical diagram.
 - `--ref`: Override the generated reference ID.
 
 #### `tld connect elements [flags]`
-Add a connector between two elements inside an element-owned view.
+Add a connector between two elements.
+The owning diagram is inferred from the two elements' shared parent placement.
 **Flags:**
-- `--view`: Owner element reference of the view **(required)**.
 - `--from`: Source element reference **(required)**.
 - `--to`: Target element reference **(required)**.
 - `--label`: Connector label.
@@ -49,26 +49,7 @@ Add a connector between two elements inside an element-owned view.
 - `--style`: Visual style of the connector. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
 - `--url`: External URL for documentation related to this connection.
 
-The legacy `create diagram`, `create object`, `connect objects`, and `create link` commands are still present during the migration bridge, but new work should prefer `element` and `connector` commands.
-
-#### `tld create diagram <name> [flags]`
-Create a new diagram YAML file. This is legacy-only during the migration.
-**Flags:**
-- `--description`: Description of the diagram.
-- `--level-label`: Abstraction level label (e.g., System, Container, Component).
-- `--parent`: Parent diagram reference (if this diagram is a drill-down).
-- `--ref`: Override the automatically generated reference ID (default is the slugified name).
-
-#### `tld create object <diagram_ref> <name> <type> [flags]`
-Create a new object YAML file and place it on the specified diagram. This is legacy-only during the migration.
-**Note:** This command is idempotent. If the object (identified by its reference ID) already exists, `tld` will simply add a new placement for that object on the specified diagram, allowing you to easily reuse the same object across multiple diagrams.
-**Flags:**
-- `--description`: Description of the object.
-- `--technology`: Primary technology used by the object (e.g., Go, React, PostgreSQL).
-- `--url`: External URL for further reference.
-- `--position-x`: Horizontal canvas position (float).
-- `--position-y`: Vertical canvas position (float).
-- `--ref`: Override the generated reference ID.
+The legacy `create diagram` and `create object` commands have been removed from the CLI surface. Legacy diagram/object files remain only for the migration bridge.
 
 ### Connecting and Linking Resources
 
@@ -85,11 +66,17 @@ Add an edge (connection) between two objects on a specified diagram.
 - `--url`: External URL for documentation related to this connection.
 
 #### `tld create link [flags]`
-Create a drill-down link between two diagrams via a specific object. This is legacy-only during the migration bridge.
+Create a connector between two elements.
+The owning diagram is inferred from the two elements' shared parent placement.
 **Flags:**
-- `--object`: Object reference that will trigger the drill-down **(optional)**.
-- `--from`: Source diagram reference **(required)**.
-- `--to`: Target diagram reference to drill down into **(required)**.
+- `--from`: Source element reference **(required)**.
+- `--to`: Target element reference **(required)**.
+- `--label`: Connector label.
+- `--description`: Connector description.
+- `--relationship`: Semantic relationship type.
+- `--direction`: Direction of the arrow. Options: `forward`, `backward`, `both`, `none` (default: `forward`).
+- `--style`: Visual style of the connector. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
+- `--url`: External URL for documentation related to this connection.
 
 #### `tld update object <ref> [flags]`
 Update an object's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
@@ -167,7 +154,7 @@ tld init .
 ### 2. Create the System Context Element
 Create the high-level system context element and give it a canonical view.
 ```bash
-tld create element "E-commerce Platform" --kind workspace --with-view --view-label "System Context" --description "High-level overview of the e-commerce system."
+tld create element "E-commerce Platform" --kind workspace --diagram-label "System Context" --description "High-level overview of the e-commerce system."
 ```
 *(This generates an element with the reference ID: `e-commerce-platform`)*
 
@@ -178,7 +165,7 @@ Add the primary users and systems to the root view.
 tld create element "Customer" --parent e-commerce-platform --kind person --description "A customer of the e-commerce platform." --position-x 100 --position-y 300
 
 # Add the main E-commerce Web Application
-tld create element "Web App" --parent e-commerce-platform --kind software_system --with-view --description "The core e-commerce web application." --position-x 400 --position-y 300
+tld create element "Web App" --parent e-commerce-platform --kind software_system --description "The core e-commerce web application." --position-x 400 --position-y 300
 
 # Add an external Payment Gateway
 tld create element "Payment Gateway" --parent e-commerce-platform --kind software_system --description "External payment processor (e.g., Stripe)." --position-x 700 --position-y 300
@@ -188,10 +175,10 @@ tld create element "Payment Gateway" --parent e-commerce-platform --kind softwar
 Define how these systems and actors interact.
 ```bash
 # Customer interacts with the Web App
-tld connect elements --view e-commerce-platform --from "customer" --to "web-app" --label "Browses and buys products" --relationship "uses"
+tld connect elements --from "customer" --to "web-app" --label "Browses and buys products" --relationship "uses"
 
 # Web App integrates with the Payment Gateway
-tld connect elements --view e-commerce-platform --from "web-app" --to "payment-gateway" --label "Processes payments using" --relationship "integrates"
+tld connect elements --from "web-app" --to "payment-gateway" --label "Processes payments using" --relationship "integrates"
 ```
 
 ### 5. Validate and Apply

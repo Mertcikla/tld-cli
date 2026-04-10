@@ -30,7 +30,7 @@ func RenderExecutionMarkdown(w io.Writer, _ *planner.Plan, resp *diagv1.ApplyPla
 		fmt.Fprintln(w, "| Resource | Planned | Created |")
 		fmt.Fprintln(w, "|----------|---------|---------|")
 		fmt.Fprintf(w, "| Elements | %d | %d |\n", s.ElementsPlanned, s.ElementsCreated)
-		fmt.Fprintf(w, "| Views    | %d | %d |\n", s.ViewsPlanned, s.ViewsCreated)
+		fmt.Fprintf(w, "| Diagrams | %d | %d |\n", s.DiagramsPlanned, s.DiagramsCreated)
 		fmt.Fprintf(w, "| Connectors | %d | %d |\n", s.ConnectorsPlanned, s.ConnectorsCreated)
 		fmt.Fprintln(w)
 	}
@@ -39,11 +39,11 @@ func RenderExecutionMarkdown(w io.Writer, _ *planner.Plan, resp *diagv1.ApplyPla
 		fmt.Fprintln(w, "## Created Resources")
 		fmt.Fprintln(w)
 
-		if len(resp.CreatedViews) > 0 {
-			fmt.Fprintln(w, "### Views")
+		if len(resp.CreatedDiagrams) > 0 {
+			fmt.Fprintln(w, "### Diagrams")
 			fmt.Fprintln(w, "| ID | Name |")
 			fmt.Fprintln(w, "|----|------|")
-			for _, d := range resp.CreatedViews {
+			for _, d := range resp.CreatedDiagrams {
 				fmt.Fprintf(w, "| %d | %s |\n", d.Id, d.Name)
 			}
 			fmt.Fprintln(w)

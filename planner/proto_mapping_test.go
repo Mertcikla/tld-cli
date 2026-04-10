@@ -48,8 +48,11 @@ func TestProtoMapping_ElementFields(t *testing.T) {
 	if element.LogoUrl == nil || *element.LogoUrl != "https://example.com/logo.svg" {
 		t.Fatalf("LogoUrl = %v", element.LogoUrl)
 	}
-	if element.ViewLabel == nil || *element.ViewLabel != "Container" {
-		t.Fatalf("ViewLabel = %v", element.ViewLabel)
+	if !element.HasDiagram {
+		t.Fatal("expected HasDiagram to be true")
+	}
+	if element.DiagramLabel == nil || *element.DiagramLabel != "Container" {
+		t.Fatalf("DiagramLabel = %v", element.DiagramLabel)
 	}
 	if len(element.Placements) != 1 {
 		t.Fatalf("Placements = %d", len(element.Placements))
@@ -85,7 +88,7 @@ func TestProtoMapping_ConnectorFields(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	connector := plan.Request.Connectors[0]
-	if connector.ViewRef != "root" || connector.SourceElementRef != "a" || connector.TargetElementRef != "b" {
+	if connector.DiagramRef != "root" || connector.SourceElementRef != "a" || connector.TargetElementRef != "b" {
 		t.Fatalf("unexpected connector mapping: %+v", connector)
 	}
 	if connector.Label == nil || *connector.Label != "reads" {

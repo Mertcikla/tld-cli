@@ -17,10 +17,8 @@ func TestUpdateObjectCmd_SourceLinking(t *testing.T) {
 	setupDiagram(t, dir)
 
 	// Create an object first
-	_, _, err := runCmd(t, dir, "create", "object", "system", "API Gateway", "service")
-	if err != nil {
-		t.Fatalf("create object: %v", err)
-	}
+	createLegacyObject(t, dir, "system", "api-gateway", "API Gateway", "service")
+	var err error
 
 	// Update with source linking flags
 	_, _, err = runCmd(t, dir, "update", "object", "api-gateway",
@@ -54,10 +52,8 @@ func TestUpdateSourceCmd_SymbolLinking(t *testing.T) {
 	setupDiagram(t, dir)
 
 	// Create an object
-	_, _, err := runCmd(t, dir, "create", "object", "system", "API Gateway", "service")
-	if err != nil {
-		t.Fatalf("create object: %v", err)
-	}
+	createLegacyObject(t, dir, "system", "api-gateway", "API Gateway", "service")
+	var err error
 
 	// Update source with symbol
 	_, _, err = runCmd(t, dir, "update", "source", "api-gateway",
@@ -102,7 +98,7 @@ func TestUpdateSourceCmd_LineLinking(t *testing.T) {
 	setupDiagram(t, dir)
 
 	// Create an object
-	mustRunCmd(t, dir, "create", "object", "system", "API Gateway", "service")
+	createLegacyObject(t, dir, "system", "api-gateway", "API Gateway", "service")
 
 	// Update source with line
 	_, _, err := runCmd(t, dir, "update", "source", "api-gateway",
@@ -135,7 +131,7 @@ func TestUpdateSourceCmd_DatabaseFormat(t *testing.T) {
 	setupDiagram(t, dir)
 
 	// Create an object
-	mustRunCmd(t, dir, "create", "object", "system", "PytorchTest", "service")
+	createLegacyObject(t, dir, "system", "pytorchtest", "PytorchTest", "service")
 
 	// Update source with the specific format
 	_, _, err := runCmd(t, dir, "update", "source", "pytorchtest",

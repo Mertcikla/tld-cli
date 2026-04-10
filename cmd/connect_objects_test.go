@@ -14,12 +14,8 @@ import (
 func setupWorkspaceWithObjects(t *testing.T, dir string) {
 	t.Helper()
 	setupDiagram(t, dir)
-	if _, _, err := runCmd(t, dir, "create", "object", "system", "Service", "service"); err != nil {
-		t.Fatalf("create svc: %v", err)
-	}
-	if _, _, err := runCmd(t, dir, "create", "object", "system", "Database", "database"); err != nil {
-		t.Fatalf("create db: %v", err)
-	}
+	createLegacyObject(t, dir, "system", "service", "Service", "service")
+	createLegacyObject(t, dir, "system", "database", "Database", "database")
 }
 
 func TestConnectObjectsCmd_AppendsEdge(t *testing.T) {

@@ -51,8 +51,10 @@ func (ws *Workspace) Validate() []ValidationError {
 		loc := fmt.Sprintf("connectors.yaml[%s]", ref)
 		if connector.View == "" {
 			errs = append(errs, ValidationError{loc, "view is required"})
-		} else if _, ok := ws.Elements[connector.View]; !ok {
-			errs = append(errs, ValidationError{loc, fmt.Sprintf("view ref %q not found", connector.View)})
+		} else if connector.View != "root" {
+			if _, ok := ws.Elements[connector.View]; !ok {
+				errs = append(errs, ValidationError{loc, fmt.Sprintf("view ref %q not found", connector.View)})
+			}
 		}
 		if connector.Source == "" {
 			errs = append(errs, ValidationError{loc, "source is required"})

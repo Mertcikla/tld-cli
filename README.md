@@ -48,7 +48,7 @@ This will install the `tld` binary into your `$GOPATH/bin` directory.
 
 3. Create your first element:
    ```bash
-   tld create element "System Overview" --ref system-overview --kind workspace --with-view --view-label "System Context"
+   tld create element "System Overview" --ref system-overview --kind workspace --diagram-label "System Context"
    ```
 
 4. Add elements to that view:
@@ -73,8 +73,8 @@ A tld workspace consists of the following directory structure:
 
 - `~/.config/tldiagram/tld.yaml` (or your OS equivalent): Configuration file for server connection and organization details.
 - `.tld.lock`: (Generated) Lock file for workspace versioning and change tracking.
-- `elements.yaml`: YAML file defining elements, their canonical-view capability, and their placements.
-- `connectors.yaml`: Relationship definitions inside an element-owned view.
+- `elements.yaml`: YAML file defining elements, their canonical diagrams, and their placements.
+- `connectors.yaml`: Relationship definitions between elements inside the inferred parent diagram.
 - `diagrams.yaml`, `objects.yaml`, `edges.yaml`, `links.yaml`: Legacy files retained only during the migration bridge.
 
 ## Commands
@@ -90,11 +90,12 @@ A tld workspace consists of the following directory structure:
 
 ### Resource Creation
 
-- `tld create element <name>`: Define a new element and optionally give it a canonical internal view.
-- `tld connect elements --view <element_ref> --from <source> --to <target>`: Define a connector inside an element-owned view.
+- `tld create element <name>`: Define a new element. Every created element owns a canonical diagram.
+- `tld create link --from <source_ref> --to <target_ref>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
+- `tld connect elements --from <source> --to <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
 - `tld remove element <ref>`: Remove an element from the workspace.
 - `tld remove connector --view <ref> --from <source_ref> --to <target_ref>`: Remove matching connector(s).
-- The legacy `diagram/object/edge/link` commands still exist during the migration bridge, but new work should use the element/connectors workflow.
+- The legacy `create diagram` and `create object` commands have been removed. Legacy diagram/object files are still retained only for the migration bridge.
 
 ### Removing Resources
 

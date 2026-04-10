@@ -56,15 +56,15 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			}
 
 			req := plan.Request
-			viewCount := 0
+			diagramCount := 0
 			for _, element := range req.Elements {
-				if element.GetHasView() {
-					viewCount++
+				if element.GetHasDiagram() {
+					diagramCount++
 				}
 			}
-			total := len(req.Elements) + viewCount + len(req.Connectors)
-			fmt.Fprintf(cmd.OutOrStdout(), "Plan: %d elements, %d views, %d connectors (%d total resources)\n",
-				len(req.Elements), viewCount, len(req.Connectors), total)
+			total := len(req.Elements) + diagramCount + len(req.Connectors)
+			fmt.Fprintf(cmd.OutOrStdout(), "Plan: %d elements, %d diagrams, %d connectors (%d total resources)\n",
+				len(req.Elements), diagramCount, len(req.Connectors), total)
 
 			// Check for version conflicts if lock file exists
 			scanner := bufio.NewScanner(cmd.InOrStdin())
@@ -208,7 +208,7 @@ func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *works
 		if !element.HasView {
 			continue
 		}
-		if metadata, ok := resourceMetadataFromMap(respMsg.GetViewMetadata(), ref); ok {
+		if metadata, ok := resourceMetadataFromMap(respMsg.GetDiagramMetadata(), ref); ok {
 			meta.Views[ref] = metadata
 		}
 	}
@@ -234,14 +234,14 @@ func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *works
 // updateLockFileFromResponse updates lock file with response data
 func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, ws *workspace.Workspace, respMsg *diagv1.ApplyPlanResponse) error {
 	summary := respMsg.GetSummary()
-	viewCount := len(respMsg.GetCreatedViews())
+	diagramCount := len(respMsg.GetCreatedDiagrams())
 	elementCount := len(respMsg.GetCreatedElements())
 	connectorCount := len(respMsg.GetCreatedConnectors())
-	legacyViewCount := viewCount
+	legacyDiagramCount := diagramCount
 	legacyElementCount := elementCount
 	legacyConnectorCount := connectorCount
 	if summary != nil {
-		legacyViewCount = int(summary.GetViewsCreated())
+		legacyDiagramCount = int(summary.GetDiagramsCreated())
 		legacyElementCount = int(summary.GetElementsCreated())
 		legacyConnectorCount = int(summary.GetConnectorsCreated())
 	}
@@ -254,7 +254,7 @@ func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, w
 	}
 
 	// Generate new version ID
-	versionID := fmt.Sprintf("v%d", legacyViewCount+legacyElementCount+legacyConnectorCount)
+	versionID := fmt.Sprintf("v%d", legacyDiagramCount+legacyElementCount+legacyConnectorCount)
 	if respMsg.Version != nil {
 		versionID = respMsg.Version.VersionId
 	}
@@ -274,7 +274,7 @@ func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, w
 	// Update lock file
 	workspace.UpdateLockFile(lockFile, versionID, "cli", 0, 0, 0, 0, workspaceHash, nil, meta)
 	lockFile.Resources.Elements = len(ws.Elements)
-	lockFile.Resources.Views = viewCount
+	lockFile.Resources.Views = diagramCount
 	lockFile.Resources.Connectors = len(ws.Connectors)
 
 	if err := workspace.WriteLockFile(wdir, lockFile); err != nil {

@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const syntheticRootViewRef = "__workspace_root__"
+const syntheticRootViewRef = "root"
 
 // Plan holds the resolved ApplyPlanRequest and a topologically-sorted list of
 // diagram refs (parents before children).
@@ -56,9 +56,9 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 	for _, ref := range elementRefs {
 		element := ws.Elements[ref]
 		planElement := &diagv1.PlanElement{
-			Ref:     ref,
-			Name:    element.Name,
-			HasView: element.HasView,
+			Ref:        ref,
+			Name:       element.Name,
+			HasDiagram: element.HasView,
 		}
 		if element.Kind != "" {
 			planElement.Kind = &element.Kind
@@ -88,14 +88,14 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 			planElement.FilePath = &element.FilePath
 		}
 		if element.ViewLabel != "" {
-			planElement.ViewLabel = &element.ViewLabel
+			planElement.DiagramLabel = &element.ViewLabel
 		}
 		for _, placement := range element.Placements {
 			parentRef := placement.ParentRef
 			if parentRef == "" {
 				parentRef = syntheticRootViewRef
 			}
-			planPlacement := &diagv1.PlanViewPlacement{ParentRef: parentRef}
+			planPlacement := &diagv1.PlanDiagramPlacement{ParentRef: parentRef}
 			if placement.PositionX != 0 {
 				planPlacement.PositionX = &placement.PositionX
 			}
@@ -114,8 +114,8 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 			if element.HasView {
 				if meta, ok := ws.Meta.Views[ref]; ok {
 					id := int32(meta.ID)
-					planElement.ViewId = &id
-					planElement.ViewUpdatedAt = timestamppb.New(meta.UpdatedAt)
+					planElement.DiagramId = &id
+					planElement.DiagramUpdatedAt = timestamppb.New(meta.UpdatedAt)
 				}
 			}
 		}
@@ -131,7 +131,7 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 		}
 		planConnector := &diagv1.PlanConnector{
 			Ref:              ref,
-			ViewRef:          viewRef,
+			DiagramRef:       viewRef,
 			SourceElementRef: connector.Source,
 			TargetElementRef: connector.Target,
 		}

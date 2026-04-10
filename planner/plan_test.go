@@ -97,8 +97,8 @@ func TestBuild_MapsElementsAndConnectors(t *testing.T) {
 		if element.Kind == nil || *element.Kind != "service" {
 			t.Fatalf("api kind = %v", element.Kind)
 		}
-		if element.ViewId != nil {
-			t.Fatalf("unexpected view id on fresh workspace")
+		if element.DiagramId != nil {
+			t.Fatalf("unexpected diagram id on fresh workspace")
 		}
 		if len(element.Placements) != 1 {
 			t.Fatalf("api placements = %d", len(element.Placements))
@@ -116,8 +116,8 @@ func TestBuild_MapsElementsAndConnectors(t *testing.T) {
 	}
 
 	connector := plan.Request.Connectors[0]
-	if connector.ViewRef != "platform" {
-		t.Fatalf("ViewRef = %q", connector.ViewRef)
+	if connector.DiagramRef != "platform" {
+		t.Fatalf("DiagramRef = %q", connector.DiagramRef)
 	}
 	if connector.SourceElementRef != "api" || connector.TargetElementRef != "db" {
 		t.Fatalf("unexpected connector endpoints: %+v", connector)
@@ -157,8 +157,8 @@ func TestBuild_ReusesMetadataIDs(t *testing.T) {
 	if api.Id == nil || *api.Id != 101 {
 		t.Fatalf("api id = %v", api.Id)
 	}
-	if api.ViewId == nil || *api.ViewId != 202 {
-		t.Fatalf("api view id = %v", api.ViewId)
+	if api.DiagramId == nil || *api.DiagramId != 202 {
+		t.Fatalf("api diagram id = %v", api.DiagramId)
 	}
 	if plan.Request.Connectors[0].Id == nil || *plan.Request.Connectors[0].Id != 303 {
 		t.Fatalf("connector id = %v", plan.Request.Connectors[0].Id)

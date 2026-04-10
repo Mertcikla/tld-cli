@@ -10,9 +10,8 @@ import (
 func TestValidateCmd_ValidWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
-	// Write a valid diagram
-	if _, _, err := runCmd(t, dir, "create", "diagram", "System", "--ref", "sys"); err != nil {
-		t.Fatalf("create diagram: %v", err)
+	if _, _, err := runCmd(t, dir, "create", "element", "System", "--ref", "sys", "--kind", "workspace"); err != nil {
+		t.Fatalf("create element: %v", err)
 	}
 
 	stdout, _, err := runCmd(t, dir, "validate")
@@ -22,7 +21,7 @@ func TestValidateCmd_ValidWorkspace(t *testing.T) {
 	if !strings.Contains(stdout, "Workspace valid") {
 		t.Errorf("stdout %q does not contain 'Workspace valid'", stdout)
 	}
-	if !strings.Contains(stdout, "1 diagrams") {
+	if !strings.Contains(stdout, "Element workspace: 1 elements, 1 diagrams, 0 connectors") {
 		t.Errorf("stdout %q does not contain count summary", stdout)
 	}
 }
