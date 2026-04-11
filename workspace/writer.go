@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ func UpdateDiagram(dir, ref string, spec *Diagram) error {
 		_ = yaml.Unmarshal(data, &existing)
 	}
 	existing[ref] = spec
-	data, err := yaml.Marshal(existing)
+	data, err := marshalPrettyYAML(existing)
 	if err != nil {
 		return fmt.Errorf("marshal diagrams: %w", err)
 	}
@@ -47,7 +48,7 @@ func UpdateObject(dir, ref string, spec *Object) error {
 		_ = yaml.Unmarshal(data, &existing)
 	}
 	existing[ref] = spec
-	data, err := yaml.Marshal(existing)
+	data, err := marshalPrettyYAML(existing)
 	if err != nil {
 		return fmt.Errorf("marshal objects: %w", err)
 	}
@@ -72,7 +73,7 @@ func AppendEdge(dir string, spec *Edge) error {
 	}
 	key := spec.Diagram + ":" + spec.SourceObject + ":" + spec.TargetObject + ":" + spec.Label
 	existing[key] = spec
-	data, err := yaml.Marshal(existing)
+	data, err := marshalPrettyYAML(existing)
 	if err != nil {
 		return fmt.Errorf("marshal edges: %w", err)
 	}
@@ -90,7 +91,7 @@ func UpdateEdge(dir, key string, spec *Edge) error {
 		_ = yaml.Unmarshal(data, &existing)
 	}
 	existing[key] = spec
-	data, err := yaml.Marshal(existing)
+	data, err := marshalPrettyYAML(existing)
 	if err != nil {
 		return fmt.Errorf("marshal edges: %w", err)
 	}
@@ -120,7 +121,7 @@ func UpdateElement(dir, ref string, spec *Element) error {
 		_ = yaml.Unmarshal(data, &existing)
 	}
 	existing[ref] = spec
-	data, err := yaml.Marshal(existing)
+	data, err := marshalPrettyYAML(existing)
 	if err != nil {
 		return fmt.Errorf("marshal elements: %w", err)
 	}
@@ -165,7 +166,7 @@ func Save(ws *Workspace) error {
 
 	// Write links
 	if len(ws.Links) > 0 {
-		data, err := yaml.Marshal(ws.Links)
+		data, err := marshalPrettyYAML(ws.Links)
 		if err != nil {
 			return fmt.Errorf("marshal links: %w", err)
 		}
@@ -357,6 +358,7 @@ func connectorKey(spec *Connector) string {
 }
 
 func writeYAMLNode(path string, root *yaml.Node) error {
+	normalizeYAMLStyle(root)
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -372,6 +374,25 @@ func writeYAMLNode(path string, root *yaml.Node) error {
 		return fmt.Errorf("close %s: %w", path, err)
 	}
 	return nil
+}
+
+func marshalPrettyYAML(v any) ([]byte, error) {
+	var node yaml.Node
+	if err := node.Encode(v); err != nil {
+		return nil, err
+	}
+	normalizeYAMLStyle(&node)
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&node); err != nil {
+		_ = enc.Close()
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // WriteFullYAMLMap writes a map of items to a YAML file, including an optional _meta section.
@@ -405,6 +426,7 @@ func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata)
 	}
 
 	// 3. Write back to file with specific indentation
+	normalizeYAMLStyle(&node)
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -502,7 +524,7 @@ func updateDiagramsYamlForRename(dir, oldRef, newRef string) error {
 		}
 	}
 
-	out, err := yaml.Marshal(diagrams)
+	out, err := marshalPrettyYAML(diagrams)
 	if err != nil {
 		return fmt.Errorf("marshal diagrams: %w", err)
 	}
@@ -532,7 +554,7 @@ func updateObjectsYamlForDiagramRename(dir, oldRef, newRef string) error {
 		}
 	}
 	if changed {
-		out, err := yaml.Marshal(objects)
+		out, err := marshalPrettyYAML(objects)
 		if err != nil {
 			return fmt.Errorf("marshal objects: %w", err)
 		}
@@ -585,7 +607,7 @@ func updateEdgesYamlForDiagramRename(dir, oldRef, newRef string) error {
 		}
 	}
 	if changed {
-		out, err := yaml.Marshal(newEdges)
+		out, err := marshalPrettyYAML(newEdges)
 		if err != nil {
 			return fmt.Errorf("marshal edges: %w", err)
 		}
@@ -618,7 +640,7 @@ func updateLinksYamlForDiagramRename(dir, oldRef, newRef string) error {
 		}
 	}
 	if changed {
-		out, err := yaml.Marshal(links)
+		out, err := marshalPrettyYAML(links)
 		if err != nil {
 			return fmt.Errorf("marshal links: %w", err)
 		}
@@ -737,7 +759,7 @@ func updateObjectsYamlForRename(dir, oldRef, newRef string) error {
 		}
 	}
 
-	out, err := yaml.Marshal(objects)
+	out, err := marshalPrettyYAML(objects)
 	if err != nil {
 		return fmt.Errorf("marshal objects: %w", err)
 	}
@@ -827,7 +849,7 @@ func updateEdgesYamlForObjectRename(dir, oldRef, newRef string) error {
 		}
 	}
 	if changed {
-		out, err := yaml.Marshal(newEdges)
+		out, err := marshalPrettyYAML(newEdges)
 		if err != nil {
 			return fmt.Errorf("marshal edges: %w", err)
 		}
@@ -856,7 +878,7 @@ func updateLinksYamlForObjectRename(dir, oldRef, newRef string) error {
 		}
 	}
 	if changed {
-		out, err := yaml.Marshal(links)
+		out, err := marshalPrettyYAML(links)
 		if err != nil {
 			return fmt.Errorf("marshal links: %w", err)
 		}
@@ -1019,7 +1041,7 @@ func updateYAMLMap(path, ref string, item any) error {
 	}
 	existing[ref] = itemMap
 
-	data, err := yaml.Marshal(existing)
+	data, err := marshalPrettyYAML(existing)
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
@@ -1049,7 +1071,7 @@ func appendYAMLList(path string, item any) error {
 	}
 	existing = append(existing, itemMap)
 
-	data, err := yaml.Marshal(existing)
+	data, err := marshalPrettyYAML(existing)
 	if err != nil {
 		return fmt.Errorf("marshal list %s: %w", path, err)
 	}

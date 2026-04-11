@@ -17,7 +17,7 @@ proto:
 	go mod tidy
 
 build:
-	go build -o ./build/tld .
+    go build -o $GOPATH/bin/tld .
 
 run:
 	go run .
