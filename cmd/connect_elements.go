@@ -7,18 +7,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func elementParentRef(element *workspace.Element) (string, error) {
-	if element == nil {
-		return "", fmt.Errorf("element is required")
+func elementParentRefs(element *workspace.Element) []string {
+	if element == nil || len(element.Placements) == 0 {
+		return []string{"root"}
 	}
-	if len(element.Placements) != 1 {
-		return "", fmt.Errorf("element %q must have exactly 1 placement, got %d", element.Name, len(element.Placements))
+	refs := make([]string, 0, len(element.Placements))
+	for _, p := range element.Placements {
+		parent := p.ParentRef
+		if parent == "" {
+			parent = "root"
+		}
+		refs = append(refs, parent)
 	}
-	parentRef := element.Placements[0].ParentRef
-	if parentRef == "" {
-		parentRef = "root"
-	}
-	return parentRef, nil
+	return refs
 }
 
 func inferConnectorView(ws *workspace.Workspace, from, to string) (string, error) {
@@ -33,18 +34,21 @@ func inferConnectorView(ws *workspace.Workspace, from, to string) (string, error
 	if !ok {
 		return "", fmt.Errorf("target element %q not found", to)
 	}
-	fromParent, err := elementParentRef(fromElement)
-	if err != nil {
-		return "", fmt.Errorf("source element %q: %w", from, err)
+
+	fromParents := elementParentRefs(fromElement)
+	toParents := elementParentRefs(toElement)
+
+	// Check for a shared parent
+	for _, f := range fromParents {
+		for _, t := range toParents {
+			if f == t {
+				return f, nil
+			}
+		}
 	}
-	toParent, err := elementParentRef(toElement)
-	if err != nil {
-		return "", fmt.Errorf("target element %q: %w", to, err)
-	}
-	if fromParent != toParent {
-		return "", fmt.Errorf("elements %q and %q must share the same parent diagram (got %q and %q)", from, to, fromParent, toParent)
-	}
-	return fromParent, nil
+
+	// No shared parent, default to root
+	return "root", nil
 }
 
 func newConnectElementsCmd(wdir *string) *cobra.Command {
