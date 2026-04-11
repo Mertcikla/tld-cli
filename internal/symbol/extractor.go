@@ -58,12 +58,12 @@ func ExtractDir(ctx context.Context, root string, rules *ignore.Rules) (*Result,
 		// Relative path for ignore matching
 		rel, _ := filepath.Rel(root, path)
 		if d.IsDir() {
-			if rules.ShouldIgnoreFolder(rel) || rules.ShouldIgnoreFolder(d.Name()) {
+			if rules.ShouldIgnorePath(rel) || rules.ShouldIgnorePath(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if rules.ShouldIgnoreFile(path) {
+		if rules.ShouldIgnorePath(path) {
 			return nil
 		}
 		if _, err := grammarFor(path); err != nil {

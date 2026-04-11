@@ -19,6 +19,8 @@ func newValidateCmd(wdir *string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load workspace: %w", err)
 			}
+			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
+			rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 
 			// Override strictness if flag is set
 			if strictness > 0 {
@@ -36,6 +38,16 @@ func newValidateCmd(wdir *string) *cobra.Command {
 				}
 				return fmt.Errorf("%d validation error(s)", len(errs))
 			}
+
+			broken := checkSymbols(cmd.Context(), ws, repoCtx, rules)
+			if len(broken) > 0 {
+				fmt.Fprintln(cmd.ErrOrStderr(), "Symbol verification errors:")
+				for _, msg := range broken {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  - %s\n", msg)
+				}
+				return fmt.Errorf("%d symbol verification error(s)", len(broken))
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Symbol verification: passed")
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Workspace valid: %d diagrams, %d objects, %d edges, %d links\n",
 				len(ws.Diagrams), len(ws.Objects), len(ws.Edges), len(ws.Links))

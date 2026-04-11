@@ -37,6 +37,19 @@ func Load(dir string) (*Workspace, error) {
 		ws.Config.APIKey = os.Getenv("TLD_API_KEY")
 	}
 
+	// Load workspace-local configuration from .tld.yaml if present.
+	workspaceConfigPath := WorkspaceConfigPath(dir)
+	if data, err := os.ReadFile(workspaceConfigPath); err == nil {
+		cfg := &WorkspaceConfig{}
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("parse .tld.yaml: %w", err)
+		}
+		ws.WorkspaceConfig = cfg
+		ws.IgnoreRules = &ignore.Rules{Exclude: append([]string{}, cfg.Exclude...)}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read .tld.yaml: %w", err)
+	}
+
 	// Load diagrams from diagrams.yaml
 	diagPath := filepath.Join(dir, "diagrams.yaml")
 	if data, err := os.ReadFile(diagPath); err == nil {
@@ -100,16 +113,6 @@ func Load(dir string) (*Workspace, error) {
 		return nil, fmt.Errorf("load metadata: %w", err)
 	}
 	ws.Meta = meta
-
-	// Load ignore rules (optional — missing file is not an error)
-	ignorePath := filepath.Join(dir, "ignore.yaml")
-	if data, err := os.ReadFile(ignorePath); err == nil {
-		var rules ignore.Rules
-		if err := yaml.Unmarshal(data, &rules); err != nil {
-			return nil, fmt.Errorf("parse ignore.yaml: %w", err)
-		}
-		ws.IgnoreRules = &rules
-	}
 
 	return ws, nil
 }

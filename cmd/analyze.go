@@ -45,131 +45,150 @@ for cross-file call references.`,
 				return fmt.Errorf("load workspace: %w", err)
 			}
 
-			// Detect git context (best-effort — not fatal if not a git repo)
-			var repoURL, branch string
-			var repoRoot string
-			if root, err := git.RepoRoot(absPath); err == nil {
-				repoRoot = root
-				if url, err := git.DetectRemoteURL(root); err == nil {
-					repoURL = url
-				}
-				if b, err := git.DetectBranch(root); err == nil {
-					branch = b
-				}
+			repoScopes, err := resolveAnalyzeRepoScopes(ws, absPath)
+			if err != nil {
+				return err
 			}
 
 			ctx := cmd.Context()
-			rules := ws.IgnoreRules
+			totalElements := 0
+			totalConnectors := 0
+			workspaceRoot, _ := filepath.Abs(ws.Dir)
+			workspaceScan := samePath(absPath, workspaceRoot)
 
-			// Extract symbols from the scan path
-			scanResult, err := extractFromPath(ctx, absPath, rules)
-			if err != nil {
-				return fmt.Errorf("extract symbols: %w", err)
-			}
-
-			// Optionally scan entire repo for cross-file references
-			if deep && repoRoot != "" {
-				deepResult, err := extractFromPath(ctx, repoRoot, rules)
-				if err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: deep scan failed: %v\n", err)
-				} else {
-					scanResult.Refs = append(scanResult.Refs, deepResult.Refs...)
+			for _, repoCtx := range repoScopes {
+				rules := ws.IgnoreRulesForRepository(repoCtx.Name)
+				scanRoot := absPath
+				if workspaceScan {
+					scanRoot = repoCtx.Root
 				}
-			}
 
-			// Filter symbols by ignore rules
-			filtered := filterSymbols(scanResult.Symbols, rules)
+				fmt.Fprintf(cmd.OutOrStdout(), "Scanning repo %s (%s)\n", repoCtx.displayName(), repoCtx.Root)
 
-			if len(filtered) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No symbols found.")
-				return nil
-			}
-
-			// Build a ref map: symbol name → element ref (for connector creation)
-			refMap := make(map[string]string) // symbolName → ref slug
-
-			upserted := 0
-			for _, sym := range filtered {
-				ref := slugifySymbol(sym.Name, sym.FilePath, refMap)
-				refMap[sym.Name] = ref
-
-				relPath := sym.FilePath
-				if repoRoot != "" {
-					if rel, err := filepath.Rel(repoRoot, sym.FilePath); err == nil {
-						relPath = rel
+				// Detect git context (best-effort — not fatal if not a git repo)
+				var repoURL, branch string
+				if repoCtx.active() {
+					if url, err := git.DetectRemoteURL(repoCtx.Root); err == nil {
+						repoURL = url
+					}
+					if b, err := git.DetectBranch(repoCtx.Root); err == nil {
+						branch = b
 					}
 				}
 
-				spec := &workspace.Element{
-					Name:     sym.Name,
-					Kind:     sym.Kind,
-					FilePath: relPath,
-					Symbol:   sym.Name,
-					Repo:     repoURL,
-					Branch:   branch,
+				// Extract symbols from the scan path
+				scanResult, err := extractFromPath(ctx, scanRoot, rules)
+				if err != nil {
+					return fmt.Errorf("extract symbols: %w", err)
 				}
 
-				if dryRun {
-					fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] upsert element %q (kind=%s, file=%s)\n",
-						ref, sym.Kind, relPath)
-					upserted++
+				// Optionally scan entire repo for cross-file references
+				if deep && repoCtx.active() && !workspaceScan {
+					deepResult, err := extractFromPath(ctx, repoCtx.Root, rules)
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: deep scan failed: %v\n", err)
+					} else {
+						scanResult.Refs = append(scanResult.Refs, deepResult.Refs...)
+					}
+				}
+
+				// Filter symbols by ignore rules
+				filtered := filterSymbols(scanResult.Symbols, rules)
+
+				if len(filtered) == 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "No symbols found in repo %s.\n", repoCtx.displayName())
 					continue
 				}
 
-				if err := workspace.UpsertElement(*wdir, ref, spec); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: upsert element %q: %v\n", ref, err)
-					continue
-				}
-				upserted++
-			}
+				// Build a ref map: symbol name → element ref (for connector creation)
+				refMap := make(map[string]string) // symbolName → ref slug
 
-			// Create connectors for discovered references
-			connectors := 0
-			for _, ref := range scanResult.Refs {
-				// Only create connectors between symbols we extracted
-				if rules.ShouldIgnoreSymbol(ref.Name) {
-					continue
-				}
-				toRef, toExists := refMap[ref.Name]
-				if !toExists {
-					continue // target symbol not in our extracted set
-				}
+				repoElements := 0
+				for _, sym := range filtered {
+					ref := slugifySymbol(sym.Name, sym.FilePath, refMap)
+					refMap[sym.Name] = ref
 
-				// Find which element's file this ref came from
-				fromRef := refByFile(ref.FilePath, refMap, filtered)
-				if fromRef == "" || fromRef == toRef {
-					continue
-				}
+					relPath := sym.FilePath
+					if repoCtx.active() {
+						if rel, err := filepath.Rel(repoCtx.Root, sym.FilePath); err == nil {
+							relPath = rel
+						}
+					}
 
-				connectorSpec := &workspace.Connector{
-					View:         "root",
-					Source:       fromRef,
-					Target:       toRef,
-					Label:        "calls",
-					Relationship: "uses",
-					Direction:    "forward",
-				}
+					spec := &workspace.Element{
+						Name:     sym.Name,
+						Kind:     sym.Kind,
+						FilePath: relPath,
+						Symbol:   sym.Name,
+						Repo:     repoURL,
+						Branch:   branch,
+					}
 
-				if dryRun {
-					fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] upsert connector %s → %s\n", fromRef, toRef)
-					connectors++
-					continue
+					if dryRun {
+						fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] [%s] upsert element %q (kind=%s, file=%s)\n",
+							repoCtx.displayName(), ref, sym.Kind, relPath)
+						repoElements++
+						continue
+					}
+
+					if err := workspace.UpsertElement(*wdir, ref, spec); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: upsert element %q: %v\n", ref, err)
+						continue
+					}
+					repoElements++
 				}
 
-				if err := workspace.AppendConnector(*wdir, connectorSpec); err != nil {
-					// Duplicate connectors produce a benign overwrite — not fatal
-					_ = err
-					continue
+				// Create connectors for discovered references
+				repoConnectors := 0
+				for _, ref := range scanResult.Refs {
+					// Only create connectors between symbols we extracted
+					if rules.ShouldIgnoreSymbol(ref.Name) {
+						continue
+					}
+					toRef, toExists := refMap[ref.Name]
+					if !toExists {
+						continue // target symbol not in our extracted set
+					}
+
+					// Find which element's file this ref came from
+					fromRef := refByFile(ref.FilePath, refMap, filtered)
+					if fromRef == "" || fromRef == toRef {
+						continue
+					}
+
+					connectorSpec := &workspace.Connector{
+						View:         "root",
+						Source:       fromRef,
+						Target:       toRef,
+						Label:        "calls",
+						Relationship: "uses",
+						Direction:    "forward",
+					}
+
+					if dryRun {
+						fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] [%s] upsert connector %s → %s\n", repoCtx.displayName(), fromRef, toRef)
+						repoConnectors++
+						continue
+					}
+
+					if err := workspace.AppendConnector(*wdir, connectorSpec); err != nil {
+						// Duplicate connectors produce a benign overwrite — not fatal
+						_ = err
+						continue
+					}
+					repoConnectors++
 				}
-				connectors++
+
+				totalElements += repoElements
+				totalConnectors += repoConnectors
 			}
 
 			if dryRun {
-				fmt.Fprintf(cmd.OutOrStdout(), "Dry run: %d elements, %d connectors (not written)\n",
-					upserted, connectors)
+				fmt.Fprintf(cmd.OutOrStdout(), "Dry run: %d repos, %d elements, %d connectors (not written)\n",
+					len(repoScopes), totalElements, totalConnectors)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "Analyzed: upserted %d elements, %d connectors\n",
-					upserted, connectors)
+				fmt.Fprintf(cmd.OutOrStdout(), "Analyzed: %d repos, %d elements, %d connectors\n",
+					len(repoScopes), totalElements, totalConnectors)
 			}
 			return nil
 		},

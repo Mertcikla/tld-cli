@@ -1,97 +1,120 @@
-// Package ignore provides rule-based filtering for repos, folders, files, and symbols
+// Package ignore provides rule-based filtering for excluded paths and symbols
 // used by tld analyze and tld check commands.
 package ignore
 
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
-// Rules holds ignore patterns loaded from tld/ignore.yaml.
+// Rules holds gitignore-style exclusion patterns loaded from the workspace configuration file.
 type Rules struct {
-	Repos   []string `yaml:"repos"`
-	Folders []string `yaml:"folders"`
-	Files   []string `yaml:"files"`
-	Symbols []string `yaml:"symbols"`
+	Exclude []string `yaml:"exclude,omitempty"`
 }
 
-// ShouldIgnoreRepo returns true if the given remote URL matches any repo pattern.
-func (r *Rules) ShouldIgnoreRepo(url string) bool {
+// Merge combines multiple rule sets into a single exclusion list.
+func Merge(rules ...*Rules) *Rules {
+	merged := &Rules{}
+	seen := make(map[string]struct{})
+	for _, ruleSet := range rules {
+		if ruleSet == nil {
+			continue
+		}
+		for _, pattern := range ruleSet.Exclude {
+			pattern = strings.TrimSpace(pattern)
+			if pattern == "" {
+				continue
+			}
+			if _, ok := seen[pattern]; ok {
+				continue
+			}
+			seen[pattern] = struct{}{}
+			merged.Exclude = append(merged.Exclude, pattern)
+		}
+	}
+	if len(merged.Exclude) == 0 {
+		return nil
+	}
+	return merged
+}
+
+// ShouldIgnorePath returns true if the given file or folder path matches any exclusion pattern.
+// The path can be absolute or relative; matching is performed against both the full path and base name.
+func (r *Rules) ShouldIgnorePath(path string) bool {
 	if r == nil {
 		return false
 	}
-	for _, pattern := range r.Repos {
-		if matchPattern(pattern, url) {
-			return true
-		}
-	}
-	return false
-}
-
-// ShouldIgnoreFolder returns true if the given folder path matches any folder pattern.
-// path may be relative (e.g. "vendor/foo") or just a folder name (e.g. "vendor").
-func (r *Rules) ShouldIgnoreFolder(path string) bool {
-	if r == nil {
-		return false
-	}
-	for _, pattern := range r.Folders {
-		// Trim trailing slash from pattern for consistent matching
-		trimmed := strings.TrimSuffix(pattern, "/")
-		if matchPattern(trimmed, path) {
-			return true
-		}
-		// Also check if any path segment matches
-		if matchPattern(trimmed, filepath.Base(path)) {
-			return true
-		}
-		// Check if path starts with pattern (for prefix matching like "vendor/")
-		if strings.HasPrefix(path, strings.TrimSuffix(pattern, "/")+"/") {
-			return true
-		}
-		if path == strings.TrimSuffix(pattern, "/") {
-			return true
-		}
-	}
-	return false
-}
-
-// ShouldIgnoreFile returns true if the given file path matches any file pattern.
-func (r *Rules) ShouldIgnoreFile(path string) bool {
-	if r == nil {
-		return false
-	}
+	path = normalizePath(path)
 	base := filepath.Base(path)
-	for _, pattern := range r.Files {
-		if matchPattern(pattern, base) {
+	for _, pattern := range r.Exclude {
+		if pattern == "" {
+			continue
+		}
+		normalizedPattern := normalizePattern(pattern)
+		if matchPattern(normalizedPattern, path) || matchPattern(normalizedPattern, base) {
 			return true
 		}
-		if matchPattern(pattern, path) {
-			return true
+		if strings.HasSuffix(normalizedPattern, "/") {
+			trimmed := strings.TrimSuffix(normalizedPattern, "/")
+			if path == trimmed || strings.HasPrefix(path, trimmed+"/") || base == trimmed {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// ShouldIgnoreSymbol returns true if the given symbol name matches any symbol pattern.
+// ShouldIgnoreFile returns true if the given file path is excluded.
+func (r *Rules) ShouldIgnoreFile(path string) bool {
+	return r.ShouldIgnorePath(path)
+}
+
+// ShouldIgnoreFolder returns true if the given folder path is excluded.
+func (r *Rules) ShouldIgnoreFolder(path string) bool {
+	return r.ShouldIgnorePath(path)
+}
+
+// ShouldIgnoreSymbol returns true if the given symbol name matches any exclusion pattern.
 func (r *Rules) ShouldIgnoreSymbol(name string) bool {
 	if r == nil {
 		return false
 	}
-	for _, pattern := range r.Symbols {
-		if matchPattern(pattern, name) {
+	name = strings.TrimSpace(name)
+	for _, pattern := range r.Exclude {
+		if pattern == "" {
+			continue
+		}
+		normalizedPattern := normalizePattern(pattern)
+		if matchPattern(normalizedPattern, name) {
 			return true
 		}
 	}
 	return false
 }
 
-// matchPattern matches a value against a pattern using filepath.Match glob syntax.
-// Falls back to exact string equality if the pattern contains no glob characters.
+// matchPattern matches a value against a pattern using gitignore-style glob syntax.
+// It falls back to exact string equality if the glob is invalid.
 func matchPattern(pattern, value string) bool {
-	matched, err := filepath.Match(pattern, value)
+	matched, err := doublestar.Match(pattern, value)
 	if err != nil {
-		// Invalid pattern — treat as exact match
 		return pattern == value
 	}
 	return matched
+}
+
+func normalizePath(path string) string {
+	path = strings.TrimSpace(path)
+	path = filepath.ToSlash(path)
+	path = strings.TrimPrefix(path, "./")
+	path = strings.TrimPrefix(path, "/")
+	return path
+}
+
+func normalizePattern(pattern string) string {
+	pattern = strings.TrimSpace(pattern)
+	pattern = filepath.ToSlash(pattern)
+	pattern = strings.TrimPrefix(pattern, "./")
+	return pattern
 }

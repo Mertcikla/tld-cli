@@ -29,3 +29,8 @@ func ConfigPath() (string, error) {
 	}
 	return filepath.Join(dir, "tld.yaml"), nil
 }
+
+// WorkspaceConfigPath returns the path to the workspace-local configuration file.
+func WorkspaceConfigPath(dir string) string {
+	return filepath.Join(dir, ".tld.yaml")
+}

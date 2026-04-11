@@ -109,6 +109,59 @@ func TestLoad_APIKeyFileOverridesEnv(t *testing.T) {
 	}
 }
 
+func TestLoad_WorkspaceConfigLoaded(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := setupConfig(t)
+	writeFile(t, cfgPath, minimalConfig())
+	writeFile(t, filepath.Join(dir, ".tld.yaml"), "project_name: Demo\nexclude:\n  - vendor/\n  - \"**/*.pb.go\"\nrepositories:\n  frontend:\n    url: github.com/example/frontend\n    localDir: frontend\n    root: bKLqGV48\n    config:\n      mode: auto\n    exclude:\n      - \"**/*_test.go\"\n      - init*\n")
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if ws.WorkspaceConfig == nil {
+		t.Fatal("expected workspace config to be loaded")
+	}
+	if ws.WorkspaceConfig.ProjectName != "Demo" {
+		t.Errorf("ProjectName = %q, want Demo", ws.WorkspaceConfig.ProjectName)
+	}
+	if len(ws.WorkspaceConfig.Repositories) != 1 {
+		t.Fatalf("Repositories = %+v, want 1 entry", ws.WorkspaceConfig.Repositories)
+	}
+	repo, ok := ws.WorkspaceConfig.Repositories["frontend"]
+	if !ok {
+		t.Fatal("missing frontend repository entry")
+	}
+	if repo.URL != "github.com/example/frontend" || repo.LocalDir != "frontend" {
+		t.Errorf("repository = %+v, want url and localDir", repo)
+	}
+	if repo.Root != "bKLqGV48" {
+		t.Errorf("Root = %q, want bKLqGV48", repo.Root)
+	}
+	if repo.Config == nil || repo.Config.Mode != "auto" {
+		t.Errorf("Config = %+v, want mode auto", repo.Config)
+	}
+	if len(ws.WorkspaceConfig.Exclude) != 2 {
+		t.Fatalf("Exclude = %+v, want 2 patterns", ws.WorkspaceConfig.Exclude)
+	}
+	rules := ws.IgnoreRulesForRepository("frontend")
+	if rules == nil {
+		t.Fatal("expected merged ignore rules")
+	}
+	if !rules.ShouldIgnorePath("pkg/example.pb.go") {
+		t.Error("expected global pb.go file to be ignored")
+	}
+	if !rules.ShouldIgnorePath("vendor/cache.txt") {
+		t.Error("expected global vendor path to be ignored")
+	}
+	if !rules.ShouldIgnoreSymbol("initHelper") {
+		t.Error("expected repo-specific symbol glob to be ignored")
+	}
+	if !rules.ShouldIgnorePath("pkg/helper_test.go") {
+		t.Error("expected repo-specific test file glob to be ignored")
+	}
+}
+
 func TestLoad_DiagramsLoaded(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupConfig(t)

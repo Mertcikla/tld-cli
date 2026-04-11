@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/mertcikla/tld-cli/internal/git"
+	"github.com/mertcikla/tld-cli/internal/ignore"
 	"github.com/mertcikla/tld-cli/internal/symbol"
 	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
@@ -28,6 +30,8 @@ Exit codes:
 			if err != nil {
 				return fmt.Errorf("load workspace: %w", err)
 			}
+			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
+			rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 
 			allPassed := true
 
@@ -44,7 +48,7 @@ Exit codes:
 			}
 
 			// ── 2. Symbol verification ────────────────────────────────────────────
-			broken := checkSymbols(cmd.Context(), ws)
+			broken := checkSymbols(cmd.Context(), ws, repoCtx, rules)
 			if len(broken) > 0 {
 				fmt.Fprintln(cmd.ErrOrStderr(), "FAIL  Symbol Verification")
 				for _, msg := range broken {
@@ -56,7 +60,7 @@ Exit codes:
 			}
 
 			// ── 3. Outdated diagram detection ─────────────────────────────────────
-			outdated := checkOutdated(ws)
+			outdated := checkOutdated(ws, repoCtx, rules)
 			if len(outdated) > 0 {
 				label := "WARN "
 				if strict {
@@ -75,7 +79,7 @@ Exit codes:
 			}
 
 			if !allPassed {
-				os.Exit(1)
+				return fmt.Errorf("check failed")
 			}
 			return nil
 		},
@@ -87,16 +91,23 @@ Exit codes:
 
 // checkSymbols verifies that elements with file_path+symbol have the symbol present
 // in the referenced file.  Returns a list of human-readable failure messages.
-func checkSymbols(ctx context.Context, ws *workspace.Workspace) []string {
+func checkSymbols(ctx context.Context, ws *workspace.Workspace, repoCtx repoScope, rules *ignore.Rules) []string {
 	var failures []string
 	for ref, element := range ws.Elements {
 		if element.FilePath == "" || element.Symbol == "" {
 			continue
 		}
-		if _, err := os.Stat(element.FilePath); err != nil {
+		if !repoCtx.matchesElement(element) {
+			continue
+		}
+		if rules != nil && (rules.ShouldIgnorePath(element.FilePath) || rules.ShouldIgnoreSymbol(element.Symbol)) {
+			continue
+		}
+		absPath := repoCtx.resolvePath(element.FilePath)
+		if _, err := os.Stat(absPath); err != nil {
 			continue // file not accessible locally — skip
 		}
-		found, err := symbol.HasSymbol(ctx, element.FilePath, element.Symbol)
+		found, err := symbol.HasSymbol(ctx, absPath, element.Symbol)
 		if err != nil {
 			if _, unsupported := err.(symbol.ErrUnsupportedLanguage); unsupported {
 				continue
@@ -117,28 +128,29 @@ func checkSymbols(ctx context.Context, ws *workspace.Workspace) []string {
 // checkOutdated compares the last git commit timestamp for each element's file_path
 // against the element's metadata UpdatedAt timestamp.  Returns human-readable messages
 // for elements whose file was committed after the diagram was last synced.
-func checkOutdated(ws *workspace.Workspace) []string {
+func checkOutdated(ws *workspace.Workspace, repoCtx repoScope, rules *ignore.Rules) []string {
 	var outdated []string
 
 	if ws.Meta == nil || ws.Meta.Elements == nil {
 		return nil
 	}
 
-	// Find the git root from the workspace directory
-	repoRoot, err := git.RepoRoot(ws.Dir)
-	if err != nil {
-		return nil // not a git repo — skip
+	if !repoCtx.active() {
+		return nil
 	}
 
 	for ref, element := range ws.Elements {
-		if element.FilePath == "" {
+		if element.FilePath == "" || !repoCtx.matchesElement(element) {
+			continue
+		}
+		if rules != nil && rules.ShouldIgnorePath(element.FilePath) {
 			continue
 		}
 		meta, ok := ws.Meta.Elements[ref]
 		if !ok || meta.UpdatedAt.IsZero() {
 			continue
 		}
-		commitTime, err := git.FileLastCommitAt(repoRoot, element.FilePath)
+		commitTime, err := git.FileLastCommitAt(repoCtx.Root, element.FilePath)
 		if err != nil {
 			continue // file not tracked — skip
 		}
@@ -153,4 +165,12 @@ func checkOutdated(ws *workspace.Workspace) []string {
 		}
 	}
 	return outdated
+}
+
+func getWorkingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(dir)
 }

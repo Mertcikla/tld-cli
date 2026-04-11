@@ -32,17 +32,25 @@ func newInitCmd() *cobra.Command {
 				"links.yaml":      "[]\n",
 				"elements.yaml":   "{}\n",
 				"connectors.yaml": "{}\n",
-				"ignore.yaml": `# tld/ignore.yaml — Ignore rules for tld analyze and tld check
-# Patterns use glob syntax (e.g. "*_test.go", "vendor/").
-repos: []
-folders:
-  - vendor/
-  - node_modules/
-  - .git/
-files:
-  - "*_test.go"
-  - "*.pb.go"
-symbols: []
+				".tld.yaml": `# tld workspace configuration
+# project metadata and repo-scoped analysis settings for tld analyze and tld check
+project_name: ""
+exclude:
+- vendor/
+- node_modules/
+- .git/
+- "**/*_test.go"
+- "**/*.pb.go"
+repositories: {}
+# Example:
+# frontend:
+#   url: github.com/example/frontend
+#   localDir: frontend
+#   root: bKLqGV48
+#   config:
+#     mode: auto
+#   exclude:
+#     - generated/**
 `,
 			}
 			for f, content := range files {

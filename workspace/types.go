@@ -8,12 +8,33 @@ import (
 	"github.com/mertcikla/tld-cli/internal/ignore"
 )
 
-// Config is parsed from .tld.yaml.
+// Config is parsed from the user's global tld.yaml.
 type Config struct {
 	ServerURL  string            `yaml:"server_url"`
 	APIKey     string            `yaml:"api_key"`
 	OrgID      string            `yaml:"org_id"`
 	Validation *ValidationConfig `yaml:"validation,omitempty"`
+}
+
+// WorkspaceConfig is parsed from the workspace-local .tld.yaml.
+type WorkspaceConfig struct {
+	ProjectName  string                `yaml:"project_name,omitempty"`
+	Exclude      []string              `yaml:"exclude,omitempty"`
+	Repositories map[string]Repository `yaml:"repositories,omitempty"`
+}
+
+// RepositoryConfig holds per-repository behavior flags.
+type RepositoryConfig struct {
+	Mode string `yaml:"mode,omitempty"`
+}
+
+// Repository describes one repository in a multi-repo workspace.
+type Repository struct {
+	URL      string            `yaml:"url,omitempty"`
+	LocalDir string            `yaml:"localDir,omitempty"`
+	Root     string            `yaml:"root,omitempty"`
+	Config   *RepositoryConfig `yaml:"config,omitempty"`
+	Exclude  []string          `yaml:"exclude,omitempty"`
 }
 
 // ValidationConfig represents diagram validation settings.
@@ -95,7 +116,7 @@ type Element struct {
 	Branch      string          `yaml:"branch,omitempty"`
 	Language    string          `yaml:"language,omitempty"`
 	FilePath    string          `yaml:"file_path,omitempty"`
-	Symbol      string          `yaml:"symbol,omitempty"`      // Named code symbol within FilePath (e.g. "MyFunc")
+	Symbol      string          `yaml:"symbol,omitempty"` // Named code symbol within FilePath (e.g. "MyFunc")
 	HasView     bool            `yaml:"has_view,omitempty"`
 	ViewLabel   string          `yaml:"view_label,omitempty"`
 	Placements  []ViewPlacement `yaml:"placements,omitempty"`
@@ -177,16 +198,17 @@ type ResourceCounts struct {
 
 // Workspace holds the fully loaded workspace state
 type Workspace struct {
-	Dir         string
-	Config      Config
-	Diagrams    map[string]*Diagram // key = ref
-	Objects     map[string]*Object  // key = ref
-	Edges       map[string]*Edge
-	Links       []Link
-	Elements    map[string]*Element // key = ref
-	Connectors  map[string]*Connector
-	Meta        *Meta               // Loaded from separate _meta sections
-	IgnoreRules *ignore.Rules       // Loaded from ignore.yaml; nil if file absent
+	Dir             string
+	Config          Config
+	WorkspaceConfig *WorkspaceConfig
+	Diagrams        map[string]*Diagram // key = ref
+	Objects         map[string]*Object  // key = ref
+	Edges           map[string]*Edge
+	Links           []Link
+	Elements        map[string]*Element // key = ref
+	Connectors      map[string]*Connector
+	Meta            *Meta         // Loaded from separate _meta sections
+	IgnoreRules     *ignore.Rules // Loaded from workspace config; nil if file absent
 }
 
 // Meta contains metadata for all resources in the workspace.

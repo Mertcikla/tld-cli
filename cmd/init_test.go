@@ -20,9 +20,19 @@ func TestInitCmd_CreatesWorkspace(t *testing.T) {
 		t.Errorf("stdout %q does not contain 'Initialized workspace'", stdout)
 	}
 
+	workspaceCfgPath := filepath.Join(dir, ".tld.yaml")
+	data, err := os.ReadFile(workspaceCfgPath)
+	if err != nil {
+		t.Fatalf("read .tld.yaml from workspace: %v", err)
+	}
+	workspaceContent := string(data)
+	if !strings.Contains(workspaceContent, "repositories") || !strings.Contains(workspaceContent, "exclude:") {
+		t.Errorf(".tld.yaml missing expected keys: %q", workspaceContent)
+	}
+
 	// Check tld.yaml was created globally
 	cfgPath := filepath.Join(configDir, "tld.yaml")
-	data, err := os.ReadFile(cfgPath)
+	data, err = os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read tld.yaml from global config: %v", err)
 	}
