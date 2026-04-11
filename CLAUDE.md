@@ -57,7 +57,7 @@ YAML files in workspace/ (usually ./tld/)
 
 ```
 tld
-├── init [dir]         - initializes ./tld/ with elements.yaml, connectors.yaml, and legacy bridge files
+├── init [dir]         - initializes ./tld/ with .tld.yaml, elements.yaml, and connectors.yaml
 ├── login
 ├── validate
 ├── plan [-o file]
@@ -89,14 +89,15 @@ tld
 ```
 ~/.config/tldiagram/tld.yaml  # Global config: API key, org slug
 ./tld/
+  ├── .tld.yaml              # Workspace config: project metadata, repositories, excludes
   ├── elements.yaml           # Elements + placements + canonical-view ownership
   ├── connectors.yaml         # Connectors inside element-owned views
-  ├── diagrams.yaml           # Legacy bridge file during migration
-  ├── objects.yaml            # Legacy bridge file during migration
-  ├── edges.yaml              # Legacy bridge file during migration
-  ├── links.yaml              # Legacy bridge file during migration
   └── .tld.lock               # Sync state, hash, and metadata at last sync
 ```
+
+Legacy bridge files such as `diagrams.yaml`, `objects.yaml`, `edges.yaml`, and `links.yaml`
+may still appear later when legacy commands or migration paths materialize them, but `tld init`
+does not scaffold them by default.
 
 ### Key patterns
 

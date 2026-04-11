@@ -535,6 +535,12 @@ _meta_connectors:
 	if !contains(text, "_meta_connectors:") {
 		t.Fatalf("connectors.yaml lost _meta_connectors:\n%s", text)
 	}
+	if contains(text, "{view:") {
+		t.Fatalf("connectors.yaml should use block-style YAML, got:\n%s", text)
+	}
+	if !contains(text, "\n  view: system\n") || !contains(text, "\n  source: api\n") {
+		t.Fatalf("connectors.yaml did not render in a readable block style:\n%s", text)
+	}
 	if !contains(text, "id: conn123") {
 		t.Fatalf("connectors.yaml lost connector metadata:\n%s", text)
 	}

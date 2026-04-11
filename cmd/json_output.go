@@ -23,6 +23,7 @@ func wantsJSONOutput() bool {
 
 func writeJSONOutput(w io.Writer, payload planner.JSONOutput) error {
 	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
 	return enc.Encode(payload)
 }
 

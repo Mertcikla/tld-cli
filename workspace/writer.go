@@ -240,9 +240,21 @@ func encodeYAMLValueNode(spec any) (*yaml.Node, error) {
 		if len(value.Content) == 0 {
 			return &yaml.Node{}, nil
 		}
+		normalizeYAMLStyle(value.Content[0])
 		return value.Content[0], nil
 	}
+	normalizeYAMLStyle(&value)
 	return &value, nil
+}
+
+func normalizeYAMLStyle(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	node.Style &^= yaml.FlowStyle
+	for _, child := range node.Content {
+		normalizeYAMLStyle(child)
+	}
 }
 
 func mergeExistingSpec(ref string, existingNode *yaml.Node, spec any) (any, error) {

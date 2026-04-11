@@ -33,12 +33,21 @@ func TestInitCmd_CreatesTldDirectory(t *testing.T) {
 		t.Fatalf("tld directory was not created: %v", err)
 	}
 
-	// Check if YAML files were created in tld/
-	files := []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"}
+	// Check if new-model YAML files were created in tld/
+	files := []string{"elements.yaml", "connectors.yaml"}
 	for _, f := range files {
 		path := filepath.Join(tldDir, f)
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("file %s was not created in tld directory", f)
+		}
+	}
+
+	// Legacy bridge files should not be scaffolded during init.
+	legacyFiles := []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"}
+	for _, f := range legacyFiles {
+		path := filepath.Join(tldDir, f)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("legacy file %s should not be created during init", f)
 		}
 	}
 }
@@ -61,8 +70,16 @@ func TestInitCmd_CustomDirectory(t *testing.T) {
 		t.Fatalf("custom directory %s was not created", customDir)
 	}
 
-	// Check if YAML files were created in customDir/
-	if _, err := os.Stat(filepath.Join(customDir, "diagrams.yaml")); err != nil {
-		t.Errorf("diagrams.yaml was not created in custom directory")
+	// Check if new-model YAML files were created in customDir/
+	for _, f := range []string{"elements.yaml", "connectors.yaml"} {
+		if _, err := os.Stat(filepath.Join(customDir, f)); err != nil {
+			t.Errorf("%s was not created in custom directory", f)
+		}
+	}
+
+	for _, f := range []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"} {
+		if _, err := os.Stat(filepath.Join(customDir, f)); !os.IsNotExist(err) {
+			t.Errorf("legacy file %s should not be created in custom directory", f)
+		}
 	}
 }
