@@ -1,6 +1,12 @@
 package workspace
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/mertcikla/tld-cli/internal/symbol"
+)
 
 // ValidationError describes a single validation failure.
 type ValidationError struct {
@@ -169,6 +175,45 @@ func (ws *Workspace) Validate() []ValidationError {
 		}
 	}
 
+	// Symbol verification: for elements that declare both file_path and symbol,
+	// confirm the named symbol actually exists in the file (skip if file not locally accessible).
+	errs = append(errs, ws.validateSymbols()...)
+
+	return errs
+}
+
+// validateSymbols checks that elements with both file_path and symbol fields
+// have a symbol that is actually present in the referenced file.
+// Files that do not exist locally are silently skipped.
+func (ws *Workspace) validateSymbols() []ValidationError {
+	var errs []ValidationError
+	ctx := context.Background()
+
+	for ref, element := range ws.Elements {
+		if element.FilePath == "" || element.Symbol == "" {
+			continue
+		}
+		if _, err := os.Stat(element.FilePath); err != nil {
+			continue // file not accessible locally — skip
+		}
+		found, err := symbol.HasSymbol(ctx, element.FilePath, element.Symbol)
+		if err != nil {
+			if _, unsupported := err.(symbol.ErrUnsupportedLanguage); unsupported {
+				continue // language not supported — skip silently
+			}
+			errs = append(errs, ValidationError{
+				Location: fmt.Sprintf("elements.yaml[%s]", ref),
+				Message:  fmt.Sprintf("symbol verification failed: %v", err),
+			})
+			continue
+		}
+		if !found {
+			errs = append(errs, ValidationError{
+				Location: fmt.Sprintf("elements.yaml[%s]", ref),
+				Message:  fmt.Sprintf("symbol %q not found in %s", element.Symbol, element.FilePath),
+			})
+		}
+	}
 	return errs
 }
 

@@ -97,6 +97,12 @@ and apply them atomically with 'tld apply'.`,
 	versionCmd := newVersionCmd()
 	versionCmd.GroupID = secondaryGroup.ID
 
+	analyzeCmd := newAnalyzeCmd(&wdir)
+	analyzeCmd.GroupID = resourceGroup.ID
+
+	checkCmd := newCheckCmd(&wdir)
+	checkCmd.GroupID = secondaryGroup.ID
+
 	root.AddCommand(
 		initCmd,
 		loginCmd,
@@ -112,6 +118,8 @@ and apply them atomically with 'tld apply'.`,
 		connectCmd,
 		removeCmd,
 		renameCmd,
+		analyzeCmd,
+		checkCmd,
 		versionCmd,
 	)
 

@@ -32,6 +32,18 @@ func newInitCmd() *cobra.Command {
 				"links.yaml":      "[]\n",
 				"elements.yaml":   "{}\n",
 				"connectors.yaml": "{}\n",
+				"ignore.yaml": `# tld/ignore.yaml — Ignore rules for tld analyze and tld check
+# Patterns use glob syntax (e.g. "*_test.go", "vendor/").
+repos: []
+folders:
+  - vendor/
+  - node_modules/
+  - .git/
+files:
+  - "*_test.go"
+  - "*.pb.go"
+symbols: []
+`,
 			}
 			for f, content := range files {
 				path := filepath.Join(dir, f)

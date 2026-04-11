@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mertcikla/tld-cli/internal/ignore"
 	"gopkg.in/yaml.v3"
 )
 
@@ -99,6 +100,16 @@ func Load(dir string) (*Workspace, error) {
 		return nil, fmt.Errorf("load metadata: %w", err)
 	}
 	ws.Meta = meta
+
+	// Load ignore rules (optional — missing file is not an error)
+	ignorePath := filepath.Join(dir, "ignore.yaml")
+	if data, err := os.ReadFile(ignorePath); err == nil {
+		var rules ignore.Rules
+		if err := yaml.Unmarshal(data, &rules); err != nil {
+			return nil, fmt.Errorf("parse ignore.yaml: %w", err)
+		}
+		ws.IgnoreRules = &rules
+	}
 
 	return ws, nil
 }

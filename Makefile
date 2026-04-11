@@ -1,4 +1,15 @@
-.PHONY: build run test test-unit test-cmd test-cover test-cover-html lint fmt release
+.PHONY: build run test test-unit test-cmd test-cover test-cover-html lint fmt release grammars symbol-wasm
+
+grammars:
+	cd internal/symbol/grammars/src/go        && GOOS=wasip1 GOARCH=wasm go build -o ../../go.wasm .
+	cd internal/symbol/grammars/src/typescript && GOOS=wasip1 GOARCH=wasm go build -o ../../typescript.wasm .
+	cp internal/symbol/grammars/typescript.wasm internal/symbol/grammars/javascript.wasm
+	cd internal/symbol/grammars/src/python     && GOOS=wasip1 GOARCH=wasm go build -o ../../python.wasm .
+	@echo "Grammars rebuilt."
+
+symbol-wasm:
+	GOOS=wasip1 GOARCH=wasm go build -o internal/symbol/wasm/symbol.wasm ./internal/symbol/wasm/
+	@echo "symbol.wasm built."
 
 proto:
 	go get buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go@$(shell buf registry sdk version --module=buf.build/tldiagramcom/diagram --plugin=buf.build/protocolbuffers/go)

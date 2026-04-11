@@ -5,6 +5,7 @@ import (
 	"time"
 
 	hashidlib "github.com/mertcikla/tld-cli/internal/hashids"
+	"github.com/mertcikla/tld-cli/internal/ignore"
 )
 
 // Config is parsed from .tld.yaml.
@@ -94,6 +95,7 @@ type Element struct {
 	Branch      string          `yaml:"branch,omitempty"`
 	Language    string          `yaml:"language,omitempty"`
 	FilePath    string          `yaml:"file_path,omitempty"`
+	Symbol      string          `yaml:"symbol,omitempty"`      // Named code symbol within FilePath (e.g. "MyFunc")
 	HasView     bool            `yaml:"has_view,omitempty"`
 	ViewLabel   string          `yaml:"view_label,omitempty"`
 	Placements  []ViewPlacement `yaml:"placements,omitempty"`
@@ -175,15 +177,16 @@ type ResourceCounts struct {
 
 // Workspace holds the fully loaded workspace state
 type Workspace struct {
-	Dir        string
-	Config     Config
-	Diagrams   map[string]*Diagram // key = ref
-	Objects    map[string]*Object  // key = ref
-	Edges      map[string]*Edge
-	Links      []Link
-	Elements   map[string]*Element // key = ref
-	Connectors map[string]*Connector
-	Meta       *Meta // Loaded from separate _meta sections
+	Dir         string
+	Config      Config
+	Diagrams    map[string]*Diagram // key = ref
+	Objects     map[string]*Object  // key = ref
+	Edges       map[string]*Edge
+	Links       []Link
+	Elements    map[string]*Element // key = ref
+	Connectors  map[string]*Connector
+	Meta        *Meta               // Loaded from separate _meta sections
+	IgnoreRules *ignore.Rules       // Loaded from ignore.yaml; nil if file absent
 }
 
 // Meta contains metadata for all resources in the workspace.

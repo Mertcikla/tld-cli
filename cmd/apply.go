@@ -69,8 +69,13 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			// Check for version conflicts if lock file exists
 			scanner := bufio.NewScanner(cmd.InOrStdin())
 			if lockFile != nil && !autoApprove {
-				if err := detectAndHandleConflicts(cmd, ws, lockFile, meta, plan, scanner); err != nil {
+				newPlan, err := detectAndHandleConflicts(cmd, ws, lockFile, meta, plan, scanner, *wdir, recreateIDs)
+				if err != nil {
 					return err
+				}
+				if newPlan != nil {
+					plan = newPlan
+					req = plan.Request
 				}
 			}
 
@@ -132,19 +137,29 @@ func newApplyCmd(wdir *string) *cobra.Command {
 	return c
 }
 
-// detectAndHandleConflicts checks for version conflicts by performing a dry run on the server
-func detectAndHandleConflicts(cmd *cobra.Command, ws *workspace.Workspace, _ *workspace.LockFile, _ *workspace.Meta, plan *planner.Plan, scanner *bufio.Scanner) error {
+// detectAndHandleConflicts checks for version conflicts by performing a dry run on the server.
+// Returns a new plan if Pull & Merge was performed, nil if the original plan should be used.
+func detectAndHandleConflicts(
+	cmd *cobra.Command,
+	ws *workspace.Workspace,
+	lockFile *workspace.LockFile,
+	_ *workspace.Meta,
+	plan *planner.Plan,
+	scanner *bufio.Scanner,
+	wdir string,
+	recreateIDs bool,
+) (*planner.Plan, error) {
 	// Perform dry run on the server
 	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 	plan.Request.DryRun = proto.Bool(true)
 	resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(plan.Request))
 	plan.Request.DryRun = nil // reset so the real apply is not also a dry run
 	if err != nil {
-		return fmt.Errorf("server plan failed: %w", err)
+		return nil, fmt.Errorf("server plan failed: %w", err)
 	}
 
 	if len(resp.Msg.Conflicts) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	fmt.Fprintf(cmd.ErrOrStderr(), "⚠️  Version conflict detected:\n")
@@ -163,25 +178,86 @@ func detectAndHandleConflicts(cmd *cobra.Command, ws *workspace.Workspace, _ *wo
 
 	fmt.Fprintf(cmd.ErrOrStderr(), "\nOptions:\n")
 	fmt.Fprintf(cmd.ErrOrStderr(), "[1] Abort and review changes\n")
-	fmt.Fprintf(cmd.ErrOrStderr(), "[2] Force apply (overwrite remote changes)\n")
-	fmt.Fprintf(cmd.ErrOrStderr(), "[3] Review conflicts one-by-one (not implemented)\n")
+	fmt.Fprintf(cmd.ErrOrStderr(), "[2] Pull & Merge (fetch server state and merge locally)\n")
+	fmt.Fprintf(cmd.ErrOrStderr(), "[3] Force Apply (overwrite remote changes)\n")
 	fmt.Fprintf(cmd.ErrOrStderr(), "\nChoose option [1-3]: ")
 
 	if !scanner.Scan() {
-		return errors.New("no response received")
+		return nil, errors.New("no response received")
 	}
 
 	choice := strings.TrimSpace(scanner.Text())
 	switch choice {
 	case "1":
 		fmt.Fprintln(cmd.OutOrStdout(), "Apply aborted.")
-		return errors.New("apply aborted by user")
+		return nil, errors.New("apply aborted by user")
+
 	case "2":
+		fmt.Fprintln(cmd.OutOrStdout(), "Pulling server state and merging locally...")
+		newPlan, err := pullAndRebuildPlan(cmd, ws, lockFile, wdir, recreateIDs)
+		if err != nil {
+			return nil, fmt.Errorf("pull & merge: %w", err)
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "Merge complete. Proceeding with apply...")
+		return newPlan, nil
+
+	case "3":
 		fmt.Fprintln(cmd.OutOrStdout(), "Proceeding with force apply...")
-		return nil
+		return nil, nil
+
 	default:
-		return errors.New("invalid choice or aborted")
+		return nil, errors.New("invalid choice or aborted")
 	}
+}
+
+// pullAndRebuildPlan fetches the server state, merges it with the local workspace,
+// and rebuilds the plan from the merged state.
+func pullAndRebuildPlan(cmd *cobra.Command, ws *workspace.Workspace, lockFile *workspace.LockFile, wdir string, recreateIDs bool) (*planner.Plan, error) {
+	diagv1client := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
+
+	targetOrg := ws.Config.OrgID
+	if targetOrg == "" {
+		return nil, fmt.Errorf("org-id required in tld.yaml for Pull & Merge")
+	}
+
+	exportResp, err := diagv1client.ExportWorkspace(cmd.Context(), connect.NewRequest(&diagv1.ExportOrganizationRequest{
+		OrgId: targetOrg,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("export workspace: %w", err)
+	}
+
+	newWS := convertExportResponse(ws, exportResp.Msg)
+
+	lastSyncMeta := &workspace.Meta{
+		Diagrams: make(map[string]*workspace.ResourceMetadata),
+		Objects:  make(map[string]*workspace.ResourceMetadata),
+		Edges:    make(map[string]*workspace.ResourceMetadata),
+	}
+	if lockFile != nil && lockFile.Metadata != nil {
+		lastSyncMeta = lockFile.Metadata
+	}
+
+	if err := workspace.MergeWorkspace(wdir, newWS, lastSyncMeta, ws.Meta); err != nil {
+		return nil, fmt.Errorf("merge: %w", err)
+	}
+
+	// Reload the merged workspace and rebuild the plan
+	mergedWS, err := workspace.Load(wdir)
+	if err != nil {
+		return nil, fmt.Errorf("reload after merge: %w", err)
+	}
+	if errs := mergedWS.Validate(); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning (post-merge validation): %s\n", e)
+		}
+	}
+
+	newPlan, err := planner.Build(mergedWS, recreateIDs)
+	if err != nil {
+		return nil, fmt.Errorf("rebuild plan: %w", err)
+	}
+	return newPlan, nil
 }
 
 func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *workspace.Workspace, plan *planner.Plan, respMsg *diagv1.ApplyPlanResponse) error {
