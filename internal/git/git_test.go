@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -131,5 +132,36 @@ func TestRepoRoot(t *testing.T) {
 	evalRoot, _ := filepath.EvalSymlinks(root)
 	if evalRoot != evalDir {
 		t.Errorf("expected root %q, got %q", evalDir, evalRoot)
+	}
+}
+
+func TestFilesChangedSince(t *testing.T) {
+	dir := t.TempDir()
+	initRepo(t, dir, map[string]string{"main.go": "package main"})
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	head, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	base := strings.TrimSpace(string(head))
+
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\nfunc Changed() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commit := exec.Command("git", "commit", "-am", "update")
+	commit.Dir = dir
+	commit.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com", "GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com")
+	if out, err := commit.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+
+	files, err := FilesChangedSince(dir, base)
+	if err != nil {
+		t.Fatalf("FilesChangedSince: %v", err)
+	}
+	if len(files) != 1 || filepath.Base(files[0]) != "main.go" {
+		t.Fatalf("unexpected files: %v", files)
 	}
 }

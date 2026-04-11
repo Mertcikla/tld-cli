@@ -59,19 +59,53 @@ func CalculateWorkspaceHash(dir string) (string, error) {
 			continue // File doesn't exist, skip
 		}
 
-		file, err := os.Open(path)
+		normalized, err := normalizedHashContent(path)
 		if err != nil {
-			return "", fmt.Errorf("open %s: %w", filename, err)
-		}
-
-		if _, err := io.Copy(hash, file); err != nil {
-			_ = file.Close()
 			return "", fmt.Errorf("hash %s: %w", filename, err)
 		}
-		_ = file.Close()
+		if _, err := io.WriteString(hash, filename+"\n"); err != nil {
+			return "", fmt.Errorf("hash %s: %w", filename, err)
+		}
+		if _, err := hash.Write(normalized); err != nil {
+			return "", fmt.Errorf("hash %s: %w", filename, err)
+		}
 	}
 
 	return fmt.Sprintf("sha256:%x", hash.Sum(nil)), nil
+}
+
+func normalizedHashContent(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var raw any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return data, nil
+	}
+	return yaml.Marshal(stripPositionFields(raw))
+}
+
+func stripPositionFields(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for key, child := range typed {
+			if positionKeys[key] {
+				continue
+			}
+			result[key] = stripPositionFields(child)
+		}
+		return result
+	case []any:
+		result := make([]any, len(typed))
+		for i, child := range typed {
+			result[i] = stripPositionFields(child)
+		}
+		return result
+	default:
+		return value
+	}
 }
 
 // CreateLockFile creates a new lock file with the given parameters
@@ -167,15 +201,28 @@ func loadYAMLMetadataSection(filepath, sectionName string, target map[string]*Re
 		for ref, metaData := range metaSection {
 			if metaMap, ok := metaData.(map[string]any); ok {
 				metadata := &ResourceMetadata{}
-				if idStr, ok := metaMap["id"].(string); ok {
-					if decoded, err := hashidlib.Decode(idStr); err == nil {
+				switch idValue := metaMap["id"].(type) {
+				case string:
+					if decoded, err := hashidlib.Decode(idValue); err == nil {
 						metadata.ID = ResourceID(decoded)
 					}
+				case int:
+					metadata.ID = ResourceID(idValue)
+				case int64:
+					metadata.ID = ResourceID(idValue)
+				case float64:
+					metadata.ID = ResourceID(idValue)
 				}
-				if updatedAtStr, ok := metaMap["updated_at"].(string); ok {
-					if updatedAt, err := time.Parse(time.RFC3339, updatedAtStr); err == nil {
+				switch updatedAtValue := metaMap["updated_at"].(type) {
+				case string:
+					if updatedAt, err := time.Parse(time.RFC3339, updatedAtValue); err == nil {
 						metadata.UpdatedAt = updatedAt
 					}
+				case time.Time:
+					metadata.UpdatedAt = updatedAtValue
+				}
+				if conflict, ok := metaMap["conflict"].(bool); ok {
+					metadata.Conflict = conflict
 				}
 				target[ref] = metadata
 			}
@@ -212,6 +259,9 @@ func WriteMetadataSection(dir, filename, sectionName string, metadata map[string
 		metaMap := map[string]any{
 			"id":         meta.ID,
 			"updated_at": meta.UpdatedAt.Format(time.RFC3339),
+		}
+		if meta.Conflict {
+			metaMap["conflict"] = true
 		}
 		metaSection[ref] = metaMap
 	}

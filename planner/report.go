@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mertcikla/tld-cli/internal/term"
 	"github.com/mertcikla/tld-cli/workspace"
 )
 
@@ -15,6 +16,8 @@ func RenderPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace, verbos
 }
 
 func renderElementPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace, verbose bool) {
+	summary := summarizePlanActions(ws)
+	fmt.Fprintf(w, "Plan: %d to create (+), %d to update (~), %d to delete (-)\n\n", summary.created, summary.updated, summary.deleted)
 	fmt.Fprintln(w, "# Element Plan")
 	fmt.Fprintln(w)
 
@@ -44,33 +47,119 @@ func renderElementPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace,
 		return
 	}
 
-	fmt.Fprintln(w, "## Elements")
+	fmt.Fprintln(w, "## Actions")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "| Ref | Name | Kind | Has View | Placements |")
-	fmt.Fprintln(w, "|-----|------|------|----------|------------|")
-	for ref, element := range ws.Elements {
-		parents := make([]string, 0, len(element.Placements))
-		for _, placement := range element.Placements {
-			parents = append(parents, placement.ParentRef)
-		}
-		fmt.Fprintf(w, "| %s | %s | %s | %t | %s |\n", ref, element.Name, element.Kind, element.HasView, strings.Join(parents, ", "))
+	for _, line := range detailedPlanLines(w, ws) {
+		fmt.Fprintln(w, line)
 	}
 	fmt.Fprintln(w)
+}
 
-	if len(ws.Connectors) > 0 {
-		fmt.Fprintln(w, "## Connectors")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "| View | Source -> Target | Label | Direction |")
-		fmt.Fprintln(w, "|------|------------------|-------|-----------|")
-		for _, connector := range ws.Connectors {
-			direction := connector.Direction
-			if direction == "" {
-				direction = "forward"
-			}
-			fmt.Fprintf(w, "| %s | %s -> %s | %s | %s |\n", connector.View, connector.Source, connector.Target, connector.Label, direction)
-		}
-		fmt.Fprintln(w)
+type planActionSummary struct {
+	created int
+	updated int
+	deleted int
+}
+
+func summarizePlanActions(ws *workspace.Workspace) planActionSummary {
+	summary := planActionSummary{}
+	var elementMeta map[string]*workspace.ResourceMetadata
+	var viewMeta map[string]*workspace.ResourceMetadata
+	var connectorMeta map[string]*workspace.ResourceMetadata
+	if ws.Meta != nil {
+		elementMeta = ws.Meta.Elements
+		viewMeta = ws.Meta.Views
+		connectorMeta = ws.Meta.Connectors
 	}
+	for ref, element := range ws.Elements {
+		if hasMetadata(ws.Meta, elementMeta, ref) {
+			summary.updated++
+		} else {
+			summary.created++
+		}
+		if element.HasView {
+			if hasMetadata(ws.Meta, viewMeta, ref) {
+				summary.updated++
+			} else {
+				summary.created++
+			}
+		}
+	}
+	for ref := range ws.Connectors {
+		if hasMetadata(ws.Meta, connectorMeta, ref) {
+			summary.updated++
+		} else {
+			summary.created++
+		}
+	}
+	return summary
+}
+
+func detailedPlanLines(w io.Writer, ws *workspace.Workspace) []string {
+	var lines []string
+	var elementMeta map[string]*workspace.ResourceMetadata
+	var viewMeta map[string]*workspace.ResourceMetadata
+	var connectorMeta map[string]*workspace.ResourceMetadata
+	if ws.Meta != nil {
+		elementMeta = ws.Meta.Elements
+		viewMeta = ws.Meta.Views
+		connectorMeta = ws.Meta.Connectors
+	}
+	refs := make([]string, 0, len(ws.Elements))
+	for ref := range ws.Elements {
+		refs = append(refs, ref)
+	}
+	sort.Strings(refs)
+	for _, ref := range refs {
+		element := ws.Elements[ref]
+		lines = append(lines, formatPlanActionLine(actionPrefix(w, actionForRef(ws.Meta, elementMeta, ref)), fmt.Sprintf("element %s (%s) [%s]", ref, element.Name, element.Kind)))
+		if element.HasView {
+			label := element.ViewLabel
+			if label == "" {
+				label = element.Name
+			}
+			lines = append(lines, formatPlanActionLine(actionPrefix(w, actionForRef(ws.Meta, viewMeta, ref)), fmt.Sprintf("view %s (%s)", ref, label)))
+		}
+	}
+
+	connectorRefs := make([]string, 0, len(ws.Connectors))
+	for ref := range ws.Connectors {
+		connectorRefs = append(connectorRefs, ref)
+	}
+	sort.Strings(connectorRefs)
+	for _, ref := range connectorRefs {
+		connector := ws.Connectors[ref]
+		lines = append(lines, formatPlanActionLine(actionPrefix(w, actionForRef(ws.Meta, connectorMeta, ref)), fmt.Sprintf("connector %s (%s -> %s)", ref, connector.Source, connector.Target)))
+	}
+	return lines
+}
+
+func formatPlanActionLine(prefix, description string) string {
+	return fmt.Sprintf("%s %s", prefix, description)
+}
+
+func actionPrefix(w io.Writer, action string) string {
+	switch action {
+	case "update":
+		return term.Colorize(w, term.ColorYellow, "~")
+	default:
+		return term.Colorize(w, term.ColorGreen, "+")
+	}
+}
+
+func actionForRef(meta *workspace.Meta, bucket map[string]*workspace.ResourceMetadata, ref string) string {
+	if hasMetadata(meta, bucket, ref) {
+		return "update"
+	}
+	return "create"
+}
+
+func hasMetadata(meta *workspace.Meta, bucket map[string]*workspace.ResourceMetadata, ref string) bool {
+	if meta == nil || bucket == nil {
+		return false
+	}
+	_, ok := bucket[ref]
+	return ok
 }
 
 func renderElementTree(w io.Writer, ws *workspace.Workspace) {

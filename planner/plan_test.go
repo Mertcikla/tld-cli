@@ -164,3 +164,23 @@ func TestBuild_ReusesMetadataIDs(t *testing.T) {
 		t.Fatalf("connector id = %v", plan.Request.Connectors[0].Id)
 	}
 }
+
+func TestBuild_FiltersByOwnerForActiveRepo(t *testing.T) {
+	ws := elementWorkspace()
+	ws.ActiveRepo = "frontend"
+	ws.Elements["api"].Owner = "frontend"
+	ws.Elements["db"].Owner = "backend"
+	ws.Connectors["platform:api:db:reads"].Source = "api"
+	ws.Connectors["platform:api:db:reads"].Target = "db"
+
+	plan, err := planner.Build(ws, false)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(plan.Request.Elements) != 2 {
+		t.Fatalf("elements = %d, want 2", len(plan.Request.Elements))
+	}
+	if len(plan.Request.Connectors) != 0 {
+		t.Fatalf("connectors = %d, want 0 when target owner is excluded", len(plan.Request.Connectors))
+	}
+}

@@ -162,6 +162,22 @@ func TestLoad_WorkspaceConfigLoaded(t *testing.T) {
 	}
 }
 
+func TestLoad_DefaultsRepositoryModeToUpsert(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := setupConfig(t)
+	writeFile(t, cfgPath, minimalConfig())
+	writeFile(t, filepath.Join(dir, ".tld.yaml"), "project_name: Demo\nrepositories:\n  frontend:\n    url: github.com/example/frontend\n    localDir: frontend\n")
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	repo := ws.WorkspaceConfig.Repositories["frontend"]
+	if repo.Config == nil || repo.Config.Mode != "upsert" {
+		t.Fatalf("repository mode = %+v, want upsert", repo.Config)
+	}
+}
+
 func TestLoad_DiagramsLoaded(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupConfig(t)

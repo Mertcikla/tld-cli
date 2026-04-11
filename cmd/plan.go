@@ -23,9 +23,12 @@ func newPlanCmd(wdir *string) *cobra.Command {
 		Use:   "plan",
 		Short: "Show what would be applied",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ws, err := workspace.Load(*wdir)
+			ws, err := loadWorkspaceWithHint(*wdir)
 			if err != nil {
-				return fmt.Errorf("load workspace: %w", err)
+				return err
+			}
+			if err := ensureAPIKey(ws.Config.APIKey); err != nil {
+				return err
 			}
 
 			// Override strictness if flag is set
@@ -42,6 +45,10 @@ func newPlanCmd(wdir *string) *cobra.Command {
 				}
 				return fmt.Errorf("workspace has %d validation error(s)", len(errs))
 			}
+			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
+			if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(ws) {
+				ws.ActiveRepo = repoCtx.Name
+			}
 			plan, err := planner.Build(ws, recreateIDs)
 			if err != nil {
 				return fmt.Errorf("build plan: %w", err)
@@ -54,7 +61,10 @@ func newPlanCmd(wdir *string) *cobra.Command {
 
 			resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
-				return fmt.Errorf("server plan failed: %w", err)
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "plan", withUnauthorizedHint("server plan failed", err))
+				}
+				return withUnauthorizedHint("server plan failed", err)
 			}
 
 			out := cmd.OutOrStdout()
@@ -65,6 +75,11 @@ func newPlanCmd(wdir *string) *cobra.Command {
 				}
 				defer func() { _ = f.Close() }()
 				out = f
+			}
+
+			warnings := planner.AnalyzePlan(ws)
+			if wantsJSONOutput() {
+				return writeJSONOutput(out, buildPlanJSONOutput(ws, resp.Msg, warnings))
 			}
 
 			planner.RenderPlanMarkdown(out, plan, ws, verbose)
@@ -86,7 +101,6 @@ func newPlanCmd(wdir *string) *cobra.Command {
 			}
 
 			// Evaluate Diagram warnings
-			warnings := planner.AnalyzePlan(ws)
 			if len(warnings) > 0 {
 				level := 3
 				if ws.Config.Validation != nil && ws.Config.Validation.Level > 0 {

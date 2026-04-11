@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+var positionKeys = map[string]bool{
+	"position_x": true,
+	"position_y": true,
+}
 
 // MergeWorkspace merges changes from a new workspace (from server) into the current on-disk state.
 // It uses yaml.Node to preserve comments and formatting.
@@ -94,12 +100,14 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 			serverChanged := lMeta != nil && sMeta != nil && sMeta.UpdatedAt.After(lMeta.UpdatedAt)
 
 			if localChanged && serverChanged {
-				// CONFLICT: Both changed. Keep local for now but mark as conflict in meta.
-				// The user will see this in 'tld status' or 'tld apply'.
-				if sMeta != nil {
-					sMeta.Conflict = true
+				mergedNode, hasConflict, mergeErr := mergeResourceValueNode(valNode, serverItem, key)
+				if mergeErr != nil {
+					return fmt.Errorf("merge %s[%s]: %w", filepath.Base(path), key, mergeErr)
 				}
-				newContent = append(newContent, keyNode, valNode)
+				if sMeta != nil {
+					sMeta.Conflict = hasConflict
+				}
+				newContent = append(newContent, keyNode, mergedNode)
 			} else if serverChanged {
 				// Server changed, local did not: Update local with server content.
 				var newValNode yaml.Node
@@ -158,4 +166,161 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 		return fmt.Errorf("encode %s: %w", path, err)
 	}
 	return nil
+}
+
+func mergeResourceValueNode(localNode *yaml.Node, serverItem any, ref string) (*yaml.Node, bool, error) {
+	serverNode, err := encodeYAMLValueNode(serverItem)
+	if err != nil {
+		return nil, false, err
+	}
+	merged, hasConflict := mergeNodeValues(localNode, serverNode, "")
+	if hasConflict && merged.HeadComment == "" {
+		merged.HeadComment = fmt.Sprintf("CONFLICT: %q was modified both locally and on the server.\nResolve the marked values, then run `tld apply`.", ref)
+	}
+	return merged, hasConflict, nil
+}
+
+func mergeNodeValues(localNode, serverNode *yaml.Node, fieldName string) (*yaml.Node, bool) {
+	if serverNode == nil {
+		return cloneYAMLNode(localNode), false
+	}
+	if localNode == nil {
+		return cloneYAMLNode(serverNode), false
+	}
+	if positionKeys[fieldName] {
+		return cloneYAMLNode(serverNode), false
+	}
+
+	if localNode.Kind == yaml.MappingNode && serverNode.Kind == yaml.MappingNode {
+		return mergeMappingNodes(localNode, serverNode)
+	}
+	if localNode.Kind == yaml.SequenceNode && serverNode.Kind == yaml.SequenceNode {
+		if fieldName == "diagrams" || fieldName == "placements" {
+			return mergePlacementSequences(localNode, serverNode, fieldName)
+		}
+		return cloneYAMLNode(serverNode), false
+	}
+
+	localValue := strings.TrimSpace(localNode.Value)
+	serverValue := strings.TrimSpace(serverNode.Value)
+	if localValue == serverValue {
+		return cloneYAMLNode(localNode), false
+	}
+	if serverValue == "" && localValue != "" {
+		return cloneYAMLNode(localNode), false
+	}
+	if localValue == "" && serverValue != "" {
+		return cloneYAMLNode(serverNode), false
+	}
+	return conflictValueNode(fieldName, localValue, serverValue), true
+}
+
+func mergeMappingNodes(localNode, serverNode *yaml.Node) (*yaml.Node, bool) {
+	result := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	hasConflict := false
+	serverValues := make(map[string]*yaml.Node)
+	serverOrder := make([]string, 0, len(serverNode.Content)/2)
+	for i := 0; i+1 < len(serverNode.Content); i += 2 {
+		serverValues[serverNode.Content[i].Value] = serverNode.Content[i+1]
+		serverOrder = append(serverOrder, serverNode.Content[i].Value)
+	}
+	seen := make(map[string]bool)
+
+	for i := 0; i+1 < len(localNode.Content); i += 2 {
+		key := localNode.Content[i].Value
+		localVal := localNode.Content[i+1]
+		seen[key] = true
+		mergedVal := cloneYAMLNode(localVal)
+		fieldConflict := false
+		if serverVal, ok := serverValues[key]; ok {
+			mergedVal, fieldConflict = mergeNodeValues(localVal, serverVal, key)
+		}
+		result.Content = append(result.Content, cloneYAMLNode(localNode.Content[i]), mergedVal)
+		hasConflict = hasConflict || fieldConflict
+	}
+
+	for _, key := range serverOrder {
+		if seen[key] {
+			continue
+		}
+		result.Content = append(result.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+			cloneYAMLNode(serverValues[key]),
+		)
+	}
+	return result, hasConflict
+}
+
+func mergePlacementSequences(localNode, serverNode *yaml.Node, fieldName string) (*yaml.Node, bool) {
+	result := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+	serverValues := make(map[string]*yaml.Node)
+	serverOrder := make([]string, 0, len(serverNode.Content))
+	for _, item := range serverNode.Content {
+		if key := placementSequenceKey(item); key != "" {
+			serverValues[key] = item
+			serverOrder = append(serverOrder, key)
+		}
+	}
+	seen := make(map[string]bool)
+	hasConflict := false
+
+	for _, localItem := range localNode.Content {
+		key := placementSequenceKey(localItem)
+		seen[key] = true
+		if key != "" {
+			if serverItem, ok := serverValues[key]; ok {
+				mergedItem, conflict := mergeNodeValues(localItem, serverItem, fieldName)
+				result.Content = append(result.Content, mergedItem)
+				hasConflict = hasConflict || conflict
+				continue
+			}
+		}
+		result.Content = append(result.Content, cloneYAMLNode(localItem))
+	}
+
+	for _, key := range serverOrder {
+		if seen[key] {
+			continue
+		}
+		result.Content = append(result.Content, cloneYAMLNode(serverValues[key]))
+	}
+	return result, hasConflict
+}
+
+func placementSequenceKey(node *yaml.Node) string {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return ""
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		switch node.Content[i].Value {
+		case "diagram", "parent":
+			return node.Content[i+1].Value
+		}
+	}
+	return ""
+}
+
+func conflictValueNode(fieldName, localValue, serverValue string) *yaml.Node {
+	comment := fmt.Sprintf("CONFLICT: '%s' was modified both locally and on the server.\nLocal:  %s\nServer: %s\nResolve by keeping one value, then run `tld apply`.", fieldName, localValue, serverValue)
+	return &yaml.Node{
+		Kind:        yaml.ScalarNode,
+		Tag:         "!!str",
+		Style:       yaml.LiteralStyle,
+		HeadComment: comment,
+		Value:       fmt.Sprintf("<<< LOCAL\n%s\n===\n%s\n>>> SERVER", localValue, serverValue),
+	}
+}
+
+func cloneYAMLNode(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	clone := *node
+	if len(node.Content) > 0 {
+		clone.Content = make([]*yaml.Node, len(node.Content))
+		for i, child := range node.Content {
+			clone.Content[i] = cloneYAMLNode(child)
+		}
+	}
+	return &clone
 }

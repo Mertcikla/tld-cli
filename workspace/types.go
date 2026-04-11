@@ -108,6 +108,7 @@ type Link struct {
 type Element struct {
 	Name        string          `yaml:"name"`
 	Kind        string          `yaml:"kind"`
+	Owner       string          `yaml:"owner,omitempty"`
 	Description string          `yaml:"description,omitempty"`
 	Technology  string          `yaml:"technology,omitempty"`
 	URL         string          `yaml:"url,omitempty"`
@@ -209,6 +210,7 @@ type Workspace struct {
 	Connectors      map[string]*Connector
 	Meta            *Meta         // Loaded from separate _meta sections
 	IgnoreRules     *ignore.Rules // Loaded from workspace config; nil if file absent
+	ActiveRepo      string        // active repository scope for plan/apply operations
 }
 
 // Meta contains metadata for all resources in the workspace.

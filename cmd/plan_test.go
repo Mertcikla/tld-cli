@@ -1,10 +1,13 @@
 package cmd_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mertcikla/tld-cli/planner"
 )
 
 func TestPlanCmd_OutputsMarkdown(t *testing.T) {
@@ -49,7 +52,7 @@ func TestPlanCmd_VerboseFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan -v: %v", err)
 	}
-	if !strings.Contains(stdout, "## Elements") {
+	if !strings.Contains(stdout, "## Actions") {
 		t.Errorf("stdout missing verbose section when -v is used: %q", stdout)
 	}
 	if strings.Contains(stdout, "Use '-v' or '--verbose' for detailed resource reporting") {
@@ -80,6 +83,30 @@ func TestPlanCmd_OutputToFile(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "# Element Plan") {
 		t.Errorf("file content %q does not contain '# Element Plan'", string(data))
+	}
+}
+
+func TestPlanCmd_JSONOutput(t *testing.T) {
+	svc := &mockDiagramService{}
+	serverURL := newMockServer(t, svc)
+
+	dir := t.TempDir()
+	setupApplyWorkspace(t, dir, serverURL)
+	seedElementWorkspace(t, dir)
+
+	stdout, _, err := runCmd(t, dir, "plan", "--format", "json")
+	if err != nil {
+		t.Fatalf("plan --format json: %v", err)
+	}
+	var payload planner.JSONOutput
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("unmarshal json output: %v\nstdout=%s", err, stdout)
+	}
+	if payload.Command != "plan" || payload.Status != "ok" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if payload.Summary["created"] == 0 {
+		t.Fatalf("expected created resources in summary, got %+v", payload.Summary)
 	}
 }
 

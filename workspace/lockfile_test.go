@@ -128,3 +128,65 @@ _meta:
 		t.Errorf("expected ID 123, got %d", meta2.Objects["diag2"].ID)
 	}
 }
+
+func TestCalculateWorkspaceHash_PositionChangeIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	base := `api:
+  name: API
+  diagrams:
+    - diagram: system
+      position_x: 10
+      position_y: 20
+`
+	changed := `api:
+  name: API
+  diagrams:
+    - diagram: system
+      position_x: 99
+      position_y: 42
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "objects.yaml"), []byte(base), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hash1, err := CalculateWorkspaceHash(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "objects.yaml"), []byte(changed), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hash2, err := CalculateWorkspaceHash(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash1 != hash2 {
+		t.Fatalf("expected identical hashes, got %s and %s", hash1, hash2)
+	}
+}
+
+func TestCalculateWorkspaceHash_NameChangeCaptured(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "diagrams.yaml"), []byte("d1:\n  name: One\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hash1, _ := CalculateWorkspaceHash(tmpDir)
+	if err := os.WriteFile(filepath.Join(tmpDir, "diagrams.yaml"), []byte("d1:\n  name: Two\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hash2, _ := CalculateWorkspaceHash(tmpDir)
+	if hash1 == hash2 {
+		t.Fatal("expected name change to affect hash")
+	}
+}
+
+func TestCalculateWorkspaceHash_Deterministic(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "elements.yaml"), []byte("api:\n  name: API\n  kind: service\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hash1, _ := CalculateWorkspaceHash(tmpDir)
+	hash2, _ := CalculateWorkspaceHash(tmpDir)
+	if hash1 != hash2 {
+		t.Fatalf("expected deterministic hashes, got %s and %s", hash1, hash2)
+	}
+}

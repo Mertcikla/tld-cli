@@ -423,6 +423,123 @@ func TestUpsertObject_EnrichesMetadata(t *testing.T) {
 	}
 }
 
+func TestUpsertObject_PreservesMetaSection(t *testing.T) {
+	dir := t.TempDir()
+	content := `obj:
+  name: Obj
+  type: service
+_meta:
+  obj:
+    id: abc123
+    updated_at: 2024-01-01T00:00:00Z
+`
+	if err := os.WriteFile(filepath.Join(dir, "objects.yaml"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := workspace.UpsertObject(dir, "obj", &workspace.Object{
+		Name:        "Obj",
+		Type:        "service",
+		Description: "Updated",
+		Diagrams:    []workspace.Placement{{Diagram: "system", PositionX: 1, PositionY: 2}},
+	}); err != nil {
+		t.Fatalf("UpsertObject: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "objects.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(string(data), "_meta:") {
+		t.Fatalf("objects.yaml lost _meta section:\n%s", data)
+	}
+	if !contains(string(data), "id: abc123") {
+		t.Fatalf("objects.yaml lost object metadata:\n%s", data)
+	}
+}
+
+func TestUpsertElement_PreservesElementAndViewMetaSections(t *testing.T) {
+	dir := t.TempDir()
+	content := `api:
+  name: API
+  kind: service
+  placements:
+    - parent: root
+      position_x: 10
+      position_y: 20
+_meta_elements:
+  api:
+    id: elem123
+    updated_at: 2024-01-01T00:00:00Z
+_meta_views:
+  api:
+    id: view123
+    updated_at: 2024-01-02T00:00:00Z
+`
+	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := workspace.UpsertElement(dir, "api", &workspace.Element{
+		Name:        "API",
+		Kind:        "service",
+		Description: "Updated",
+		Placements:  []workspace.ViewPlacement{{ParentRef: "root", PositionX: 50, PositionY: 60}},
+	}); err != nil {
+		t.Fatalf("UpsertElement: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "elements.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !contains(text, "_meta_elements:") || !contains(text, "_meta_views:") {
+		t.Fatalf("elements.yaml lost metadata sections:\n%s", text)
+	}
+	if !contains(text, "id: elem123") || !contains(text, "id: view123") {
+		t.Fatalf("elements.yaml lost metadata values:\n%s", text)
+	}
+}
+
+func TestAppendConnector_PreservesMetaSection(t *testing.T) {
+	dir := t.TempDir()
+	content := `system:api:db:reads:
+  view: system
+  source: api
+  target: db
+  label: reads
+_meta_connectors:
+  system:api:db:reads:
+    id: conn123
+    updated_at: 2024-01-01T00:00:00Z
+`
+	if err := os.WriteFile(filepath.Join(dir, "connectors.yaml"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := workspace.AppendConnector(dir, &workspace.Connector{
+		View:   "system",
+		Source: "api",
+		Target: "queue",
+		Label:  "publishes",
+	}); err != nil {
+		t.Fatalf("AppendConnector: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !contains(text, "_meta_connectors:") {
+		t.Fatalf("connectors.yaml lost _meta_connectors:\n%s", text)
+	}
+	if !contains(text, "id: conn123") {
+		t.Fatalf("connectors.yaml lost connector metadata:\n%s", text)
+	}
+}
+
 // ---- Save ----
 
 func TestSave(t *testing.T) {

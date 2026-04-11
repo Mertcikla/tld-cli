@@ -45,6 +45,9 @@ func TestRenderPlanMarkdown_Header(t *testing.T) {
 	var buf strings.Builder
 	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
+	if !strings.Contains(out, "Plan: 6 to create (+), 0 to update (~), 0 to delete (-)") {
+		t.Fatalf("missing plan summary: %q", out)
+	}
 	if !strings.Contains(out, "# Element Plan") {
 		t.Fatalf("missing header: %q", out)
 	}
@@ -90,11 +93,11 @@ func TestRenderPlanMarkdown_VerboseSections(t *testing.T) {
 	var buf strings.Builder
 	planner.RenderPlanMarkdown(&buf, plan, w, true)
 	out := buf.String()
-	if !strings.Contains(out, "## Elements") {
-		t.Fatalf("missing elements section: %q", out)
+	if !strings.Contains(out, "## Actions") {
+		t.Fatalf("missing actions section: %q", out)
 	}
-	if !strings.Contains(out, "## Connectors") {
-		t.Fatalf("missing connectors section: %q", out)
+	if !strings.Contains(out, "+ element api") || !strings.Contains(out, "+ connector platform:api:db:reads") {
+		t.Fatalf("missing action lines: %q", out)
 	}
 }
 
@@ -120,5 +123,24 @@ func TestRenderPlanMarkdown_EmptyWorkspace(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "# Element Plan") {
 		t.Fatalf("expected header for empty workspace: %q", out)
+	}
+}
+
+func TestRenderPlanMarkdown_UsesUpdatePrefixesWhenMetadataExists(t *testing.T) {
+	w := reportWorkspace()
+	w.Meta = &workspace.Meta{
+		Elements:   map[string]*workspace.ResourceMetadata{"platform": {}, "api": {}, "db": {}},
+		Views:      map[string]*workspace.ResourceMetadata{"platform": {}, "api": {}},
+		Connectors: map[string]*workspace.ResourceMetadata{"platform:api:db:reads": {}},
+	}
+	plan := buildPlan(t, w)
+	var buf strings.Builder
+	planner.RenderPlanMarkdown(&buf, plan, w, true)
+	out := buf.String()
+	if !strings.Contains(out, "Plan: 0 to create (+), 6 to update (~), 0 to delete (-)") {
+		t.Fatalf("wrong update summary: %q", out)
+	}
+	if !strings.Contains(out, "~ element api") || !strings.Contains(out, "~ connector platform:api:db:reads") {
+		t.Fatalf("missing update prefixes: %q", out)
 	}
 }

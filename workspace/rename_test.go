@@ -244,6 +244,68 @@ func TestRenameObject(t *testing.T) {
 	}
 }
 
+func TestRenameConnector(t *testing.T) {
+	dir := t.TempDir()
+	content := "\"system:api-handler:db:reads\":\n" +
+		"  view: system\n" +
+		"  source: api-handler\n" +
+		"  target: db\n" +
+		"  label: reads\n" +
+		"\"system:web:api-handler:calls\":\n" +
+		"  view: system\n" +
+		"  source: web\n" +
+		"  target: api-handler\n" +
+		"  label: calls\n" +
+		"_meta_connectors:\n" +
+		"  \"system:api-handler:db:reads\":\n" +
+		"    id: c1\n" +
+		"    updated_at: 2024-01-01T00:00:00Z\n" +
+		"  \"system:web:api-handler:calls\":\n" +
+		"    id: c2\n" +
+		"    updated_at: 2024-01-01T00:00:00Z\n"
+	if err := os.WriteFile(filepath.Join(dir, "connectors.yaml"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := workspace.RenameConnector(dir, "api-handler", "api-handler-2"); err != nil {
+		t.Fatalf("RenameConnector failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]workspace.Connector
+	if err := yaml.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["system:api-handler:db:reads"]; ok {
+		t.Fatal("old connector key still exists")
+	}
+	if _, ok := got["system:web:api-handler:calls"]; ok {
+		t.Fatal("old target connector key still exists")
+	}
+	if conn, ok := got["system:api-handler-2:db:reads"]; !ok {
+		t.Fatal("renamed source connector key missing")
+	} else if conn.Source != "api-handler-2" {
+		t.Fatalf("source not updated: %+v", conn)
+	}
+	if conn, ok := got["system:web:api-handler-2:calls"]; !ok {
+		t.Fatal("renamed target connector key missing")
+	} else if conn.Target != "api-handler-2" {
+		t.Fatalf("target not updated: %+v", conn)
+	}
+
+	text := string(data)
+	if !contains(text, "_meta_connectors:") {
+		t.Fatalf("metadata section missing:\n%s", text)
+	}
+	if !contains(text, "system:api-handler-2:db:reads") || !contains(text, "system:web:api-handler-2:calls") {
+		t.Fatalf("metadata keys were not renamed:\n%s", text)
+	}
+}
+
 func TestRename_Errors(t *testing.T) {
 	dir := t.TempDir()
 

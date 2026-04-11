@@ -17,6 +17,7 @@ import (
 func newAnalyzeCmd(wdir *string) *cobra.Command {
 	var deep bool
 	var dryRun bool
+	var changedSince string
 
 	c := &cobra.Command{
 		Use:   "analyze <path>",
@@ -53,6 +54,16 @@ for cross-file call references.`,
 			ctx := cmd.Context()
 			totalElements := 0
 			totalConnectors := 0
+			incrementalFiles := 0
+			modeLabel := "shallow"
+			if deep {
+				modeLabel = "deep"
+			}
+			linePrefix := ""
+			if dryRun {
+				linePrefix = "[dry-run] "
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%sAnalyzing %s (%s)...\n", linePrefix, scanPath, modeLabel)
 			workspaceRoot, _ := filepath.Abs(ws.Dir)
 			workspaceScan := samePath(absPath, workspaceRoot)
 
@@ -62,8 +73,6 @@ for cross-file call references.`,
 				if workspaceScan {
 					scanRoot = repoCtx.Root
 				}
-
-				fmt.Fprintf(cmd.OutOrStdout(), "Scanning repo %s (%s)\n", repoCtx.displayName(), repoCtx.Root)
 
 				// Detect git context (best-effort — not fatal if not a git repo)
 				var repoURL, branch string
@@ -82,6 +91,18 @@ for cross-file call references.`,
 					return fmt.Errorf("extract symbols: %w", err)
 				}
 
+				changedFileSet := map[string]struct{}{}
+				if changedSince != "" && repoCtx.active() {
+					changed, err := git.FilesChangedSince(repoCtx.Root, changedSince)
+					if err != nil {
+						return fmt.Errorf("git changed-since: %w", err)
+					}
+					incrementalFiles += len(changed)
+					for _, file := range changed {
+						changedFileSet[filepath.Clean(file)] = struct{}{}
+					}
+				}
+
 				// Optionally scan entire repo for cross-file references
 				if deep && repoCtx.active() && !workspaceScan {
 					deepResult, err := extractFromPath(ctx, repoCtx.Root, rules)
@@ -94,9 +115,12 @@ for cross-file call references.`,
 
 				// Filter symbols by ignore rules
 				filtered := filterSymbols(scanResult.Symbols, rules)
+				if len(changedFileSet) > 0 {
+					filtered = filterSymbolsByFiles(filtered, changedFileSet)
+					scanResult.Refs = filterRefsByFiles(scanResult.Refs, changedFileSet)
+				}
 
 				if len(filtered) == 0 {
-					fmt.Fprintf(cmd.OutOrStdout(), "No symbols found in repo %s.\n", repoCtx.displayName())
 					continue
 				}
 
@@ -118,6 +142,7 @@ for cross-file call references.`,
 					spec := &workspace.Element{
 						Name:     sym.Name,
 						Kind:     sym.Kind,
+						Owner:    repoCtx.Name,
 						FilePath: relPath,
 						Symbol:   sym.Name,
 						Repo:     repoURL,
@@ -125,8 +150,6 @@ for cross-file call references.`,
 					}
 
 					if dryRun {
-						fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] [%s] upsert element %q (kind=%s, file=%s)\n",
-							repoCtx.displayName(), ref, sym.Kind, relPath)
 						repoElements++
 						continue
 					}
@@ -166,7 +189,6 @@ for cross-file call references.`,
 					}
 
 					if dryRun {
-						fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] [%s] upsert connector %s → %s\n", repoCtx.displayName(), fromRef, toRef)
 						repoConnectors++
 						continue
 					}
@@ -183,12 +205,17 @@ for cross-file call references.`,
 				totalConnectors += repoConnectors
 			}
 
+			fmt.Fprintf(cmd.OutOrStdout(), "%s  OK  %d elements written to elements.yaml\n", linePrefix, totalElements)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s  OK  %d connectors written to connectors.yaml\n", linePrefix, totalConnectors)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s  OK  %d repositories scanned\n", linePrefix, len(repoScopes))
+			if changedSince != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  OK  Incremental scan: %d files changed since %s\n", linePrefix, incrementalFiles, changedSince)
+			}
+			fmt.Fprintln(cmd.OutOrStdout())
 			if dryRun {
-				fmt.Fprintf(cmd.OutOrStdout(), "Dry run: %d repos, %d elements, %d connectors (not written)\n",
-					len(repoScopes), totalElements, totalConnectors)
+				fmt.Fprintf(cmd.OutOrStdout(), "%sNo files written. Remove --dry-run to apply.\n", linePrefix)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "Analyzed: %d repos, %d elements, %d connectors\n",
-					len(repoScopes), totalElements, totalConnectors)
+				fmt.Fprintln(cmd.OutOrStdout(), "Tip: run `tld plan` to preview what will be applied.")
 			}
 			return nil
 		},
@@ -196,6 +223,7 @@ for cross-file call references.`,
 
 	c.Flags().BoolVar(&deep, "deep", false, "scan entire git repo for cross-file references (slower)")
 	c.Flags().BoolVar(&dryRun, "dry-run", false, "print what would be written without modifying workspace")
+	c.Flags().StringVar(&changedSince, "changed-since", "", "only re-analyse files changed since this git SHA")
 	return c
 }
 
@@ -236,6 +264,26 @@ func filterSymbols(symbols []symbol.Symbol, rules *ignore.Rules) []symbol.Symbol
 			continue
 		}
 		out = append(out, s)
+	}
+	return out
+}
+
+func filterSymbolsByFiles(symbols []symbol.Symbol, changedFiles map[string]struct{}) []symbol.Symbol {
+	var out []symbol.Symbol
+	for _, sym := range symbols {
+		if _, ok := changedFiles[filepath.Clean(sym.FilePath)]; ok {
+			out = append(out, sym)
+		}
+	}
+	return out
+}
+
+func filterRefsByFiles(refs []symbol.Ref, changedFiles map[string]struct{}) []symbol.Ref {
+	var out []symbol.Ref
+	for _, ref := range refs {
+		if _, ok := changedFiles[filepath.Clean(ref.FilePath)]; ok {
+			out = append(out, ref)
+		}
 	}
 	return out
 }

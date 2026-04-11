@@ -1,0 +1,50 @@
+name: tld diagram update
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install tld
+        run: |
+          curl -sSL https://tldiagram.com/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache diagram workspace
+        uses: actions/cache@v4
+        with:
+          path: tld/
+          key: tld-workspace-${{ hashFiles('tld/elements.yaml', 'tld/connectors.yaml') }}
+          restore-keys: |
+            tld-workspace-
+
+      - name: Pull latest server state
+        env:
+          TLD_API_KEY: ${{ secrets.TLD_API_KEY }}
+        run: tld pull --force
+
+      - name: Analyze changed files
+        env:
+          TLD_API_KEY: ${{ secrets.TLD_API_KEY }}
+        run: |
+          PREV_SHA=$(git rev-parse HEAD~1)
+          tld analyze . --changed-since "$PREV_SHA"
+
+      - name: Apply
+        env:
+          TLD_API_KEY: ${{ secrets.TLD_API_KEY }}
+        run: tld apply --auto-approve --format json | tee tld-apply-result.json
+
+      - name: Upload apply result
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tld-apply-result
+          path: tld-apply-result.json

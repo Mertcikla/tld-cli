@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	diagv1connect "buf.build/gen/go/tldiagramcom/diagram/connectrpc/go/diag/v1/diagv1connect"
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
 	"connectrpc.com/connect"
+	"github.com/mertcikla/tld-cli/planner"
 	"github.com/mertcikla/tld-cli/workspace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -313,6 +315,65 @@ func TestApplyCmd_DriftDetected(t *testing.T) {
 	}
 }
 
+func TestApplyCmd_PrefightDriftWarningAbort(t *testing.T) {
+	svc := &mockDiagramService{applyFunc: func(req *diagv1.ApplyPlanRequest) (*diagv1.ApplyPlanResponse, error) {
+		if req.DryRun != nil && *req.DryRun {
+			return &diagv1.ApplyPlanResponse{Drift: []*diagv1.PlanDriftItem{{ResourceType: "element", Ref: "api", Reason: "remote changed"}}}, nil
+		}
+		return successResponse(req), nil
+	}}
+	serverURL := newMockServer(t, svc)
+	dir := t.TempDir()
+	setupApplyWorkspace(t, dir, serverURL)
+	seedElementWorkspace(t, dir)
+	hash, err := workspace.CalculateWorkspaceHash(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{VersionID: "v1", WorkspaceHash: hash}); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := runCmdWithStdin(t, dir, strings.NewReader("no\n"), "apply")
+	if err != nil {
+		t.Fatalf("expected graceful cancel, got %v", err)
+	}
+	if !strings.Contains(stdout, "server has changes that are not in your local YAML") || !strings.Contains(stdout, "Apply cancelled.") {
+		t.Fatalf("unexpected output: %q", stdout)
+	}
+	if svc.lastRequest == nil || svc.lastRequest.DryRun == nil || !*svc.lastRequest.DryRun {
+		t.Fatalf("expected only dry-run preflight request, got %#v", svc.lastRequest)
+	}
+}
+
+func TestApplyCmd_ForceApplySkipsPreflightDriftPrompt(t *testing.T) {
+	svc := &mockDiagramService{applyFunc: func(req *diagv1.ApplyPlanRequest) (*diagv1.ApplyPlanResponse, error) {
+		if req.DryRun != nil && *req.DryRun {
+			return &diagv1.ApplyPlanResponse{Drift: []*diagv1.PlanDriftItem{{ResourceType: "element", Ref: "api", Reason: "remote changed"}}}, nil
+		}
+		return successResponse(req), nil
+	}}
+	serverURL := newMockServer(t, svc)
+	dir := t.TempDir()
+	setupApplyWorkspace(t, dir, serverURL)
+	seedElementWorkspace(t, dir)
+	hash, err := workspace.CalculateWorkspaceHash(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{VersionID: "v1", WorkspaceHash: hash}); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "apply", "--auto-approve", "--force-apply")
+	if err != nil {
+		t.Fatalf("expected apply success, stdout=%q stderr=%q err=%v", stdout, stderr, err)
+	}
+	if strings.Contains(stdout, "server has changes that are not in your local YAML") {
+		t.Fatalf("unexpected preflight prompt output: %q", stdout)
+	}
+}
+
 func TestApplyCmd_InteractiveApprove(t *testing.T) {
 	svc := &mockDiagramService{}
 	serverURL := newMockServer(t, svc)
@@ -405,5 +466,66 @@ func TestApplyCmd_ConflictForce(t *testing.T) {
 	stdout, _, err := runCmdWithStdin(t, dir, strings.NewReader("2\nyes\n"), "apply")
 	if err != nil || !strings.Contains(stdout, "SUCCESS") {
 		t.Fatalf("stdout=%q err=%v", stdout, err)
+	}
+}
+
+func TestApplyCmd_JSONOutput(t *testing.T) {
+	svc := &mockDiagramService{}
+	serverURL := newMockServer(t, svc)
+	dir := t.TempDir()
+	setupApplyWorkspace(t, dir, serverURL)
+	seedElementWorkspace(t, dir)
+
+	stdout, stderr, err := runCmd(t, dir, "apply", "--auto-approve", "--format", "json")
+	if err != nil {
+		t.Fatalf("apply --format json: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	var payload planner.JSONOutput
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("unmarshal json output: %v\nstdout=%s", err, stdout)
+	}
+	if payload.Command != "apply" || payload.Status != "ok" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if payload.Retries != 0 {
+		t.Fatalf("unexpected retries: %+v", payload)
+	}
+}
+
+func TestApplyCmd_JSONOutputIncludesRetryCount(t *testing.T) {
+	var calls int
+	svc := &mockDiagramService{
+		applyFunc: func(req *diagv1.ApplyPlanRequest) (*diagv1.ApplyPlanResponse, error) {
+			calls++
+			if req.DryRun != nil && *req.DryRun {
+				return &diagv1.ApplyPlanResponse{Conflicts: []*diagv1.PlanConflictItem{{ResourceType: "element", Ref: "api"}}}, nil
+			}
+			return successResponse(req), nil
+		},
+		exportFunc: func(_ *diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error) {
+			return &diagv1.ExportOrganizationResponse{}, nil
+		},
+	}
+	serverURL := newMockServer(t, svc)
+	dir := t.TempDir()
+	setupApplyWorkspace(t, dir, serverURL)
+	seedElementWorkspace(t, dir)
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{VersionID: "v1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "apply", "--auto-approve", "--format", "json")
+	if err != nil {
+		t.Fatalf("apply --format json: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	var payload planner.JSONOutput
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("unmarshal json output: %v\nstdout=%s", err, stdout)
+	}
+	if payload.Retries != 1 {
+		t.Fatalf("expected retries=1, got %+v", payload)
+	}
+	if calls < 2 {
+		t.Fatalf("expected dry-run conflict check and real apply, got %d calls", calls)
 	}
 }

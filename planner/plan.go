@@ -39,6 +39,7 @@ func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
 }
 
 func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
+	includedElements := make(map[string]bool)
 	elementRefs := make([]string, 0, len(ws.Elements))
 	for ref := range ws.Elements {
 		elementRefs = append(elementRefs, ref)
@@ -55,6 +56,10 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 
 	for _, ref := range elementRefs {
 		element := ws.Elements[ref]
+		if ws.ActiveRepo != "" && element.Owner != "" && element.Owner != ws.ActiveRepo {
+			continue
+		}
+		includedElements[ref] = true
 		planElement := &diagv1.PlanElement{
 			Ref:        ref,
 			Name:       element.Name,
@@ -125,6 +130,11 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 
 	for _, ref := range connectorRefs {
 		connector := ws.Connectors[ref]
+		if len(includedElements) > 0 {
+			if !includedElements[connector.Source] || !includedElements[connector.Target] {
+				continue
+			}
+		}
 		viewRef := connector.View
 		if viewRef == "" {
 			viewRef = syntheticRootViewRef

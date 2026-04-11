@@ -19,6 +19,9 @@ func newDiffCmd(wdir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ws, err := workspace.Load(*wdir)
 			if err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "diff", err)
+				}
 				return fmt.Errorf("load workspace: %w", err)
 			}
 
@@ -45,6 +48,13 @@ func newDiffCmd(wdir *string) *cobra.Command {
 			serverWS := convertExportResponse(&workspace.Workspace{Dir: tempDir, Config: ws.Config}, resp.Msg)
 			if err := workspace.Save(serverWS); err != nil {
 				return fmt.Errorf("save server state to temp: %w", err)
+			}
+			if wantsJSONOutput() {
+				payload, err := buildDiffJSONOutput(*wdir, tempDir)
+				if err != nil {
+					return writeCommandJSONError(cmd.OutOrStdout(), "diff", err)
+				}
+				return writeJSONOutput(cmd.OutOrStdout(), payload)
 			}
 
 			// 2. Run git diff between temp and local

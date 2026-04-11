@@ -111,13 +111,73 @@ func TestAnalyzeCmd_DiscoversConfiguredRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
-	if !strings.Contains(stdout, "Scanning repo frontend") || !strings.Contains(stdout, "Scanning repo backend") {
-		t.Fatalf("stdout does not show both repo scopes\nstdout: %s\nstderr: %s", stdout, stderr)
+	if !strings.Contains(stdout, "Analyzing "+workspaceDir+" (shallow)...") {
+		t.Fatalf("stdout does not show analyze header\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
-	if !strings.Contains(stdout, "[dry-run] [frontend]") || !strings.Contains(stdout, "[dry-run] [backend]") {
-		t.Fatalf("stdout does not show repo-labeled dry-run output\nstdout: %s\nstderr: %s", stdout, stderr)
-	}
-	if !strings.Contains(stdout, "Dry run: 2 repos") {
+	if !strings.Contains(stdout, "[dry-run]   OK  2 repositories scanned") {
 		t.Fatalf("stdout does not summarize both repos\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run] No files written. Remove --dry-run to apply.") {
+		t.Fatalf("stdout missing dry-run guidance\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+}
+
+func TestAnalyzeCmd_ChangedSinceLimitsScan(t *testing.T) {
+	workspaceDir := t.TempDir()
+	mustInitWorkspace(t, workspaceDir)
+
+	workspaceCfg := strings.Join([]string{
+		"project_name: Demo",
+		"repositories:",
+		"  frontend:",
+		"    url: github.com/example/frontend",
+		"    localDir: frontend",
+		"exclude: []",
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(workspaceDir, ".tld.yaml"), []byte(workspaceCfg), 0600); err != nil {
+		t.Fatalf("write workspace config: %v", err)
+	}
+
+	repoDir := filepath.Join(workspaceDir, "frontend")
+	initGitRepo(t, repoDir, "frontend.go", "package frontend\nfunc FrontendService() {}\n")
+
+	baseCmd := exec.Command("git", "rev-parse", "HEAD")
+	baseCmd.Dir = repoDir
+	base, err := baseCmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "frontend.go"), []byte("package frontend\nfunc FrontendService() {}\nfunc NewFrontendService() {}\n"), 0600); err != nil {
+		t.Fatalf("write frontend.go: %v", err)
+	}
+	commit := exec.Command("git", "commit", "-am", "update")
+	commit.Dir = repoDir
+	commit.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@example.com",
+	)
+	if out, err := commit.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+
+	stdout, stderr, err := runCmd(t, workspaceDir, "analyze", workspaceDir, "--dry-run", "--changed-since", strings.TrimSpace(string(base)))
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run]   OK  Incremental scan: 1 files changed since ") {
+		t.Fatalf("stdout missing incremental summary\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run]   OK  2 elements written to elements.yaml") {
+		t.Fatalf("stdout missing changed-file element count\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run]   OK  1 repositories scanned") {
+		t.Fatalf("stdout missing repository count\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run] No files written. Remove --dry-run to apply.") {
+		t.Fatalf("stdout missing dry-run guidance\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 }

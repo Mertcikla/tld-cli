@@ -27,14 +27,17 @@ local YAML files. Use this after making changes in the frontend UI.
 If you have local changes that haven't been applied yet, tld pull will warn
 you before overwriting them. Use --force to skip the prompt.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ws, err := workspace.Load(*wdir)
+			ws, err := loadWorkspaceWithHint(*wdir)
 			if err != nil {
-				return fmt.Errorf("load workspace: %w (did you run 'tld init'?)", err)
+				return err
+			}
+			if err := ensureAPIKey(ws.Config.APIKey); err != nil {
+				return err
 			}
 
 			targetOrg := ws.Config.OrgID
 			if targetOrg == "" {
-				return fmt.Errorf("org-id required in .tld.yaml")
+				return orgIDRequiredHint("org-id required in .tld.yaml")
 			}
 
 			lockFile, err := workspace.LoadLockFile(*wdir)
@@ -68,7 +71,7 @@ you before overwriting them. Use --force to skip the prompt.`,
 				OrgId: targetOrg,
 			}))
 			if err != nil {
-				return fmt.Errorf("pull failed: %w", err)
+				return withUnauthorizedHint("pull failed", err)
 			}
 
 			newWS := convertExportResponse(ws, resp.Msg)

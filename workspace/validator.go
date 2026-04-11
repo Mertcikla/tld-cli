@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mertcikla/tld-cli/internal/symbol"
 )
@@ -22,6 +23,7 @@ func (e ValidationError) Error() string {
 // detection in parent_diagram chains.
 func (ws *Workspace) Validate() []ValidationError {
 	var errs []ValidationError
+	errs = append(errs, ws.validateConflictMarkers()...)
 
 	// Elements: required fields + placement refs
 	elementNames := make(map[string]string)
@@ -37,6 +39,11 @@ func (ws *Workspace) Validate() []ValidationError {
 		}
 		if element.Kind == "" {
 			errs = append(errs, ValidationError{loc, "kind is required"})
+		}
+		if element.Owner != "" && ws.WorkspaceConfig != nil {
+			if _, ok := ws.WorkspaceConfig.Repositories[element.Owner]; !ok {
+				errs = append(errs, ValidationError{loc, fmt.Sprintf("owner %q is not a registered repository", element.Owner)})
+			}
 		}
 		for index, placement := range element.Placements {
 			ploc := fmt.Sprintf("elements.yaml[%s][placements][%d]", ref, index)
@@ -179,6 +186,42 @@ func (ws *Workspace) Validate() []ValidationError {
 	// confirm the named symbol actually exists in the file (skip if file not locally accessible).
 	errs = append(errs, ws.validateSymbols()...)
 
+	return errs
+}
+
+func (ws *Workspace) validateConflictMarkers() []ValidationError {
+	var errs []ValidationError
+	checkString := func(location, value string) {
+		if strings.Contains(value, "<<< LOCAL") || strings.Contains(value, ">>> SERVER") {
+			errs = append(errs, ValidationError{Location: location, Message: "unresolved merge conflict"})
+		}
+	}
+
+	for ref, diagram := range ws.Diagrams {
+		loc := fmt.Sprintf("diagrams.yaml[%s]", ref)
+		checkString(loc, diagram.Name)
+		checkString(loc, diagram.Description)
+	}
+	for ref, object := range ws.Objects {
+		loc := fmt.Sprintf("objects.yaml[%s]", ref)
+		checkString(loc, object.Name)
+		checkString(loc, object.Description)
+		checkString(loc, object.Technology)
+		checkString(loc, object.URL)
+	}
+	for ref, element := range ws.Elements {
+		loc := fmt.Sprintf("elements.yaml[%s]", ref)
+		checkString(loc, element.Name)
+		checkString(loc, element.Description)
+		checkString(loc, element.Technology)
+		checkString(loc, element.URL)
+	}
+	for ref, connector := range ws.Connectors {
+		loc := fmt.Sprintf("connectors.yaml[%s]", ref)
+		checkString(loc, connector.Label)
+		checkString(loc, connector.Description)
+		checkString(loc, connector.Relationship)
+	}
 	return errs
 }
 

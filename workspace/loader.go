@@ -44,6 +44,15 @@ func Load(dir string) (*Workspace, error) {
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("parse .tld.yaml: %w", err)
 		}
+		for key, repo := range cfg.Repositories {
+			if repo.Config == nil {
+				repo.Config = &RepositoryConfig{}
+			}
+			if repo.Config.Mode == "" {
+				repo.Config.Mode = "upsert"
+			}
+			cfg.Repositories[key] = repo
+		}
 		ws.WorkspaceConfig = cfg
 		ws.IgnoreRules = &ignore.Rules{Exclude: append([]string{}, cfg.Exclude...)}
 	} else if !os.IsNotExist(err) {

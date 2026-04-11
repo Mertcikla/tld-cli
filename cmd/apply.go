@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 
 	"errors"
 	"fmt"
@@ -23,14 +24,21 @@ func newApplyCmd(wdir *string) *cobra.Command {
 	var debug bool
 	var verbose bool
 	var recreateIDs bool
+	var forceApply bool
 
 	c := &cobra.Command{
 		Use:   "apply",
 		Short: "Apply plan to the tldiagram.com",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ws, err := workspace.Load(*wdir)
+			ws, err := loadWorkspaceWithHint(*wdir)
 			if err != nil {
-				return fmt.Errorf("load workspace: %w", err)
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "apply", err)
+				}
+				return err
+			}
+			if err := ensureAPIKey(ws.Config.APIKey); err != nil {
+				return err
 			}
 			if errs := ws.Validate(); len(errs) > 0 {
 				for _, e := range errs {
@@ -49,11 +57,16 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load metadata: %w", err)
 			}
+			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
+			if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(ws) {
+				ws.ActiveRepo = repoCtx.Name
+			}
 
 			plan, err := planner.Build(ws, recreateIDs)
 			if err != nil {
 				return fmt.Errorf("build plan: %w", err)
 			}
+			retries := 0
 
 			req := plan.Request
 			diagramCount := 0
@@ -63,11 +76,35 @@ func newApplyCmd(wdir *string) *cobra.Command {
 				}
 			}
 			total := len(req.Elements) + diagramCount + len(req.Connectors)
-			fmt.Fprintf(cmd.OutOrStdout(), "Plan: %d elements, %d diagrams, %d connectors (%d total resources)\n",
-				len(req.Elements), diagramCount, len(req.Connectors), total)
+			if !wantsJSONOutput() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Plan: %d elements, %d diagrams, %d connectors (%d total resources)\n",
+					len(req.Elements), diagramCount, len(req.Connectors), total)
+			}
 
 			// Check for version conflicts if lock file exists
 			scanner := bufio.NewScanner(cmd.InOrStdin())
+			if lockFile != nil && !autoApprove && !forceApply {
+				currentHash, hashErr := workspace.CalculateWorkspaceHash(*wdir)
+				if hashErr == nil && lockFile.WorkspaceHash != "" && currentHash == lockFile.WorkspaceHash {
+					hasDrift, err := serverHasDrift(cmd.Context(), ws, plan)
+					if err != nil {
+						return fmt.Errorf("server drift check failed: %w", err)
+					}
+					if hasDrift {
+						fmt.Fprintln(cmd.OutOrStdout(), "Warning: The server has changes that are not in your local YAML.")
+						fmt.Fprintln(cmd.OutOrStdout(), "  Run `tld pull` to merge them first, or use --force-apply to overwrite.")
+						fmt.Fprint(cmd.OutOrStdout(), "  Continue anyway? [yes/no]: ")
+						if !scanner.Scan() {
+							return errors.New("aborted")
+						}
+						answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+						if answer != "yes" && answer != "y" {
+							fmt.Fprintln(cmd.OutOrStdout(), "Apply cancelled.")
+							return nil
+						}
+					}
+				}
+			}
 			if lockFile != nil && !autoApprove {
 				newPlan, err := detectAndHandleConflicts(cmd, ws, lockFile, meta, plan, scanner, *wdir, recreateIDs)
 				if err != nil {
@@ -76,6 +113,20 @@ func newApplyCmd(wdir *string) *cobra.Command {
 				if newPlan != nil {
 					plan = newPlan
 					req = plan.Request
+				}
+			}
+			if lockFile != nil && autoApprove {
+				newPlan, retryCount, err := autoPullAndRebuild(cmd, ws, lockFile, plan, *wdir, recreateIDs)
+				if err != nil {
+					if wantsJSONOutput() {
+						return writeCommandJSONError(cmd.OutOrStdout(), "apply", err)
+					}
+					return err
+				}
+				if newPlan != nil {
+					plan = newPlan
+					req = plan.Request
+					retries = retryCount
 				}
 			}
 
@@ -94,6 +145,9 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			c := client.New(ws.Config.ServerURL, ws.Config.APIKey, debug)
 			resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "apply", err)
+				}
 				fmt.Fprintln(cmd.ErrOrStderr(), "Apply failed:", err)
 				fmt.Fprintf(cmd.ErrOrStderr(), "  Target URL: %s\n", client.NormalizeURL(ws.Config.ServerURL))
 
@@ -109,15 +163,36 @@ func newApplyCmd(wdir *string) *cobra.Command {
 
 				fmt.Fprintln(cmd.ErrOrStderr(), "Transaction rolled back.")
 				reporter.RenderExecutionMarkdown(cmd.ErrOrStderr(), plan, nil, false, false)
-				return fmt.Errorf("apply failed: %w", err)
+				return withUnauthorizedHint("apply failed", err)
 			}
 
-			if err := updatePlanMetadataFromResponse(*wdir, meta, ws, plan, resp.Msg); err != nil {
+			currentWS := ws
+			renames, err := applyCanonicalRefs(*wdir, resp.Msg)
+			if err != nil {
+				return fmt.Errorf("apply canonical refs: %w", err)
+			}
+			if len(renames) > 0 {
+				currentWS, err = workspace.Load(*wdir)
+				if err != nil {
+					return fmt.Errorf("reload workspace after canonical ref rename: %w", err)
+				}
+				if !wantsJSONOutput() {
+					for _, rename := range renames {
+						fmt.Fprintf(cmd.OutOrStdout(), "  ref renamed: %s -> %s\n", rename.from, rename.to)
+					}
+				}
+			}
+
+			if err := updatePlanMetadataFromResponse(*wdir, meta, currentWS, plan, resp.Msg); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update metadata: %v\n", err)
 			}
 
-			if err := updateLockFileFromResponse(*wdir, lockFile, ws, resp.Msg); err != nil {
+			if err := updateLockFileFromResponse(*wdir, lockFile, currentWS, resp.Msg); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update lock file: %v\n", err)
+			}
+
+			if wantsJSONOutput() {
+				return writeJSONOutput(cmd.OutOrStdout(), buildApplyJSONOutput(currentWS, resp.Msg, retries))
 			}
 
 			reporter.RenderExecutionMarkdown(cmd.OutOrStdout(), plan, resp.Msg, true, verbose)
@@ -134,7 +209,40 @@ func newApplyCmd(wdir *string) *cobra.Command {
 	c.Flags().BoolVar(&debug, "debug", false, "enable detailed network request logging")
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "print each created resource")
 	c.Flags().BoolVar(&recreateIDs, "recreate-ids", false, "ignore existing resource IDs and let the server generate new ones")
+	c.Flags().BoolVar(&forceApply, "force-apply", false, "bypass the pre-apply server drift warning")
 	return c
+}
+
+func serverHasDrift(ctx context.Context, ws *workspace.Workspace, plan *planner.Plan) (bool, error) {
+	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
+	req := proto.Clone(plan.Request).(*diagv1.ApplyPlanRequest)
+	req.DryRun = proto.Bool(true)
+	resp, err := c.ApplyWorkspacePlan(ctx, connect.NewRequest(req))
+	if err != nil {
+		return false, err
+	}
+	return len(resp.Msg.Drift) > 0, nil
+}
+
+func autoPullAndRebuild(cmd *cobra.Command, ws *workspace.Workspace, lockFile *workspace.LockFile, plan *planner.Plan, wdir string, recreateIDs bool) (*planner.Plan, int, error) {
+	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
+	req := proto.Clone(plan.Request).(*diagv1.ApplyPlanRequest)
+	req.DryRun = proto.Bool(true)
+	resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
+	if err != nil {
+		return nil, 0, fmt.Errorf("server plan failed: %w", err)
+	}
+	if len(resp.Msg.Conflicts) == 0 {
+		return nil, 0, nil
+	}
+	if !wantsJSONOutput() {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Version conflict detected during auto-approve. Pulling and retrying once...")
+	}
+	newPlan, err := pullAndRebuildPlan(cmd, ws, lockFile, wdir, recreateIDs)
+	if err != nil {
+		return nil, 0, fmt.Errorf("auto-retry pull failed: %w", err)
+	}
+	return newPlan, 1, nil
 }
 
 // detectAndHandleConflicts checks for version conflicts by performing a dry run on the server.
@@ -217,7 +325,7 @@ func pullAndRebuildPlan(cmd *cobra.Command, ws *workspace.Workspace, lockFile *w
 
 	targetOrg := ws.Config.OrgID
 	if targetOrg == "" {
-		return nil, fmt.Errorf("org-id required in tld.yaml for Pull & Merge")
+		return nil, orgIDRequiredHint("org-id required in tld.yaml for Pull & Merge")
 	}
 
 	exportResp, err := diagv1client.ExportWorkspace(cmd.Context(), connect.NewRequest(&diagv1.ExportOrganizationRequest{
@@ -247,6 +355,10 @@ func pullAndRebuildPlan(cmd *cobra.Command, ws *workspace.Workspace, lockFile *w
 	if err != nil {
 		return nil, fmt.Errorf("reload after merge: %w", err)
 	}
+	repoCtx := detectRepoScope(getWorkingDir(), wdir)
+	if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(mergedWS) {
+		mergedWS.ActiveRepo = repoCtx.Name
+	}
 	if errs := mergedWS.Validate(); len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Warning (post-merge validation): %s\n", e)
@@ -258,6 +370,25 @@ func pullAndRebuildPlan(cmd *cobra.Command, ws *workspace.Workspace, lockFile *w
 		return nil, fmt.Errorf("rebuild plan: %w", err)
 	}
 	return newPlan, nil
+}
+
+type refRename struct {
+	from string
+	to   string
+}
+
+func applyCanonicalRefs(wdir string, resp *diagv1.ApplyPlanResponse) ([]refRename, error) {
+	var renames []refRename
+	for _, result := range resp.GetElementResults() {
+		if result.GetCanonicalRef() == "" || result.GetCanonicalRef() == result.GetRef() {
+			continue
+		}
+		if err := workspace.RenameElement(wdir, result.GetRef(), result.GetCanonicalRef()); err != nil {
+			return nil, fmt.Errorf("rename element %s -> %s: %w", result.GetRef(), result.GetCanonicalRef(), err)
+		}
+		renames = append(renames, refRename{from: result.GetRef(), to: result.GetCanonicalRef()})
+	}
+	return renames, nil
 }
 
 func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *workspace.Workspace, plan *planner.Plan, respMsg *diagv1.ApplyPlanResponse) error {
@@ -275,8 +406,12 @@ func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *works
 		meta.Connectors = make(map[string]*workspace.ResourceMetadata)
 	}
 
+	elementMetadata := canonicalizeMetadata(respMsg.GetElementMetadata(), elementRefRenames(respMsg))
+	viewMetadata := canonicalizeMetadata(respMsg.GetDiagramMetadata(), elementRefRenames(respMsg))
+	connectorMetadata := canonicalizeConnectorMetadata(respMsg.GetConnectorMetadata(), elementRefRenames(respMsg))
+
 	for ref := range ws.Elements {
-		if metadata, ok := resourceMetadataFromMap(respMsg.GetElementMetadata(), ref); ok {
+		if metadata, ok := resourceMetadataFromMap(elementMetadata, ref); ok {
 			meta.Elements[ref] = metadata
 		}
 	}
@@ -284,12 +419,12 @@ func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *works
 		if !element.HasView {
 			continue
 		}
-		if metadata, ok := resourceMetadataFromMap(respMsg.GetDiagramMetadata(), ref); ok {
+		if metadata, ok := resourceMetadataFromMap(viewMetadata, ref); ok {
 			meta.Views[ref] = metadata
 		}
 	}
 	for ref := range ws.Connectors {
-		if metadata, ok := resourceMetadataFromMap(respMsg.GetConnectorMetadata(), ref); ok {
+		if metadata, ok := resourceMetadataFromMap(connectorMetadata, ref); ok {
 			meta.Connectors[ref] = metadata
 		}
 	}
@@ -369,4 +504,57 @@ func resourceMetadataFromMap(source map[string]*diagv1.ResourceMetadata, ref str
 		metadata.UpdatedAt = resourceMeta.UpdatedAt.AsTime()
 	}
 	return metadata, true
+}
+
+func elementRefRenames(resp *diagv1.ApplyPlanResponse) map[string]string {
+	renames := make(map[string]string)
+	for _, result := range resp.GetElementResults() {
+		if result.GetCanonicalRef() == "" || result.GetCanonicalRef() == result.GetRef() {
+			continue
+		}
+		renames[result.GetRef()] = result.GetCanonicalRef()
+	}
+	return renames
+}
+
+func canonicalizeMetadata(source map[string]*diagv1.ResourceMetadata, renames map[string]string) map[string]*diagv1.ResourceMetadata {
+	if len(source) == 0 {
+		return source
+	}
+	out := make(map[string]*diagv1.ResourceMetadata, len(source))
+	for ref, metadata := range source {
+		canonicalRef := ref
+		if renamed, ok := renames[ref]; ok {
+			canonicalRef = renamed
+		}
+		out[canonicalRef] = metadata
+	}
+	return out
+}
+
+func canonicalizeConnectorMetadata(source map[string]*diagv1.ResourceMetadata, renames map[string]string) map[string]*diagv1.ResourceMetadata {
+	if len(source) == 0 {
+		return source
+	}
+	out := make(map[string]*diagv1.ResourceMetadata, len(source))
+	for ref, metadata := range source {
+		out[canonicalConnectorRef(ref, renames)] = metadata
+	}
+	return out
+}
+
+func canonicalConnectorRef(ref string, renames map[string]string) string {
+	parts := strings.Split(ref, ":")
+	if len(parts) < 4 {
+		if renamed, ok := renames[ref]; ok {
+			return renamed
+		}
+		return ref
+	}
+	for _, index := range []int{0, 1, 2} {
+		if renamed, ok := renames[parts[index]]; ok {
+			parts[index] = renamed
+		}
+	}
+	return strings.Join(parts, ":")
 }

@@ -72,3 +72,36 @@ func TestInitCmd_DefaultDir(t *testing.T) {
 		t.Fatalf("init with explicit dir: %v", err)
 	}
 }
+
+func TestInitCmd_WizardProducesValidYAML(t *testing.T) {
+	dir := t.TempDir()
+	configDir := t.TempDir()
+	t.Setenv("TLD_CONFIG_DIR", configDir)
+
+	stdin := strings.NewReader("My Project\nfrontend\ngithub.com/x/fe\n./frontend\n1\nn\n")
+	stdout, stderr, err := runCmdWithStdin(t, ".", stdin, "init", dir, "--wizard")
+	if err != nil {
+		t.Fatalf("init --wizard: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "Next steps:") {
+		t.Fatalf("stdout missing next steps:\n%s", stdout)
+	}
+
+	configPath := filepath.Join(dir, ".tld.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read .tld.yaml: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "project_name: My Project") {
+		t.Fatalf("project name missing from .tld.yaml:\n%s", content)
+	}
+	if !strings.Contains(content, "frontend:") || !strings.Contains(content, "mode: upsert") {
+		t.Fatalf("repository config missing from .tld.yaml:\n%s", content)
+	}
+
+	validateOut, validateErr, err := runCmd(t, dir, "validate")
+	if err != nil {
+		t.Fatalf("validate after wizard: %v\nstdout: %s\nstderr: %s", err, validateOut, validateErr)
+	}
+}

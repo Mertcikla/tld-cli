@@ -59,49 +59,7 @@ func UpdateObject(dir, ref string, spec *Object) error {
 
 // UpsertObject adds an object to objects.yaml or updates an existing one by adding a placement.
 func UpsertObject(dir, ref string, spec *Object) error {
-	path := filepath.Join(dir, "objects.yaml")
-	existing := make(map[string]*Object)
-	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
-	}
-
-	if old, ok := existing[ref]; ok {
-		if old.Type != spec.Type {
-			return fmt.Errorf("object %q already exists with type %q (tried to reuse as %q)", ref, old.Type, spec.Type)
-		}
-		newPlacement := spec.Diagrams[0]
-		found := false
-		for i, p := range old.Diagrams {
-			if p.Diagram == newPlacement.Diagram {
-				old.Diagrams[i].PositionX = newPlacement.PositionX
-				old.Diagrams[i].PositionY = newPlacement.PositionY
-				found = true
-				break
-			}
-		}
-		if !found {
-			old.Diagrams = append(old.Diagrams, newPlacement)
-		}
-		if old.Description == "" {
-			old.Description = spec.Description
-		}
-		if old.Technology == "" {
-			old.Technology = spec.Technology
-		}
-		if old.URL == "" {
-			old.URL = spec.URL
-		}
-	} else {
-		existing[ref] = spec
-	}
-	data, err := yaml.Marshal(existing)
-	if err != nil {
-		return fmt.Errorf("marshal objects: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write objects.yaml: %w", err)
-	}
-	return nil
+	return upsertYAMLNodeKey(filepath.Join(dir, "objects.yaml"), ref, spec)
 }
 
 // AppendEdge adds an Edge to edges.yaml keyed by "diagram:source:target:label" (creates file if absent).
@@ -174,80 +132,12 @@ func UpdateElement(dir, ref string, spec *Element) error {
 
 // UpsertElement adds an element to elements.yaml or updates placements on an existing one.
 func UpsertElement(dir, ref string, spec *Element) error {
-	path := filepath.Join(dir, "elements.yaml")
-	existing := make(map[string]*Element)
-	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
-	}
-
-	if old, ok := existing[ref]; ok {
-		if old.Kind != spec.Kind {
-			return fmt.Errorf("element %q already exists with kind %q (tried to reuse as %q)", ref, old.Kind, spec.Kind)
-		}
-		if old.Name == "" {
-			old.Name = spec.Name
-		}
-		if old.Description == "" {
-			old.Description = spec.Description
-		}
-		if old.Technology == "" {
-			old.Technology = spec.Technology
-		}
-		if old.URL == "" {
-			old.URL = spec.URL
-		}
-		if spec.HasView {
-			old.HasView = true
-			if old.ViewLabel == "" {
-				old.ViewLabel = spec.ViewLabel
-			}
-		}
-		for _, newPlacement := range spec.Placements {
-			found := false
-			for index, placement := range old.Placements {
-				if placement.ParentRef == newPlacement.ParentRef {
-					old.Placements[index].PositionX = newPlacement.PositionX
-					old.Placements[index].PositionY = newPlacement.PositionY
-					found = true
-					break
-				}
-			}
-			if !found {
-				old.Placements = append(old.Placements, newPlacement)
-			}
-		}
-	} else {
-		existing[ref] = spec
-	}
-
-	data, err := yaml.Marshal(existing)
-	if err != nil {
-		return fmt.Errorf("marshal elements: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write elements.yaml: %w", err)
-	}
-	return nil
+	return upsertYAMLNodeKey(filepath.Join(dir, "elements.yaml"), ref, spec)
 }
 
 // AppendConnector adds a connector to connectors.yaml keyed by view:source:target:label.
 func AppendConnector(dir string, spec *Connector) error {
-	path := filepath.Join(dir, "connectors.yaml")
-	existing := make(map[string]*Connector)
-	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
-		delete(existing, "_meta")
-	}
-	key := spec.View + ":" + spec.Source + ":" + spec.Target + ":" + spec.Label
-	existing[key] = spec
-	data, err := yaml.Marshal(existing)
-	if err != nil {
-		return fmt.Errorf("marshal connectors: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write connectors.yaml: %w", err)
-	}
-	return nil
+	return upsertYAMLNodeKey(filepath.Join(dir, "connectors.yaml"), connectorKey(spec), spec)
 }
 
 // Save writes the entire workspace state to YAML files in ws.Dir.
@@ -284,6 +174,191 @@ func Save(ws *Workspace) error {
 		}
 	}
 
+	return nil
+}
+
+func upsertYAMLNodeKey(path, ref string, spec any) error {
+	root, mapping, err := loadYAMLMappingNode(path)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value != ref {
+			continue
+		}
+
+		mergedSpec, err := mergeExistingSpec(ref, mapping.Content[i+1], spec)
+		if err != nil {
+			return err
+		}
+		newValue, err := encodeYAMLValueNode(mergedSpec)
+		if err != nil {
+			return fmt.Errorf("encode %s: %w", ref, err)
+		}
+		mapping.Content[i+1] = newValue
+		return writeYAMLNode(path, root)
+	}
+
+	newValue, err := encodeYAMLValueNode(spec)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", ref, err)
+	}
+	mapping.Content = append(mapping.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ref},
+		newValue,
+	)
+	return writeYAMLNode(path, root)
+}
+
+func loadYAMLMappingNode(path string) (*yaml.Node, *yaml.Node, error) {
+	var root yaml.Node
+	data, err := os.ReadFile(path)
+	if err == nil {
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return nil, nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	if root.Kind == 0 {
+		root = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode}}}
+	}
+	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return nil, nil, fmt.Errorf("%s must contain a YAML mapping", filepath.Base(path))
+	}
+	return &root, root.Content[0], nil
+}
+
+func encodeYAMLValueNode(spec any) (*yaml.Node, error) {
+	var value yaml.Node
+	if err := value.Encode(spec); err != nil {
+		return nil, err
+	}
+	if value.Kind == yaml.DocumentNode {
+		if len(value.Content) == 0 {
+			return &yaml.Node{}, nil
+		}
+		return value.Content[0], nil
+	}
+	return &value, nil
+}
+
+func mergeExistingSpec(ref string, existingNode *yaml.Node, spec any) (any, error) {
+	switch incoming := spec.(type) {
+	case *Object:
+		var existing Object
+		if err := existingNode.Decode(&existing); err != nil {
+			return nil, fmt.Errorf("decode existing object %q: %w", ref, err)
+		}
+		return mergeObjectFields(ref, &existing, incoming)
+	case *Element:
+		var existing Element
+		if err := existingNode.Decode(&existing); err != nil {
+			return nil, fmt.Errorf("decode existing element %q: %w", ref, err)
+		}
+		return mergeElementFields(ref, &existing, incoming)
+	default:
+		return spec, nil
+	}
+}
+
+func mergeObjectFields(ref string, existing, incoming *Object) (*Object, error) {
+	if existing.Type != incoming.Type {
+		return nil, fmt.Errorf("object %q already exists with type %q (tried to reuse as %q)", ref, existing.Type, incoming.Type)
+	}
+
+	merged := *existing
+	if merged.Name == "" {
+		merged.Name = incoming.Name
+	}
+	if merged.Description == "" {
+		merged.Description = incoming.Description
+	}
+	if merged.Technology == "" {
+		merged.Technology = incoming.Technology
+	}
+	if merged.URL == "" {
+		merged.URL = incoming.URL
+	}
+	for _, newPlacement := range incoming.Diagrams {
+		found := false
+		for index, placement := range merged.Diagrams {
+			if placement.Diagram == newPlacement.Diagram {
+				merged.Diagrams[index].PositionX = newPlacement.PositionX
+				merged.Diagrams[index].PositionY = newPlacement.PositionY
+				found = true
+				break
+			}
+		}
+		if !found {
+			merged.Diagrams = append(merged.Diagrams, newPlacement)
+		}
+	}
+	return &merged, nil
+}
+
+func mergeElementFields(ref string, existing, incoming *Element) (*Element, error) {
+	if existing.Kind != incoming.Kind {
+		return nil, fmt.Errorf("element %q already exists with kind %q (tried to reuse as %q)", ref, existing.Kind, incoming.Kind)
+	}
+
+	merged := *existing
+	if merged.Name == "" {
+		merged.Name = incoming.Name
+	}
+	if merged.Description == "" {
+		merged.Description = incoming.Description
+	}
+	if merged.Technology == "" {
+		merged.Technology = incoming.Technology
+	}
+	if merged.URL == "" {
+		merged.URL = incoming.URL
+	}
+	if incoming.HasView {
+		merged.HasView = true
+		if merged.ViewLabel == "" {
+			merged.ViewLabel = incoming.ViewLabel
+		}
+	}
+	for _, newPlacement := range incoming.Placements {
+		found := false
+		for index, placement := range merged.Placements {
+			if placement.ParentRef == newPlacement.ParentRef {
+				merged.Placements[index].PositionX = newPlacement.PositionX
+				merged.Placements[index].PositionY = newPlacement.PositionY
+				found = true
+				break
+			}
+		}
+		if !found {
+			merged.Placements = append(merged.Placements, newPlacement)
+		}
+	}
+	return &merged, nil
+}
+
+func connectorKey(spec *Connector) string {
+	return spec.View + ":" + spec.Source + ":" + spec.Target + ":" + spec.Label
+}
+
+func writeYAMLNode(path string, root *yaml.Node) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	enc := yaml.NewEncoder(f)
+	enc.SetIndent(2)
+	if err := enc.Encode(root); err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", path, err)
+	}
 	return nil
 }
 
@@ -566,6 +641,62 @@ func RenameObject(dir, oldRef, newRef string) error {
 	return nil
 }
 
+// RenameElement changes an element ref in elements.yaml and cascades to connectors.
+func RenameElement(dir, oldRef, newRef string) error {
+	if oldRef == newRef {
+		return nil
+	}
+
+	path := filepath.Join(dir, "elements.yaml")
+	root, mapping, err := loadYAMLMappingNode(path)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		keyNode := mapping.Content[i]
+		valNode := mapping.Content[i+1]
+		if keyNode.Value == "_meta_elements" || keyNode.Value == "_meta_views" {
+			continue
+		}
+		if keyNode.Value == oldRef {
+			keyNode.Value = newRef
+		}
+		updatePlacementParentRefs(valNode, oldRef, newRef)
+	}
+
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		keyNode := mapping.Content[i]
+		valNode := mapping.Content[i+1]
+		if keyNode.Value == "_meta_elements" || keyNode.Value == "_meta_views" {
+			renameMappingKeys(valNode, map[string]string{oldRef: newRef})
+		}
+	}
+
+	if err := writeYAMLNode(path, root); err != nil {
+		return err
+	}
+	return RenameConnector(dir, oldRef, newRef)
+}
+
+func updatePlacementParentRefs(node *yaml.Node, oldRef, newRef string) {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value != "placements" {
+			continue
+		}
+		placements := node.Content[i+1]
+		if placements.Kind != yaml.SequenceNode {
+			return
+		}
+		for _, placement := range placements.Content {
+			updateScalarField(placement, "parent", oldRef, newRef)
+		}
+	}
+}
+
 func updateObjectsYamlForRename(dir, oldRef, newRef string) error {
 	path := filepath.Join(dir, "objects.yaml")
 	data, err := os.ReadFile(path)
@@ -722,6 +853,114 @@ func updateLinksYamlForObjectRename(dir, oldRef, newRef string) error {
 		}
 	}
 	return nil
+}
+
+// RenameConnector updates connector refs in connectors.yaml.
+// It renames an explicit connector key and also cascades element ref changes
+// into connector source/target fields and their derived keys.
+func RenameConnector(dir, oldRef, newRef string) error {
+	if oldRef == newRef {
+		return nil
+	}
+
+	path := filepath.Join(dir, "connectors.yaml")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat connectors.yaml: %w", err)
+	}
+
+	root, mapping, err := loadYAMLMappingNode(path)
+	if err != nil {
+		return err
+	}
+
+	renames := make(map[string]string)
+	usedKeys := make(map[string]string)
+	var metaKey *yaml.Node
+	var metaValue *yaml.Node
+	var newContent []*yaml.Node
+
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		keyNode := mapping.Content[i]
+		valNode := mapping.Content[i+1]
+
+		if keyNode.Value == "_meta_connectors" || keyNode.Value == "_meta" {
+			metaKey = keyNode
+			metaValue = valNode
+			continue
+		}
+
+		entryOldKey := keyNode.Value
+		fieldChanged := false
+		if updateScalarField(valNode, "view", oldRef, newRef) {
+			fieldChanged = true
+		}
+		if updateScalarField(valNode, "source", oldRef, newRef) {
+			fieldChanged = true
+		}
+		if updateScalarField(valNode, "target", oldRef, newRef) {
+			fieldChanged = true
+		}
+
+		entryNewKey := entryOldKey
+		if entryOldKey == oldRef {
+			entryNewKey = newRef
+		}
+		if fieldChanged {
+			var spec Connector
+			if err := valNode.Decode(&spec); err != nil {
+				return fmt.Errorf("decode connector %q: %w", entryOldKey, err)
+			}
+			entryNewKey = connectorKey(&spec)
+		}
+
+		if previous, exists := usedKeys[entryNewKey]; exists && previous != entryOldKey {
+			return fmt.Errorf("connector %q already exists", entryNewKey)
+		}
+		usedKeys[entryNewKey] = entryOldKey
+		if entryNewKey != entryOldKey {
+			renames[entryOldKey] = entryNewKey
+		}
+
+		newContent = append(newContent,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: entryNewKey},
+			valNode,
+		)
+	}
+
+	if metaKey != nil && metaValue != nil {
+		renameMappingKeys(metaValue, renames)
+		newContent = append(newContent, metaKey, metaValue)
+	}
+
+	mapping.Content = newContent
+	return writeYAMLNode(path, root)
+}
+
+func updateScalarField(mapping *yaml.Node, fieldName, oldVal, newVal string) bool {
+	if mapping.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == fieldName && mapping.Content[i+1].Value == oldVal {
+			mapping.Content[i+1].Value = newVal
+			return true
+		}
+	}
+	return false
+}
+
+func renameMappingKeys(mapping *yaml.Node, renames map[string]string) {
+	if mapping == nil || mapping.Kind != yaml.MappingNode || len(renames) == 0 {
+		return
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if newKey, ok := renames[mapping.Content[i].Value]; ok {
+			mapping.Content[i].Value = newKey
+		}
+	}
 }
 
 // Slugify converts "API Service" -> "api-service" for use as a ref/filename.

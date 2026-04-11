@@ -137,13 +137,11 @@ func TestApplyCmd_DryRunResetAfterConflictCheck(t *testing.T) {
 	}
 }
 
-// --- --auto-approve bypass ---
+// --- --auto-approve conflict detection ---
 
-// TestApplyCmd_AutoApproveSkipsConflictDetection verifies that --auto-approve
-// bypasses the dry-run conflict check entirely. This is the documented gap: a
-// concurrent frontend edit between plan and auto-approved apply is silently
-// overwritten.
-func TestApplyCmd_AutoApproveSkipsConflictDetection(t *testing.T) {
+// TestApplyCmd_AutoApprovePerformsConflictDetection verifies that --auto-approve
+// now performs a dry-run conflict check when a lock file is present.
+func TestApplyCmd_AutoApprovePerformsConflictDetection(t *testing.T) {
 	var dryRunCalled bool
 	svc := &mockDiagramService{
 		applyFunc: func(req *diagv1.ApplyPlanRequest) (*diagv1.ApplyPlanResponse, error) {
@@ -163,8 +161,8 @@ func TestApplyCmd_AutoApproveSkipsConflictDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if dryRunCalled {
-		t.Error("--auto-approve should bypass dry-run conflict detection, but it fired")
+	if !dryRunCalled {
+		t.Error("--auto-approve should perform dry-run conflict detection when a lock file exists")
 	}
 }
 
