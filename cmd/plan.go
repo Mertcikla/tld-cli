@@ -123,7 +123,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 
 	c.Flags().StringVarP(&planOutput, "output", "o", "", "write plan to file instead of stdout")
 	c.Flags().BoolVar(&recreateIDs, "recreate-ids", false, "ignore existing resource IDs and let the server generate new ones")
-	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "show detailed resource reporting (objects, edges, links)")
+	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "show detailed resource reporting (elements, diagrams, connectors)")
 	c.Flags().IntVar(&strictness, "strictness", 0, "override validation strictness level [1-3]")
 	return c
 }

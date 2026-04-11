@@ -50,7 +50,7 @@ func newCreateLinkCmd(wdir *string) *cobra.Command {
 			if err := workspace.AppendConnector(*wdir, spec); err != nil {
 				return fmt.Errorf("append connector: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Appended connector %s -> %s in diagram %s to connectors.yaml\n",
+			fmt.Fprintf(cmd.OutOrStdout(), "Appended connector %s -> %s in view %s to connectors.yaml\n",
 				from, to, view)
 			return nil
 		},

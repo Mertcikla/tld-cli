@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**tld** is a CLI for the tlDiagram.com architecture diagramming system. The workspace is migrating from the legacy `diagram/object/edge/link` model to the unified `element/view/connector` model. New work should prefer `elements.yaml` and `connectors.yaml`; `tld plan` and `tld apply` currently bridge that workspace onto the legacy backend request shape.
+**tld** is a CLI for the tlDiagram.com architecture diagramming system. The workspace uses the unified `element/view/connector` model. New work should only touch `elements.yaml` and `connectors.yaml`; `tld plan`, `tld apply`, `tld export`, and `tld pull` bridge that workspace onto the backend's current request and export shapes.
 
 ## Development commands
 
@@ -66,22 +66,16 @@ tld
 ├── diff               - git-style diff between local and server state
 ├── status             - show sync status and merge conflicts
 ├── rename
-│   ├── diagram <old> <new> - legacy rename path
-│   └── object <old> <new>  - legacy rename path
+│   ├── element <old> <new>
+│   └── connector <old> <new>
 ├── create
 │   ├── element <name> [--ref --kind --description --technology --url --parent --with-view --view-label --position-x --position-y]
-│   ├── diagram <name> [--ref --description --level-label --parent]  # legacy
-│   └── object <diagram_ref> <name> <type> [--ref --description --technology --url --position-x --position-y]  # legacy
+│   └── link --from --to [--label --description --relationship --direction --style --url]
 ├── connect
-│   ├── elements --view --from --to [--label --relationship --direction --style]
-│   └── objects <diagram_ref> --from --to [--label --relationship-type --direction --edge-type]  # legacy
+│   └── elements --view --from --to [--label --relationship --direction --style]
 └── remove
   ├── element <ref>
-  ├── connector --view --from --to
-    ├── diagram <ref>
-    ├── object <ref>
-    ├── edge --diagram --from --to
-    └── link --from --to [--object]
+  └── connector --view --from --to
 ```
 
 ### Workspace file layout
@@ -95,9 +89,8 @@ tld
   └── .tld.lock               # Sync state, hash, and metadata at last sync
 ```
 
-Legacy bridge files such as `diagrams.yaml`, `objects.yaml`, `edges.yaml`, and `links.yaml`
-may still appear later when legacy commands or migration paths materialize them, but `tld init`
-does not scaffold them by default.
+Local workspaces should only contain `elements.yaml`, `connectors.yaml`, and `.tld.lock`.
+Server-facing bridge logic still materializes legacy backend payloads internally during export and pull.
 
 ### Key patterns
 

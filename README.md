@@ -3,7 +3,7 @@
 
 tld is a command-line interface for managing software architecture diagrams as code. It is a companion app designed for use with [tlDiagram.com](http://tldiagram.com/). It lets you define your architecture in YAML, validate the consistency of your definitions, and sync them to [tlDiagram.com](http://tldiagram.com/).
 
-The workspace is currently migrating from the legacy `diagram/object/edge/link` model to the new `element/view/connector` model. The new CLI workflow writes `elements.yaml` and `connectors.yaml`, while `tld plan` and `tld apply` temporarily bridge that model onto the legacy backend contract.
+The workspace uses the unified `element/view/connector` model. The CLI writes `elements.yaml` and `connectors.yaml`, while `tld plan`, `tld apply`, `tld export`, and `tld pull` bridge that model onto the backend's current export/apply contract.
 
 
 ## Features
@@ -14,7 +14,7 @@ The workspace is currently migrating from the legacy `diagram/object/edge/link` 
 - **Idempotent Upserts**: Safely re-run applies; the CLI tracks system IDs to update existing resources instead of duplicating them.
 - **Conflict Detection**: Detects if resources have been modified on the server (e.g., via the web UI) since your last apply.
 - **Export/Import**: Backup your entire organization to YAML files or restore diagrams to a new organization.
-- **Edge Handles**: Specify precise connection points (handles) for edges.
+- **Connector Handles**: Specify precise connection points (handles) for connectors.
 
 ## Installation
 
@@ -75,7 +75,7 @@ A tld workspace consists of the following directory structure:
 - `.tld.lock`: (Generated) Lock file for workspace versioning and change tracking.
 - `elements.yaml`: YAML file defining elements, their canonical diagrams, and their placements.
 - `connectors.yaml`: Relationship definitions between elements inside the inferred parent diagram.
-- `diagrams.yaml`, `objects.yaml`, `edges.yaml`, `links.yaml`: Legacy files retained only during the migration bridge.
+- Local workspaces should only contain `elements.yaml`, `connectors.yaml`, and `.tld.lock`.
 
 ## Commands
 
@@ -95,14 +95,8 @@ A tld workspace consists of the following directory structure:
 - `tld connect elements --from <source> --to <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
 - `tld remove element <ref>`: Remove an element from the workspace.
 - `tld remove connector --view <ref> --from <source_ref> --to <target_ref>`: Remove matching connector(s).
-- The legacy `create diagram` and `create object` commands have been removed. Legacy diagram/object files are still retained only for the migration bridge.
-
-### Removing Resources
-
-- `tld remove diagram <ref>`: Remove a diagram and cascade-delete its edges, links, and placements.
-- `tld remove object <ref>`: Remove an object and cascade-delete edges and links referencing it.
-- `tld remove edge --diagram <ref> --from <source_ref> --to <target_ref>`: Remove matching edge(s).
-- `tld remove link --from <from_diagram_ref> --to <to_diagram_ref> [--object <ref>]`: Remove matching link(s).
+- `tld rename element <old-ref> <new-ref>`: Rename an element reference and cascade the change through placements and connector endpoints.
+- `tld rename connector <old-ref> <new-ref>`: Rename a connector key.
 
 ## Conflict Resolution
 

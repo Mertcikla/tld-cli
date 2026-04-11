@@ -23,18 +23,18 @@ func TestPullCmd_PreserveRefs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create objects.yaml with a custom ref "my-custom-ref" for object named "API Service"
+	// Create elements.yaml with a custom ref "my-custom-ref" for element named "API Service".
 	// ID "5nKqb4Xa" decodes to 22 in tld-cli hashids
-	objectsYAML := `
+	elementsYAML := `
 my-custom-ref:
   name: API Service
-  type: service
-_meta:
+  kind: service
+_meta_elements:
   my-custom-ref:
     id: "5nKqb4Xa"
     updated_at: "2023-01-01T00:00:00Z"
 `
-	err = os.WriteFile(filepath.Join(dir, "objects.yaml"), []byte(objectsYAML), 0600)
+	err = os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(elementsYAML), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +70,8 @@ _meta:
 		t.Fatalf("pull: %v", err)
 	}
 
-	// 4. Verify objects.yaml still uses "my-custom-ref"
-	data, err := os.ReadFile(filepath.Join(dir, "objects.yaml"))
+	// 4. Verify elements.yaml still uses "my-custom-ref"
+	data, err := os.ReadFile(filepath.Join(dir, "elements.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ _meta:
 	}
 
 	if _, ok := result["my-custom-ref"]; !ok {
-		t.Errorf("objects.yaml lost custom ref 'my-custom-ref'. Keys: %v", getMapKeys(result))
+		t.Errorf("elements.yaml lost custom ref 'my-custom-ref'. Keys: %v", getMapKeys(result))
 	}
 
 	obj := result["my-custom-ref"].(map[string]any)

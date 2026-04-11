@@ -50,8 +50,7 @@ func WriteLockFile(dir string, lockFile *LockFile) error {
 func CalculateWorkspaceHash(dir string) (string, error) {
 	hash := sha256.New()
 
-	// Hash each YAML file in order for deterministic results
-	files := []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml", "elements.yaml", "connectors.yaml"}
+	files := workspaceHashFiles(dir)
 
 	for _, filename := range files {
 		path := filepath.Join(dir, filename)
@@ -72,6 +71,15 @@ func CalculateWorkspaceHash(dir string) (string, error) {
 	}
 
 	return fmt.Sprintf("sha256:%x", hash.Sum(nil)), nil
+}
+
+func workspaceHashFiles(dir string) []string {
+	for _, filename := range []string{"elements.yaml", "connectors.yaml"} {
+		if _, err := os.Stat(filepath.Join(dir, filename)); err == nil {
+			return []string{"elements.yaml", "connectors.yaml"}
+		}
+	}
+	return []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"}
 }
 
 func normalizedHashContent(path string) ([]byte, error) {

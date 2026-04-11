@@ -338,9 +338,9 @@ func pullAndRebuildPlan(cmd *cobra.Command, ws *workspace.Workspace, lockFile *w
 	newWS := convertExportResponse(ws, exportResp.Msg)
 
 	lastSyncMeta := &workspace.Meta{
-		Diagrams: make(map[string]*workspace.ResourceMetadata),
-		Objects:  make(map[string]*workspace.ResourceMetadata),
-		Edges:    make(map[string]*workspace.ResourceMetadata),
+		Elements:   make(map[string]*workspace.ResourceMetadata),
+		Views:      make(map[string]*workspace.ResourceMetadata),
+		Connectors: make(map[string]*workspace.ResourceMetadata),
 	}
 	if lockFile != nil && lockFile.Metadata != nil {
 		lastSyncMeta = lockFile.Metadata

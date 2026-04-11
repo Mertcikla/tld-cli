@@ -77,16 +77,16 @@ you before overwriting them. Use --force to skip the prompt.`,
 			newWS := convertExportResponse(ws, resp.Msg)
 
 			if dryRun {
-				fmt.Fprintf(cmd.OutOrStdout(), "Would pull: %d diagrams, %d objects, %d edges, %d links\n",
-					len(newWS.Diagrams), len(newWS.Objects), len(newWS.Edges), len(newWS.Links))
+				fmt.Fprintf(cmd.OutOrStdout(), "Would pull: %d elements, %d diagrams, %d connectors\n",
+					len(newWS.Elements), countElementDiagrams(newWS), len(newWS.Connectors))
 				return nil
 			}
 
 			// Perform surgical merge
 			lastSyncMeta := &workspace.Meta{
-				Diagrams: make(map[string]*workspace.ResourceMetadata),
-				Objects:  make(map[string]*workspace.ResourceMetadata),
-				Edges:    make(map[string]*workspace.ResourceMetadata),
+				Elements:   make(map[string]*workspace.ResourceMetadata),
+				Views:      make(map[string]*workspace.ResourceMetadata),
+				Connectors: make(map[string]*workspace.ResourceMetadata),
 			}
 			if lockFile != nil && lockFile.Metadata != nil {
 				lastSyncMeta = lockFile.Metadata
@@ -110,15 +110,16 @@ you before overwriting them. Use --force to skip the prompt.`,
 				lockFile = &workspace.LockFile{Version: "v1"}
 			}
 			versionID := fmt.Sprintf("pull-%s", time.Now().UTC().Format(time.RFC3339))
-			workspace.UpdateLockFile(lockFile, versionID, "pull",
-				len(newWS.Diagrams), len(newWS.Objects), len(newWS.Edges), len(newWS.Links),
-				hash, nil, newWS.Meta)
+			workspace.UpdateLockFile(lockFile, versionID, "pull", 0, 0, 0, 0, hash, nil, newWS.Meta)
+			lockFile.Resources.Elements = len(newWS.Elements)
+			lockFile.Resources.Views = countElementDiagrams(newWS)
+			lockFile.Resources.Connectors = len(newWS.Connectors)
 			if err := workspace.WriteLockFile(*wdir, lockFile); err != nil {
 				return fmt.Errorf("write lock file: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Pulled %d diagrams, %d objects, %d edges, %d links\n",
-				len(newWS.Diagrams), len(newWS.Objects), len(newWS.Edges), len(newWS.Links))
+			fmt.Fprintf(cmd.OutOrStdout(), "Pulled %d elements, %d diagrams, %d connectors\n",
+				len(newWS.Elements), countElementDiagrams(newWS), len(newWS.Connectors))
 
 			return nil
 		},

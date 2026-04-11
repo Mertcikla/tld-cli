@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"strings"
+
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
 	"github.com/mertcikla/tld-cli/workspace"
 )
@@ -9,81 +11,46 @@ import (
 // Workspace. baseWS supplies the Dir and Config fields and is used to preserve existing refs.
 func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrganizationResponse) *workspace.Workspace {
 	newWS := &workspace.Workspace{
-		Dir:      baseWS.Dir,
-		Config:   baseWS.Config,
-		Diagrams: make(map[string]*workspace.Diagram),
-		Objects:  make(map[string]*workspace.Object),
-		Edges:    make(map[string]*workspace.Edge),
+		Dir:        baseWS.Dir,
+		Config:     baseWS.Config,
+		Diagrams:   make(map[string]*workspace.Diagram),
+		Elements:   make(map[string]*workspace.Element),
+		Connectors: make(map[string]*workspace.Connector),
 		Meta: &workspace.Meta{
-			Diagrams: make(map[string]*workspace.ResourceMetadata),
-			Objects:  make(map[string]*workspace.ResourceMetadata),
-			Edges:    make(map[string]*workspace.ResourceMetadata),
+			Elements:   make(map[string]*workspace.ResourceMetadata),
+			Views:      make(map[string]*workspace.ResourceMetadata),
+			Connectors: make(map[string]*workspace.ResourceMetadata),
 		},
 	}
 
-	// Reverse lookup for existing refs by ID
-	existingDiagramRefs := make(map[int32]string)
+	// Reverse lookup for existing refs by ID.
+	existingElementRefs := make(map[int32]string)
 	if baseWS.Meta != nil {
-		for ref, m := range baseWS.Meta.Diagrams {
-			existingDiagramRefs[int32(m.ID)] = ref
+		for ref, m := range baseWS.Meta.Elements {
+			existingElementRefs[int32(m.ID)] = ref
 		}
 	}
-	existingObjectRefs := make(map[int32]string)
+	existingConnectorRefs := make(map[int32]string)
 	if baseWS.Meta != nil {
-		for ref, m := range baseWS.Meta.Objects {
-			existingObjectRefs[int32(m.ID)] = ref
-		}
-	}
-	existingEdgeRefs := make(map[int32]string)
-	if baseWS.Meta != nil {
-		for ref, m := range baseWS.Meta.Edges {
-			existingEdgeRefs[int32(m.ID)] = ref
-		}
-	}
-
-	// Build ID → ref maps
-	diagramIDToRef := make(map[int32]string)
-	for _, d := range msg.Diagrams {
-		ref, ok := existingDiagramRefs[d.Id]
-		if !ok {
-			ref = workspace.Slugify(d.Name)
-		}
-		diagramIDToRef[d.Id] = ref
-		newWS.Diagrams[ref] = &workspace.Diagram{
-			Name:        d.Name,
-			Description: d.GetDescription(),
-			LevelLabel:  d.GetLevelLabel(),
-		}
-		newWS.Meta.Diagrams[ref] = &workspace.ResourceMetadata{
-			ID:        workspace.ResourceID(d.Id),
-			UpdatedAt: d.UpdatedAt.AsTime(),
-		}
-	}
-
-	// Second pass: resolve parent diagram refs
-	for _, d := range msg.Diagrams {
-		if d.ParentDiagramId != nil && *d.ParentDiagramId != 0 {
-			if parentRef, ok := diagramIDToRef[*d.ParentDiagramId]; ok {
-				ref := diagramIDToRef[d.Id]
-				newWS.Diagrams[ref].ParentDiagram = parentRef
-			}
+		for ref, m := range baseWS.Meta.Connectors {
+			existingConnectorRefs[int32(m.ID)] = ref
 		}
 	}
 
 	objectIDToRef := make(map[int32]string)
 	for _, o := range msg.Objects {
-		ref, ok := existingObjectRefs[o.Id]
+		ref, ok := existingElementRefs[o.Id]
 		if !ok {
 			ref = workspace.Slugify(o.Name)
 		}
 		objectIDToRef[o.Id] = ref
-		objType := ""
+		kind := ""
 		if o.Type != nil {
-			objType = *o.Type
+			kind = *o.Type
 		}
-		newWS.Objects[ref] = &workspace.Object{
+		newWS.Elements[ref] = &workspace.Element{
 			Name:        o.Name,
-			Type:        objType,
+			Kind:        kind,
 			Description: o.GetDescription(),
 			Technology:  o.GetTechnology(),
 			URL:         o.GetUrl(),
@@ -93,76 +60,134 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 			Language:    o.GetLanguage(),
 			FilePath:    o.GetFilePath(),
 		}
-		newWS.Meta.Objects[ref] = &workspace.ResourceMetadata{
+		newWS.Meta.Elements[ref] = &workspace.ResourceMetadata{
 			ID:        workspace.ResourceID(o.Id),
 			UpdatedAt: o.UpdatedAt.AsTime(),
 		}
 	}
 
-	// Placements
-	for _, p := range msg.Placements {
-		objRef, ok1 := objectIDToRef[p.ElementId]
-		diagRef, ok2 := diagramIDToRef[p.DiagramId]
-		if ok1 && ok2 {
-			newWS.Objects[objRef].Diagrams = append(newWS.Objects[objRef].Diagrams, workspace.Placement{
-				Diagram:   diagRef,
-				PositionX: p.PositionX,
-				PositionY: p.PositionY,
-			})
+	ownerByDiagramID := make(map[int32]string)
+	parentByDiagramID := make(map[int32]int32)
+	for _, link := range msg.Links {
+		ownerRef, ok := objectIDToRef[link.ElementId]
+		if !ok || link.ToDiagramId == 0 {
+			continue
 		}
+		ownerByDiagramID[link.ToDiagramId] = ownerRef
+		parentByDiagramID[link.ToDiagramId] = link.FromDiagramId
 	}
 
-	// Edges (keyed by "diagram:src:tgt:label")
-	for _, e := range msg.Edges {
-		diagRef, ok1 := diagramIDToRef[e.DiagramId]
-		srcRef, ok2 := objectIDToRef[e.SourceElementId]
-		tgtRef, ok3 := objectIDToRef[e.TargetElementId]
-		if !ok1 || !ok2 || !ok3 {
+	diagramIDToViewRef := make(map[int32]string)
+	for _, d := range msg.Diagrams {
+		if ownerRef, ok := ownerByDiagramID[d.Id]; ok {
+			diagramIDToViewRef[d.Id] = ownerRef
+			element := newWS.Elements[ownerRef]
+			element.HasView = true
+			if label := exportedDiagramLabel(d, element.Name); label != "" {
+				element.ViewLabel = label
+			}
+			newWS.Diagrams[ownerRef] = &workspace.Diagram{
+				Name:        d.Name,
+				Description: d.GetDescription(),
+				LevelLabel:  element.ViewLabel,
+			}
+			newWS.Meta.Views[ownerRef] = &workspace.ResourceMetadata{
+				ID:        workspace.ResourceID(d.Id),
+				UpdatedAt: d.UpdatedAt.AsTime(),
+			}
 			continue
 		}
 
-		// Try to find existing edge key by ID
-		key, ok := existingEdgeRefs[e.Id]
+		diagramIDToViewRef[d.Id] = "root"
+		newWS.Diagrams["root"] = &workspace.Diagram{
+			Name:        d.Name,
+			Description: d.GetDescription(),
+			LevelLabel:  exportedDiagramLabel(d, "Workspace Root"),
+		}
+	}
+
+	for childID, parentID := range parentByDiagramID {
+		childRef := diagramIDToViewRef[childID]
+		parentRef := diagramIDToViewRef[parentID]
+		if childRef == "" || childRef == "root" || parentRef == "" {
+			continue
+		}
+		if diagram := newWS.Diagrams[childRef]; diagram != nil {
+			diagram.ParentDiagram = parentRef
+		}
+	}
+
+	for _, p := range msg.Placements {
+		elementRef, ok := objectIDToRef[p.ElementId]
 		if !ok {
-			key = diagRef + ":" + srcRef + ":" + tgtRef + ":" + e.GetLabel()
+			continue
+		}
+		parentRef := diagramIDToViewRef[p.DiagramId]
+		if parentRef == "" {
+			parentRef = "root"
+		}
+		newWS.Elements[elementRef].Placements = append(newWS.Elements[elementRef].Placements, workspace.ViewPlacement{
+			ParentRef: parentRef,
+			PositionX: p.PositionX,
+			PositionY: p.PositionY,
+		})
+	}
+
+	for _, e := range msg.Edges {
+		viewRef := diagramIDToViewRef[e.DiagramId]
+		if viewRef == "" {
+			viewRef = "root"
+		}
+		srcRef, ok2 := objectIDToRef[e.SourceElementId]
+		tgtRef, ok3 := objectIDToRef[e.TargetElementId]
+		if !ok2 || !ok3 {
+			continue
 		}
 
-		newWS.Edges[key] = &workspace.Edge{
-			Diagram:          diagRef,
-			SourceObject:     srcRef,
-			TargetObject:     tgtRef,
-			Label:            e.GetLabel(),
-			Description:      e.GetDescription(),
-			RelationshipType: e.GetRelationship(),
-			Direction:        e.Direction,
-			EdgeType:         e.Style,
-			URL:              e.GetUrl(),
-			SourceHandle:     e.GetSourceHandle(),
-			TargetHandle:     e.GetTargetHandle(),
+		key, ok := existingConnectorRefs[e.Id]
+		if !ok {
+			key = viewRef + ":" + srcRef + ":" + tgtRef + ":" + e.GetLabel()
 		}
-		newWS.Meta.Edges[key] = &workspace.ResourceMetadata{
+
+		newWS.Connectors[key] = &workspace.Connector{
+			View:         viewRef,
+			Source:       srcRef,
+			Target:       tgtRef,
+			Label:        e.GetLabel(),
+			Description:  e.GetDescription(),
+			Relationship: e.GetRelationship(),
+			Direction:    e.Direction,
+			Style:        e.Style,
+			URL:          e.GetUrl(),
+			SourceHandle: e.GetSourceHandle(),
+			TargetHandle: e.GetTargetHandle(),
+		}
+		newWS.Meta.Connectors[key] = &workspace.ResourceMetadata{
 			ID:        workspace.ResourceID(e.Id),
 			UpdatedAt: e.UpdatedAt.AsTime(),
 		}
 	}
 
-	// Links
-	for _, l := range msg.Links {
-		fromRef, ok1 := diagramIDToRef[l.FromDiagramId]
-		toRef, ok2 := diagramIDToRef[l.ToDiagramId]
-		if !ok1 || !ok2 {
-			continue
-		}
-		objRef := ""
-		if l.ElementId != 0 {
-			objRef = objectIDToRef[l.ElementId]
-		}
-		newWS.Links = append(newWS.Links, workspace.Link{
-			Object:      objRef,
-			FromDiagram: fromRef,
-			ToDiagram:   toRef,
-		})
-	}
-
 	return newWS
+}
+
+func exportedDiagramLabel(diagram *diagv1.Diagram, elementName string) string {
+	if label := strings.TrimSpace(diagram.GetLevelLabel()); label != "" {
+		return label
+	}
+	name := strings.TrimSpace(diagram.Name)
+	if name != "" && !strings.EqualFold(name, strings.TrimSpace(elementName)) {
+		return name
+	}
+	return ""
+}
+
+func countElementDiagrams(ws *workspace.Workspace) int {
+	count := 0
+	for _, element := range ws.Elements {
+		if element.HasView {
+			count++
+		}
+	}
+	return count
 }

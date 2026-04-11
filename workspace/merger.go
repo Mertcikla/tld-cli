@@ -19,6 +19,36 @@ var positionKeys = map[string]bool{
 // lastSyncMeta is the metadata from the .tld.lock file (state at last pull/apply).
 // currentMeta is the metadata loaded from local YAML files (current state on disk).
 func MergeWorkspace(dir string, newWS *Workspace, lastSyncMeta *Meta, currentMeta *Meta) error {
+	if useElementWorkspaceFiles(newWS) {
+		elementMetaSections := []metadataSection{{name: "_meta_elements", values: newWS.Meta.Elements}, {name: "_meta_views", values: newWS.Meta.Views}}
+		if err := mergeYAMLMapWithMetadataSections(
+			filepath.Join(dir, "elements.yaml"),
+			newWS.Elements,
+			combinedElementMetadata(newWS.Meta),
+			combinedElementMetadata(lastSyncMeta),
+			combinedElementMetadata(currentMeta),
+			elementMetaSections,
+		); err != nil {
+			return fmt.Errorf("merge elements: %w", err)
+		}
+
+		if err := mergeYAMLMapWithMetadataSections(
+			filepath.Join(dir, "connectors.yaml"),
+			newWS.Connectors,
+			newWS.Meta.Connectors,
+			lastSyncMeta.Connectors,
+			currentMeta.Connectors,
+			[]metadataSection{{name: "_meta_connectors", values: newWS.Meta.Connectors}},
+		); err != nil {
+			return fmt.Errorf("merge connectors: %w", err)
+		}
+
+		if err := cleanupLegacyWorkspaceFiles(dir); err != nil {
+			return fmt.Errorf("cleanup legacy workspace files: %w", err)
+		}
+		return nil
+	}
+
 	// Merge diagrams
 	if err := mergeYAMLMapWithConflicts(filepath.Join(dir, "diagrams.yaml"), newWS.Diagrams, newWS.Meta.Diagrams, lastSyncMeta.Diagrams, currentMeta.Diagrams); err != nil {
 		return fmt.Errorf("merge diagrams: %w", err)
@@ -49,12 +79,16 @@ func MergeWorkspace(dir string, newWS *Workspace, lastSyncMeta *Meta, currentMet
 }
 
 func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[string]*ResourceMetadata, lastSyncMeta map[string]*ResourceMetadata, currentMeta map[string]*ResourceMetadata) error {
+	return mergeYAMLMapWithMetadataSections(path, serverItems, serverMeta, lastSyncMeta, currentMeta, []metadataSection{{name: "_meta", values: serverMeta}})
+}
+
+func mergeYAMLMapWithMetadataSections(path string, serverItems any, serverMeta map[string]*ResourceMetadata, lastSyncMeta map[string]*ResourceMetadata, currentMeta map[string]*ResourceMetadata, sections []metadataSection) error {
 	// Load existing file into a Node
 	var root yaml.Node
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return WriteFullYAMLMap(path, serverItems, serverMeta)
+			return WriteFullYAMLMapSections(path, serverItems, sections)
 		}
 		return fmt.Errorf("read %s: %w", path, err)
 	}
@@ -64,7 +98,7 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 	}
 
 	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
-		return WriteFullYAMLMap(path, serverItems, serverMeta)
+		return WriteFullYAMLMapSections(path, serverItems, sections)
 	}
 
 	mapping := root.Content[0]
@@ -83,7 +117,7 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 		valNode := mapping.Content[i+1]
 		key := keyNode.Value
 
-		if key == "_meta" {
+		if isMetadataSectionKey(key, sections) {
 			continue
 		}
 
@@ -104,8 +138,15 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 				if mergeErr != nil {
 					return fmt.Errorf("merge %s[%s]: %w", filepath.Base(path), key, mergeErr)
 				}
-				if sMeta != nil {
-					sMeta.Conflict = hasConflict
+				if hasConflict {
+					for _, section := range sections {
+						if section.values[key] != nil {
+							section.values[key].Conflict = true
+							break
+						}
+					}
+				} else if sMeta != nil {
+					sMeta.Conflict = false
 				}
 				newContent = append(newContent, keyNode, mergedNode)
 			} else if serverChanged {
@@ -140,11 +181,13 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 		}
 	}
 
-	// Rebuild _meta with merged metadata
-	if len(serverMeta) > 0 {
+	for _, section := range sections {
+		if len(section.values) == 0 {
+			continue
+		}
 		var metaKeyNode yaml.Node
-		_ = metaKeyNode.Encode("_meta")
-		metaValNode, err := EncodeMeta(serverMeta)
+		_ = metaKeyNode.Encode(section.name)
+		metaValNode, err := EncodeMeta(section.values)
 		if err != nil {
 			return err
 		}
@@ -166,6 +209,47 @@ func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[stri
 		return fmt.Errorf("encode %s: %w", path, err)
 	}
 	return nil
+}
+
+func isMetadataSectionKey(key string, sections []metadataSection) bool {
+	for _, section := range sections {
+		if key == section.name {
+			return true
+		}
+	}
+	return false
+}
+
+func combinedElementMetadata(meta *Meta) map[string]*ResourceMetadata {
+	combined := make(map[string]*ResourceMetadata)
+	if meta == nil {
+		return combined
+	}
+	for ref, resourceMeta := range meta.Elements {
+		if resourceMeta == nil {
+			continue
+		}
+		copyMeta := *resourceMeta
+		combined[ref] = &copyMeta
+	}
+	for ref, resourceMeta := range meta.Views {
+		if resourceMeta == nil {
+			continue
+		}
+		existing := combined[ref]
+		if existing == nil {
+			copyMeta := *resourceMeta
+			combined[ref] = &copyMeta
+			continue
+		}
+		if resourceMeta.UpdatedAt.After(existing.UpdatedAt) {
+			existing.UpdatedAt = resourceMeta.UpdatedAt
+		}
+		if existing.ID == 0 {
+			existing.ID = resourceMeta.ID
+		}
+	}
+	return combined
 }
 
 func mergeResourceValueNode(localNode *yaml.Node, serverItem any, ref string) (*yaml.Node, bool, error) {

@@ -10,6 +10,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type metadataSection struct {
+	name   string
+	values map[string]*ResourceMetadata
+}
+
 // WriteDiagram adds a diagram to diagrams.yaml. Errors if ref already exists.
 func WriteDiagram(dir, ref string, spec *Diagram) error {
 	path := filepath.Join(dir, "diagrams.yaml")
@@ -143,6 +148,35 @@ func AppendConnector(dir string, spec *Connector) error {
 
 // Save writes the entire workspace state to YAML files in ws.Dir.
 func Save(ws *Workspace) error {
+	if useElementWorkspaceFiles(ws) {
+		if ws.Elements == nil {
+			ws.Elements = make(map[string]*Element)
+		}
+		if ws.Connectors == nil {
+			ws.Connectors = make(map[string]*Connector)
+		}
+
+		var elementMeta map[string]*ResourceMetadata
+		var viewMeta map[string]*ResourceMetadata
+		var connectorMeta map[string]*ResourceMetadata
+		if ws.Meta != nil {
+			elementMeta = ws.Meta.Elements
+			viewMeta = ws.Meta.Views
+			connectorMeta = ws.Meta.Connectors
+		}
+
+		if err := WriteFullYAMLMapSections(filepath.Join(ws.Dir, "elements.yaml"), ws.Elements, []metadataSection{{name: "_meta_elements", values: elementMeta}, {name: "_meta_views", values: viewMeta}}); err != nil {
+			return fmt.Errorf("write elements: %w", err)
+		}
+		if err := WriteFullYAMLMapSections(filepath.Join(ws.Dir, "connectors.yaml"), ws.Connectors, []metadataSection{{name: "_meta_connectors", values: connectorMeta}}); err != nil {
+			return fmt.Errorf("write connectors: %w", err)
+		}
+		if err := cleanupLegacyWorkspaceFiles(ws.Dir); err != nil {
+			return fmt.Errorf("cleanup legacy workspace files: %w", err)
+		}
+		return nil
+	}
+
 	// Write diagrams
 	if err := WriteFullYAMLMap(filepath.Join(ws.Dir, "diagrams.yaml"), ws.Diagrams, ws.Meta.Diagrams); err != nil {
 		return fmt.Errorf("write diagrams: %w", err)
@@ -397,32 +431,42 @@ func marshalPrettyYAML(v any) ([]byte, error) {
 
 // WriteFullYAMLMap writes a map of items to a YAML file, including an optional _meta section.
 func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata) error {
+	return WriteFullYAMLMapSections(path, items, []metadataSection{{name: "_meta", values: meta}})
+}
+
+func WriteFullYAMLMapSections(path string, items any, sections []metadataSection) error {
 	// 1. Marshal items to a node
 	var node yaml.Node
 	if err := node.Encode(items); err != nil {
 		return fmt.Errorf("encode items for %s: %w", path, err)
 	}
+	if node.Kind == 0 {
+		node = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode}}}
+	}
 
-	// 2. Add _meta section if present
-	if len(meta) > 0 {
-		var mapping *yaml.Node
-		if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-			mapping = node.Content[0]
-		} else if node.Kind == yaml.MappingNode {
-			mapping = &node
-		}
+	var mapping *yaml.Node
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		mapping = node.Content[0]
+	} else if node.Kind == yaml.MappingNode {
+		mapping = &node
+	}
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		mapping = &yaml.Node{Kind: yaml.MappingNode}
+		node = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{mapping}}
+	}
 
-		if mapping != nil && mapping.Kind == yaml.MappingNode {
-			metaNode, err := EncodeMeta(meta)
-			if err != nil {
-				return fmt.Errorf("encode meta for %s: %w", path, err)
-			}
-			// Add _meta key
-			mapping.Content = append(mapping.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Value: "_meta"},
-				metaNode,
-			)
+	for _, section := range sections {
+		if len(section.values) == 0 {
+			continue
 		}
+		metaNode, err := EncodeMeta(section.values)
+		if err != nil {
+			return fmt.Errorf("encode %s for %s: %w", section.name, path, err)
+		}
+		mapping.Content = append(mapping.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: section.name},
+			metaNode,
+		)
 	}
 
 	// 3. Write back to file with specific indentation
@@ -445,6 +489,28 @@ func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata)
 		return fmt.Errorf("close %s: %w", path, err)
 	}
 
+	return nil
+}
+
+func useElementWorkspaceFiles(ws *Workspace) bool {
+	if len(ws.Elements) > 0 || len(ws.Connectors) > 0 {
+		return true
+	}
+	for _, filename := range []string{"elements.yaml", "connectors.yaml"} {
+		if _, err := os.Stat(filepath.Join(ws.Dir, filename)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func cleanupLegacyWorkspaceFiles(dir string) error {
+	for _, filename := range []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"} {
+		err := os.Remove(filepath.Join(dir, filename))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -110,21 +110,9 @@ The owning diagram is inferred from the two elements' shared parent placement.
 - `--style`: Visual style of the connector. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
 - `--url`: External URL for documentation related to this connection.
 
-The legacy `create diagram` and `create object` commands have been removed from the CLI surface. Legacy diagram/object files remain only for the migration bridge.
+The CLI only exposes the unified element and connector workflow. Server export and pull still bridge legacy backend payloads internally, but local workspaces should contain only `elements.yaml`, `connectors.yaml`, and `.tld.lock`.
 
 ### Connecting and Linking Resources
-
-#### `tld connect objects <diagram_ref> [flags]`
-Add an edge (connection) between two objects on a specified diagram.
-**Flags:**
-- `--from`: Source object reference **(required)**.
-- `--to`: Target object reference **(required)**.
-- `--label`: Edge label (e.g., "Makes API calls to").
-- `--description`: Detailed edge description.
-- `--relationship-type`: Semantic relationship type (e.g., "uses", "depends_on").
-- `--direction`: Direction of the arrow. Options: `forward`, `backward`, `both`, `none` (default: `forward`).
-- `--edge-type`: Visual style of the edge. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
-- `--url`: External URL for documentation related to this connection.
 
 #### `tld create link [flags]`
 Create a connector between two elements.
@@ -139,33 +127,11 @@ The owning diagram is inferred from the two elements' shared parent placement.
 - `--style`: Visual style of the connector. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
 - `--url`: External URL for documentation related to this connection.
 
-#### `tld update object <ref> [flags]`
-Update an object's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
-**Flags:**
-- `--name`: New name for the object.
-- `--type`: New architectural type.
-- `--description`: New description.
-- `--technology`: New primary technology.
-- `--url`: New external URL.
+#### `tld rename element <old-ref> <new-ref>`
+Rename an element reference in `elements.yaml` and cascade the change through placements, connector endpoints, and metadata.
 
-#### `tld update diagram <ref> [flags]`
-Update a diagram's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
-**Flags:**
-- `--name`: New name for the diagram.
-- `--description`: New description.
-- `--level-label`: New abstraction level label.
-
-#### `tld update edge [flags]`
-Update an edge's properties in the workspace YAML. Run `tld apply` to sync changes to the server.
-**Flags:**
-- `--diagram`: Diagram reference (required).
-- `--from`: Source object reference (required).
-- `--to`: Target object reference (required).
-- `--label`: Current label (required if multiple edges exist between the same objects).
-- `--new-label`: New label for the edge.
-- `--description`: New description.
-- `--direction`: New direction (`forward`, `backward`, `both`, `none`).
-- `--edge-type`: New visual style (`bezier`, `straight`, `step`, `smoothstep`).
+#### `tld rename connector <old-ref> <new-ref>`
+Rename a connector key in `connectors.yaml`.
 
 ### Workspace Workflow
 
@@ -188,7 +154,7 @@ Fetch the latest state from tlDiagram.com and update local YAML files. This is t
 #### `tld plan [flags]`
 Analyze the workspace and show what changes would be applied to the diag server. By default, it shows a high-level summary and the diagram hierarchy. It uses detailed drift analysis to show exactly what properties have changed.
 **Flags:**
-- `-v, --verbose`: Show detailed resource reporting, including all objects per diagram, edges, and links.
+- `-v, --verbose`: Show detailed resource reporting for element placements and connectors.
 - `-o, --output`: Write the plan to a specified file instead of printing to standard output.
 
 #### `tld apply [flags]`

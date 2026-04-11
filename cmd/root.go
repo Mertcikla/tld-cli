@@ -56,9 +56,6 @@ and apply them atomically with 'tld apply'.`,
 	createCmd := newCreateCmd(&wdir)
 	createCmd.GroupID = resourceGroup.ID
 
-	updateCmd := newUpdateCmd(&wdir)
-	updateCmd.GroupID = resourceGroup.ID
-
 	connectCmd := newConnectCmd(&wdir)
 	connectCmd.GroupID = resourceGroup.ID
 
@@ -116,7 +113,6 @@ and apply them atomically with 'tld apply'.`,
 		statusCmd,
 		diffCmd,
 		createCmd,
-		updateCmd,
 		connectCmd,
 		removeCmd,
 		renameCmd,

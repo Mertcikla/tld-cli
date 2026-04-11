@@ -57,15 +57,16 @@ func newExportCmd(wdir *string) *cobra.Command {
 				lockFile = &workspace.LockFile{Version: "v1"}
 			}
 			versionID := fmt.Sprintf("pull-%s", time.Now().UTC().Format(time.RFC3339))
-			workspace.UpdateLockFile(lockFile, versionID, "pull",
-				len(newWS.Diagrams), len(newWS.Objects), len(newWS.Edges), len(newWS.Links),
-				hash, nil, newWS.Meta)
+			workspace.UpdateLockFile(lockFile, versionID, "pull", 0, 0, 0, 0, hash, nil, newWS.Meta)
+			lockFile.Resources.Elements = len(newWS.Elements)
+			lockFile.Resources.Views = countElementDiagrams(newWS)
+			lockFile.Resources.Connectors = len(newWS.Connectors)
 			if err := workspace.WriteLockFile(*wdir, lockFile); err != nil {
 				return fmt.Errorf("write lock file: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Exported %d diagrams, %d objects, %d edges, %d links to %s\n",
-				len(newWS.Diagrams), len(newWS.Objects), len(newWS.Edges), len(newWS.Links), *wdir)
+			fmt.Fprintf(cmd.OutOrStdout(), "Exported %d elements, %d diagrams, %d connectors to %s\n",
+				len(newWS.Elements), countElementDiagrams(newWS), len(newWS.Connectors), *wdir)
 
 			return nil
 		},
