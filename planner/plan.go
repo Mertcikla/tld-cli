@@ -61,9 +61,9 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 		}
 		includedElements[ref] = true
 		planElement := &diagv1.PlanElement{
-			Ref:        ref,
-			Name:       element.Name,
-			HasDiagram: element.HasView,
+			Ref:     ref,
+			Name:    element.Name,
+			HasView: element.HasView,
 		}
 		if element.Kind != "" {
 			planElement.Kind = &element.Kind
@@ -93,7 +93,7 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 			planElement.FilePath = &element.FilePath
 		}
 		if element.ViewLabel != "" {
-			planElement.DiagramLabel = &element.ViewLabel
+			planElement.ViewLabel = &element.ViewLabel
 		}
 		for _, placement := range element.Placements {
 			parentRef := placement.ParentRef

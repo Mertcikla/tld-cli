@@ -32,7 +32,6 @@ for cross-file call references.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scanPath := args[0]
 
-			// Resolve to absolute path
 			absPath, err := filepath.Abs(scanPath)
 			if err != nil {
 				return fmt.Errorf("resolve path: %w", err)
@@ -74,7 +73,6 @@ for cross-file call references.`,
 					scanRoot = repoCtx.Root
 				}
 
-				// Detect git context (best-effort — not fatal if not a git repo)
 				var repoURL, branch string
 				if repoCtx.active() {
 					if url, err := git.DetectRemoteURL(repoCtx.Root); err == nil {
@@ -85,7 +83,6 @@ for cross-file call references.`,
 					}
 				}
 
-				// Extract symbols from the scan path
 				scanResult, err := extractFromPath(ctx, scanRoot, rules)
 				if err != nil {
 					return fmt.Errorf("extract symbols: %w", err)
@@ -103,7 +100,6 @@ for cross-file call references.`,
 					}
 				}
 
-				// Optionally scan entire repo for cross-file references
 				if deep && repoCtx.active() && !workspaceScan {
 					deepResult, err := extractFromPath(ctx, repoCtx.Root, rules)
 					if err != nil {
@@ -113,7 +109,6 @@ for cross-file call references.`,
 					}
 				}
 
-				// Filter symbols by ignore rules
 				filtered := filterSymbols(scanResult.Symbols, rules)
 				if len(changedFileSet) > 0 {
 					filtered = filterSymbolsByFiles(filtered, changedFileSet)
@@ -124,63 +119,131 @@ for cross-file call references.`,
 					continue
 				}
 
-				// Build a ref map: symbol name → element ref (for connector creation)
-				refMap := make(map[string]string) // symbolName → ref slug
+				usedRefs := make(map[string]struct{}, len(ws.Elements))
+				for ref := range ws.Elements {
+					usedRefs[ref] = struct{}{}
+				}
 
-				repoElements := 0
+				repoName := filepath.Base(repoCtx.Root)
+				repoRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, usedRefs, analyzeElementSpec{
+					Name:      repoName,
+					Kind:      "repository",
+					Owner:     repoCtx.Name,
+					Repo:      repoURL,
+					Branch:    branch,
+					HasView:   true,
+					ViewLabel: repoName,
+					ParentRef: "root",
+					Identity: analyzeElementIdentity{
+						Repo:     repoURL,
+						Branch:   branch,
+						FilePath: "",
+						Symbol:   "",
+						Kind:     "repository",
+						Name:     repoName,
+					},
+				})
+				if err != nil {
+					return fmt.Errorf("ensure repository element: %w", err)
+				}
+
+				fileRefs := make(map[string]string)
+				symbolRefs := make(map[string]string)
+				symbolFiles := make(map[string]string)
+				repoElements := 1
+
+				for _, relPath := range uniqueFilePaths(filtered, repoCtx.Root, repoCtx.active()) {
+					fileName := filepath.Base(relPath)
+					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, usedRefs, analyzeElementSpec{
+						Name:      fileName,
+						Kind:      "file",
+						Owner:     repoCtx.Name,
+						Repo:      repoURL,
+						Branch:    branch,
+						FilePath:  relPath,
+						HasView:   true,
+						ViewLabel: fileName,
+						ParentRef: repoRef,
+						Identity: analyzeElementIdentity{
+							Repo:     repoURL,
+							Branch:   branch,
+							FilePath: relPath,
+							Symbol:   "",
+							Kind:     "file",
+							Name:     fileName,
+						},
+					})
+					if err != nil {
+						return fmt.Errorf("ensure file element %q: %w", relPath, err)
+					}
+					fileRefs[relPath] = fileRef
+					repoElements++
+				}
+
 				for _, sym := range filtered {
-					ref := slugifySymbol(sym.Name, sym.FilePath, refMap)
-					refMap[sym.Name] = ref
-
 					relPath := sym.FilePath
 					if repoCtx.active() {
 						if rel, err := filepath.Rel(repoCtx.Root, sym.FilePath); err == nil {
 							relPath = rel
 						}
 					}
-
-					spec := &workspace.Element{
-						Name:     sym.Name,
-						Kind:     sym.Kind,
-						Owner:    repoCtx.Name,
-						FilePath: relPath,
-						Symbol:   sym.Name,
-						Repo:     repoURL,
-						Branch:   branch,
-					}
-
-					if dryRun {
-						repoElements++
+					relPath = filepath.Clean(relPath)
+					fileRef := fileRefs[relPath]
+					if fileRef == "" {
 						continue
 					}
 
-					if err := workspace.UpsertElement(*wdir, ref, spec); err != nil {
-						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: upsert element %q: %v\n", ref, err)
+					ref, err := ensureAnalyzeElement(*wdir, dryRun, ws, usedRefs, analyzeElementSpec{
+						Name:      sym.Name,
+						Kind:      sym.Kind,
+						Owner:     repoCtx.Name,
+						Repo:      repoURL,
+						Branch:    branch,
+						FilePath:  relPath,
+						Symbol:    sym.Name,
+						ParentRef: fileRef,
+						Identity: analyzeElementIdentity{
+							Repo:     repoURL,
+							Branch:   branch,
+							FilePath: relPath,
+							Symbol:   sym.Name,
+							Kind:     sym.Kind,
+							Name:     sym.Name,
+						},
+					})
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: upsert element %q: %v\n", sym.Name, err)
 						continue
 					}
+					symbolRefs[sym.Name] = ref
+					symbolFiles[ref] = relPath
 					repoElements++
 				}
 
-				// Create connectors for discovered references
 				repoConnectors := 0
 				for _, ref := range scanResult.Refs {
-					// Only create connectors between symbols we extracted
 					if rules.ShouldIgnoreSymbol(ref.Name) {
 						continue
 					}
-					toRef, toExists := refMap[ref.Name]
-					if !toExists {
-						continue // target symbol not in our extracted set
+					toRef, ok := symbolRefs[ref.Name]
+					if !ok {
+						continue
 					}
 
-					// Find which element's file this ref came from
-					fromRef := refByFile(ref.FilePath, refMap, filtered)
+					fromRef := refByFile(ref.FilePath, symbolRefs, filtered)
 					if fromRef == "" || fromRef == toRef {
 						continue
 					}
 
+					viewRef := repoRef
+					if sourceFile := symbolFiles[fromRef]; sourceFile != "" && sourceFile == symbolFiles[toRef] {
+						if fileRef := fileRefs[sourceFile]; fileRef != "" {
+							viewRef = fileRef
+						}
+					}
+
 					connectorSpec := &workspace.Connector{
-						View:         "root",
+						View:         viewRef,
 						Source:       fromRef,
 						Target:       toRef,
 						Label:        "calls",
@@ -194,7 +257,6 @@ for cross-file call references.`,
 					}
 
 					if err := workspace.AppendConnector(*wdir, connectorSpec); err != nil {
-						// Duplicate connectors produce a benign overwrite — not fatal
 						_ = err
 						continue
 					}
@@ -227,7 +289,6 @@ for cross-file call references.`,
 	return c
 }
 
-// extractFromPath runs symbol extraction on a file or directory.
 func extractFromPath(ctx context.Context, path string, rules *ignore.Rules) (*symbol.Result, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -236,27 +297,12 @@ func extractFromPath(ctx context.Context, path string, rules *ignore.Rules) (*sy
 	if info.IsDir() {
 		return symbol.ExtractDir(ctx, path, rules)
 	}
-	// Single file
 	if rules.ShouldIgnoreFile(path) {
 		return &symbol.Result{}, nil
 	}
 	return symbol.ExtractFile(ctx, path)
 }
 
-// slugifySymbol produces a unique ref slug for a symbol. If the base slug is already
-// taken by a different symbol, it appends a file-based suffix.
-func slugifySymbol(name, filePath string, existing map[string]string) string {
-	base := workspace.Slugify(name)
-	if _, taken := existing[base]; !taken {
-		return base
-	}
-	// Append shortened file name to disambiguate
-	fileBase := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
-	candidate := workspace.Slugify(fileBase + "-" + name)
-	return candidate
-}
-
-// filterSymbols removes symbols that match the ignore rules.
 func filterSymbols(symbols []symbol.Symbol, rules *ignore.Rules) []symbol.Symbol {
 	var out []symbol.Symbol
 	for _, s := range symbols {
@@ -288,14 +334,144 @@ func filterRefsByFiles(refs []symbol.Ref, changedFiles map[string]struct{}) []sy
 	return out
 }
 
-// refByFile returns the element ref for the first symbol extracted from the given file.
 func refByFile(filePath string, refMap map[string]string, symbols []symbol.Symbol) string {
 	for _, s := range symbols {
-		if s.FilePath == filePath {
+		if filepath.Clean(s.FilePath) == filepath.Clean(filePath) {
 			if ref, ok := refMap[s.Name]; ok {
 				return ref
 			}
 		}
 	}
 	return ""
+}
+
+type analyzeElementIdentity struct {
+	Repo     string
+	Branch   string
+	FilePath string
+	Symbol   string
+	Kind     string
+	Name     string
+}
+
+type analyzeElementSpec struct {
+	Name      string
+	Kind      string
+	Owner     string
+	Repo      string
+	Branch    string
+	FilePath  string
+	Symbol    string
+	HasView   bool
+	ViewLabel string
+	ParentRef string
+	Identity  analyzeElementIdentity
+}
+
+func ensureAnalyzeElement(wdir string, dryRun bool, ws *workspace.Workspace, usedRefs map[string]struct{}, spec analyzeElementSpec) (string, error) {
+	if ref, ok := findAnalyzeElementRef(ws, spec.Identity); ok {
+		if dryRun {
+			return ref, nil
+		}
+		return ref, workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec))
+	}
+
+	ref := uniqueAnalyzeRef(spec.Name, spec.FilePath, usedRefs)
+	usedRefs[ref] = struct{}{}
+	if dryRun {
+		return ref, nil
+	}
+	if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
+		return "", err
+	}
+	return ref, nil
+}
+
+func analyzeElementToWorkspaceElement(spec analyzeElementSpec) *workspace.Element {
+	return &workspace.Element{
+		Name:      spec.Name,
+		Kind:      spec.Kind,
+		Owner:     spec.Owner,
+		Repo:      spec.Repo,
+		Branch:    spec.Branch,
+		FilePath:  spec.FilePath,
+		Symbol:    spec.Symbol,
+		HasView:   spec.HasView,
+		ViewLabel: spec.ViewLabel,
+		Placements: []workspace.ViewPlacement{{
+			ParentRef: spec.ParentRef,
+		}},
+	}
+}
+
+func findAnalyzeElementRef(ws *workspace.Workspace, identity analyzeElementIdentity) (string, bool) {
+	for ref, element := range ws.Elements {
+		if element == nil {
+			continue
+		}
+		if identity.Repo != "" && element.Repo != identity.Repo {
+			continue
+		}
+		if identity.Branch != "" && element.Branch != identity.Branch {
+			continue
+		}
+		if filepath.Clean(element.FilePath) != filepath.Clean(identity.FilePath) {
+			continue
+		}
+		if element.Symbol != identity.Symbol {
+			continue
+		}
+		if identity.Kind != "" && element.Kind != identity.Kind {
+			continue
+		}
+		if identity.Name != "" && element.Name != identity.Name {
+			continue
+		}
+		return ref, true
+	}
+	return "", false
+}
+
+func uniqueAnalyzeRef(name, filePath string, used map[string]struct{}) string {
+	base := workspace.Slugify(name)
+	if base == "" {
+		base = "element"
+	}
+	if _, taken := used[base]; !taken {
+		return base
+	}
+	fileBase := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+	candidate := workspace.Slugify(fileBase + "-" + name)
+	if candidate == "" {
+		candidate = base
+	}
+	if _, taken := used[candidate]; !taken {
+		return candidate
+	}
+	for i := 2; ; i++ {
+		withSuffix := fmt.Sprintf("%s-%d", candidate, i)
+		if _, taken := used[withSuffix]; !taken {
+			return withSuffix
+		}
+	}
+}
+
+func uniqueFilePaths(symbols []symbol.Symbol, repoRoot string, activeRepo bool) []string {
+	seen := make(map[string]struct{})
+	paths := make([]string, 0, len(symbols))
+	for _, sym := range symbols {
+		relPath := sym.FilePath
+		if activeRepo {
+			if rel, err := filepath.Rel(repoRoot, sym.FilePath); err == nil {
+				relPath = rel
+			}
+		}
+		relPath = filepath.Clean(relPath)
+		if _, ok := seen[relPath]; ok {
+			continue
+		}
+		seen[relPath] = struct{}{}
+		paths = append(paths, relPath)
+	}
+	return paths
 }

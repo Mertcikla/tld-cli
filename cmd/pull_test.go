@@ -43,11 +43,11 @@ _meta_elements:
 	svc := &mockDiagramService{
 		exportFunc: func(_ *diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error) {
 			resp := &diagv1.ExportOrganizationResponse{
-				Objects: []*diagv1.Object{
+				Elements: []*diagv1.Element{
 					{
 						Id:          22, // This matches 5nKqb4Xa
 						Name:        "API Service Updated",
-						Type:        protoPtr("service"),
+						Kind:        protoPtr("service"),
 						UpdatedAt:   timestamppb.Now(),
 						Description: protoPtr("New description"),
 					},

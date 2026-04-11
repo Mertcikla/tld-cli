@@ -38,43 +38,43 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 	}
 
 	objectIDToRef := make(map[int32]string)
-	for _, o := range msg.Objects {
-		ref, ok := existingElementRefs[o.Id]
+	for _, e := range msg.Elements {
+		ref, ok := existingElementRefs[e.Id]
 		if !ok {
-			ref = workspace.Slugify(o.Name)
+			ref = workspace.Slugify(e.Name)
 		}
-		objectIDToRef[o.Id] = ref
+		objectIDToRef[e.Id] = ref
 		kind := ""
-		if o.Type != nil {
-			kind = *o.Type
+		if e != nil {
+			kind = *e.Kind
 		}
 		newWS.Elements[ref] = &workspace.Element{
-			Name:        o.Name,
+			Name:        e.Name,
 			Kind:        kind,
-			Description: o.GetDescription(),
-			Technology:  o.GetTechnology(),
-			URL:         o.GetUrl(),
-			LogoURL:     o.GetLogoUrl(),
-			Repo:        o.GetRepo(),
-			Branch:      o.GetBranch(),
-			Language:    o.GetLanguage(),
-			FilePath:    o.GetFilePath(),
+			Description: e.GetDescription(),
+			Technology:  e.GetTechnology(),
+			URL:         e.GetUrl(),
+			LogoURL:     e.GetLogoUrl(),
+			Repo:        e.GetRepo(),
+			Branch:      e.GetBranch(),
+			Language:    e.GetLanguage(),
+			FilePath:    e.GetFilePath(),
 		}
 		newWS.Meta.Elements[ref] = &workspace.ResourceMetadata{
-			ID:        workspace.ResourceID(o.Id),
-			UpdatedAt: o.UpdatedAt.AsTime(),
+			ID:        workspace.ResourceID(e.Id),
+			UpdatedAt: e.UpdatedAt.AsTime(),
 		}
 	}
 
 	ownerByDiagramID := make(map[int32]string)
 	parentByDiagramID := make(map[int32]int32)
-	for _, link := range msg.Links {
-		ownerRef, ok := objectIDToRef[link.ElementId]
-		if !ok || link.ToDiagramId == 0 {
+	for _, link := range msg.Connectors {
+		ownerRef, ok := objectIDToRef[link.TargetElementId]
+		if !ok || link.TargetElementId == 0 {
 			continue
 		}
-		ownerByDiagramID[link.ToDiagramId] = ownerRef
-		parentByDiagramID[link.ToDiagramId] = link.FromDiagramId
+		ownerByDiagramID[link.TargetElementId] = ownerRef
+		parentByDiagramID[link.TargetElementId] = link.SourceElementId
 	}
 
 	diagramIDToViewRef := make(map[int32]string)
@@ -122,7 +122,7 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 		if !ok {
 			continue
 		}
-		parentRef := diagramIDToViewRef[p.DiagramId]
+		parentRef := diagramIDToViewRef[p.ViewId]
 		if parentRef == "" {
 			parentRef = "root"
 		}
@@ -133,8 +133,8 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 		})
 	}
 
-	for _, e := range msg.Edges {
-		viewRef := diagramIDToViewRef[e.DiagramId]
+	for _, e := range msg.Connectors {
+		viewRef := diagramIDToViewRef[e.ViewId]
 		if viewRef == "" {
 			viewRef = "root"
 		}

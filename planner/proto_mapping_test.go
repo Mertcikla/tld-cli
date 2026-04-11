@@ -48,11 +48,11 @@ func TestProtoMapping_ElementFields(t *testing.T) {
 	if element.LogoUrl == nil || *element.LogoUrl != "https://example.com/logo.svg" {
 		t.Fatalf("LogoUrl = %v", element.LogoUrl)
 	}
-	if !element.HasDiagram {
+	if !element.HasView {
 		t.Fatal("expected HasDiagram to be true")
 	}
-	if element.DiagramLabel == nil || *element.DiagramLabel != "Container" {
-		t.Fatalf("DiagramLabel = %v", element.DiagramLabel)
+	if element.ViewLabel == nil || *element.ViewLabel != "Container" {
+		t.Fatalf("ViewLabel = %v", element.ViewLabel)
 	}
 	if len(element.Placements) != 1 {
 		t.Fatalf("Placements = %d", len(element.Placements))

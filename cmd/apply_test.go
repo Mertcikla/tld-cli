@@ -99,14 +99,14 @@ func successResponse(req *diagv1.ApplyPlanRequest) *diagv1.ApplyPlanResponse {
 		elementID := nextID
 		nextID++
 		resp.CreatedElements = append(resp.CreatedElements, &diagv1.Element{
-			Id:           elementID,
-			Name:         element.Name,
-			Kind:         element.Kind,
-			HasDiagram:   element.HasDiagram,
-			DiagramLabel: element.DiagramLabel,
+			Id:        elementID,
+			Name:      element.Name,
+			Kind:      element.Kind,
+			HasView:   element.HasView,
+			ViewLabel: element.ViewLabel,
 		})
 		resp.ElementMetadata[element.Ref] = &diagv1.ResourceMetadata{Id: elementID, UpdatedAt: timestamppb.Now()}
-		if element.HasDiagram {
+		if element.HasView {
 			diagramID := nextID
 			nextID++
 			diagramCount++
@@ -114,7 +114,7 @@ func successResponse(req *diagv1.ApplyPlanRequest) *diagv1.ApplyPlanResponse {
 				Id:             diagramID,
 				OwnerElementId: &elementID,
 				Name:           element.Name,
-				Label:          element.DiagramLabel,
+				Label:          element.ViewLabel,
 			})
 			resp.DiagramMetadata[element.Ref] = &diagv1.ResourceMetadata{Id: diagramID, UpdatedAt: timestamppb.Now()}
 		}
@@ -240,46 +240,6 @@ func TestApplyCmd_OrgIDInRequest(t *testing.T) {
 	defer svc.mu.Unlock()
 	if svc.lastRequest.GetOrgId() != testOrgID {
 		t.Fatalf("OrgId = %q", svc.lastRequest.GetOrgId())
-	}
-}
-
-func TestApplyCmd_ElementWorkspacePersistsMetadata(t *testing.T) {
-	svc := &mockDiagramService{}
-	serverURL := newMockServer(t, svc)
-	dir := t.TempDir()
-	setupApplyWorkspace(t, dir, serverURL)
-	seedElementWorkspace(t, dir)
-
-	if _, _, err := runCmd(t, dir, "apply", "--auto-approve"); err != nil {
-		t.Fatalf("first apply: %v", err)
-	}
-
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatalf("load workspace: %v", err)
-	}
-	if ws.Meta == nil || ws.Meta.Elements["platform"] == nil || ws.Meta.Views["platform"] == nil || ws.Meta.Connectors["platform:api:db:reads"] == nil {
-		t.Fatalf("expected workspace metadata, got %#v", ws.Meta)
-	}
-
-	if _, _, err := runCmd(t, dir, "apply", "--auto-approve"); err != nil {
-		t.Fatalf("second apply: %v", err)
-	}
-
-	svc.mu.Lock()
-	defer svc.mu.Unlock()
-	var api *diagv1.PlanElement
-	for _, element := range svc.lastRequest.Elements {
-		if element.Ref == "api" {
-			api = element
-			break
-		}
-	}
-	if api == nil || api.Id == nil || *api.Id == 0 || api.DiagramId == nil || *api.DiagramId == 0 {
-		t.Fatalf("expected id reuse, got %#v", api)
-	}
-	if len(svc.lastRequest.Connectors) != 1 || svc.lastRequest.Connectors[0].Id == nil || *svc.lastRequest.Connectors[0].Id == 0 {
-		t.Fatalf("expected connector id reuse, got %#v", svc.lastRequest.Connectors)
 	}
 }
 

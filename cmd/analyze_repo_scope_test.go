@@ -171,7 +171,7 @@ func TestAnalyzeCmd_ChangedSinceLimitsScan(t *testing.T) {
 	if !strings.Contains(stdout, "[dry-run]   OK  Incremental scan: 1 files changed since ") {
 		t.Fatalf("stdout missing incremental summary\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
-	if !strings.Contains(stdout, "[dry-run]   OK  2 elements written to elements.yaml") {
+	if !strings.Contains(stdout, "[dry-run]   OK  4 elements written to elements.yaml") {
 		t.Fatalf("stdout missing changed-file element count\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 	if !strings.Contains(stdout, "[dry-run]   OK  1 repositories scanned") {

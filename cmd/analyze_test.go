@@ -32,7 +32,7 @@ func TestAnalyzeCmd_DryRun_NoWrite(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatalf("elements.yaml changed during dry-run")
 	}
-	if !strings.Contains(stdout, "[dry-run]   OK  1 elements written to elements.yaml") {
+	if !strings.Contains(stdout, "[dry-run]   OK  3 elements written to elements.yaml") {
 		t.Fatalf("unexpected stdout: %s", stdout)
 	}
 }
@@ -53,8 +53,82 @@ func TestAnalyzeCmd_WritesElements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ws.Elements) != 2 {
-		t.Fatalf("elements = %d, want 2", len(ws.Elements))
+	if len(ws.Elements) != 4 {
+		t.Fatalf("elements = %d, want 4", len(ws.Elements))
+	}
+	for ref, element := range ws.Elements {
+		if element.Symbol == "" {
+			continue
+		}
+		if len(element.Placements) == 0 {
+			t.Fatalf("symbol %q (%s) has no placement", element.Name, ref)
+		}
+		if element.Placements[0].ParentRef == "root" {
+			t.Fatalf("symbol %q (%s) was created at root", element.Name, ref)
+		}
+	}
+}
+
+func TestAnalyzeCmd_ReusesExistingElements(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+
+	repoDir := filepath.Join(dir, "backhaul_analysis")
+	if err := os.MkdirAll(repoDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, repoDir, "backhaul_analysis.py", "from collections import OrderedDict\n\n\ndef get_columns():\n    return []\n")
+
+	if err := workspace.UpsertElement(dir, "backhaul-analysis", &workspace.Element{
+		Name:       "backhaul_analysis",
+		Kind:       "repository",
+		Branch:     "main",
+		HasView:    true,
+		ViewLabel:  "backhaul_analysis",
+		Placements: []workspace.ViewPlacement{{ParentRef: "root"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.UpsertElement(dir, "backhaul-analysis-py", &workspace.Element{
+		Name:       "backhaul_analysis.py",
+		Kind:       "file",
+		Branch:     "main",
+		FilePath:   "backhaul_analysis.py",
+		HasView:    true,
+		ViewLabel:  "backhaul_analysis.py",
+		Placements: []workspace.ViewPlacement{{ParentRef: "backhaul-analysis"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.UpsertElement(dir, "existing-get-columns", &workspace.Element{
+		Name:       "get_columns",
+		Kind:       "function",
+		Branch:     "main",
+		FilePath:   "backhaul_analysis.py",
+		Symbol:     "get_columns",
+		Placements: []workspace.ViewPlacement{{ParentRef: "backhaul-analysis-py"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", repoDir)
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ws.Elements["existing-get-columns"]; !ok {
+		t.Fatalf("expected existing symbol ref to be reused, got keys: %v", ws.Elements)
+	}
+	if len(ws.Elements) != 3 {
+		t.Fatalf("elements = %d, want 3", len(ws.Elements))
+	}
+	element := ws.Elements["existing-get-columns"]
+	if len(element.Placements) == 0 || element.Placements[0].ParentRef != "backhaul-analysis-py" {
+		t.Fatalf("reused symbol placement = %+v, want parent backhaul-analysis-py", element.Placements)
 	}
 }
 
