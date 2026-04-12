@@ -176,6 +176,13 @@ for cross-file call references.`,
 					continue
 				}
 
+				filePaths := uniqueFilePaths(filtered, repoCtx.Root, repoCtx.Active())
+				plannedElementWrites := 1 + len(filePaths) + len(filtered)
+				if progress != nil && !dryRun {
+					progress.AddMax(plannedElementWrites)
+				}
+				elementWriteAttempts := 0
+
 				usedRefs := make(map[string]struct{}, len(ws.Elements))
 				for ref := range ws.Elements {
 					usedRefs[ref] = struct{}{}
@@ -203,13 +210,17 @@ for cross-file call references.`,
 				if err != nil {
 					return fmt.Errorf("ensure repository element: %w", err)
 				}
+				if progress != nil && !dryRun {
+					elementWriteAttempts++
+					advanceAnalyzeWriteProgress(progress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
+				}
 
 				fileRefs := make(map[string]string)
 				symbolRefs := make(map[string]string)
 				symbolFiles := make(map[string]string)
 				repoElements := 1
 
-				for _, relPath := range uniqueFilePaths(filtered, repoCtx.Root, repoCtx.Active()) {
+				for _, relPath := range filePaths {
 					fileName := filepath.Base(relPath)
 					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
 						Name:      fileName,
@@ -232,6 +243,10 @@ for cross-file call references.`,
 					})
 					if err != nil {
 						return fmt.Errorf("ensure file element %q: %w", relPath, err)
+					}
+					if progress != nil && !dryRun {
+						elementWriteAttempts++
+						advanceAnalyzeWriteProgress(progress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
 					}
 					fileRefs[relPath] = fileRef
 					repoElements++
@@ -268,6 +283,10 @@ for cross-file call references.`,
 							Name:     sym.Name,
 						},
 					})
+					if progress != nil && !dryRun {
+						elementWriteAttempts++
+						advanceAnalyzeWriteProgress(progress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
+					}
 					if err != nil {
 						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: upsert element %q: %v\n", sym.Name, err)
 						continue
@@ -277,7 +296,7 @@ for cross-file call references.`,
 					repoElements++
 				}
 
-				repoConnectors := 0
+				plannedConnectors := make([]*workspace.Connector, 0, len(scanResult.Refs))
 				for _, ref := range scanResult.Refs {
 					if rules.ShouldIgnoreSymbol(ref.Name) {
 						continue
@@ -299,25 +318,32 @@ for cross-file call references.`,
 						}
 					}
 
-					connectorSpec := &workspace.Connector{
+					plannedConnectors = append(plannedConnectors, &workspace.Connector{
 						View:         viewRef,
 						Source:       fromRef,
 						Target:       toRef,
 						Label:        "calls",
 						Relationship: "uses",
 						Direction:    "forward",
-					}
+					})
+				}
 
+				repoConnectors := 0
+				if progress != nil && !dryRun && len(plannedConnectors) > 0 {
+					progress.AddMax(len(plannedConnectors))
+				}
+				for i, connectorSpec := range plannedConnectors {
 					if dryRun {
 						repoConnectors++
 						continue
 					}
 
-					if err := workspace.AppendConnector(*wdir, connectorSpec); err != nil {
-						_ = err
-						continue
+					if err := workspace.AppendConnector(*wdir, connectorSpec); err == nil {
+						repoConnectors++
 					}
-					repoConnectors++
+					if progress != nil {
+						advanceAnalyzeWriteProgress(progress, "connectors.yaml", i+1, len(plannedConnectors))
+					}
 				}
 
 				totalElements += repoElements
@@ -364,6 +390,15 @@ func newAnalyzeProgressBar(out io.Writer, total int) *progressbar.ProgressBar {
 		progressbar.OptionClearOnFinish(),
 		progressbar.OptionThrottle(60*time.Millisecond),
 	)
+}
+
+func advanceAnalyzeWriteProgress(progress *progressbar.ProgressBar, fileName string, completed, total int) {
+	if progress == nil || total <= 0 {
+		return
+	}
+	spinner := analyzeSpinnerFrames[completed%len(analyzeSpinnerFrames)]
+	progress.Describe(fmt.Sprintf("%s Writing %s (%d/%d)", spinner, fileName, completed, total))
+	_ = progress.Add(1)
 }
 
 func extractFromPath(ctx context.Context, path string, rules *ignore.Rules, onEntry func(path string, isDir bool)) (*symbol.Result, error) {
