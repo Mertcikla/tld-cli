@@ -8,26 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// RemoveLink removes all links from links.yaml where
-// from_diagram == fromDiagram AND to_diagram == toDiagram and,
-// when object is non-empty, object == object.
-// Safe: no error if file is absent or no matches found.
-// Returns count of removed links.
-func RemoveLink(dir, object, fromDiagram, toDiagram string) (int, error) {
-	return filterYAMLList(
-		filepath.Join(dir, "links.yaml"),
-		func(m map[string]any) bool {
-			if strVal(m, "from_diagram") != fromDiagram || strVal(m, "to_diagram") != toDiagram {
-				return true // keep
-			}
-			if object != "" && strVal(m, "object") != object {
-				return true // keep
-			}
-			return false // remove
-		},
-	)
-}
-
 // RemoveElement removes an element from elements.yaml.
 func RemoveElement(dir, ref string) error {
 	return filterYAMLMap(filepath.Join(dir, "elements.yaml"), func(k string, _ any) bool { return k != ref })
@@ -65,40 +45,6 @@ func RemoveConnector(dir, view, source, target string) (int, error) {
 		return 0, nil
 	}
 	out, err := yaml.Marshal(items)
-	if err != nil {
-		return 0, fmt.Errorf("marshal %s: %w", path, err)
-	}
-	if err := os.WriteFile(path, out, 0600); err != nil {
-		return 0, fmt.Errorf("write %s: %w", path, err)
-	}
-	return removed, nil
-}
-
-// filterYAMLList reads path as []map[string]any, keeps only items where keep(item)==true,
-// writes back, and returns the count removed. Safe: returns 0,nil if file absent.
-func filterYAMLList(path string, keep func(map[string]any) bool) (int, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, nil // file absent is fine
-	}
-
-	var items []map[string]any
-	if err := yaml.Unmarshal(data, &items); err != nil {
-		return 0, fmt.Errorf("parse %s: %w", path, err)
-	}
-
-	var kept []map[string]any
-	for _, item := range items {
-		if keep(item) {
-			kept = append(kept, item)
-		}
-	}
-	removed := len(items) - len(kept)
-	if removed == 0 {
-		return 0, nil
-	}
-
-	out, err := yaml.Marshal(kept)
 	if err != nil {
 		return 0, fmt.Errorf("marshal %s: %w", path, err)
 	}

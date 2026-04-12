@@ -84,8 +84,8 @@ func TestAnalyzePlan_TechnologyValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ws := &workspace.Workspace{
 				Elements: map[string]*workspace.Element{
-					"obj1": {
-						Name:       "Object 1",
+					"svc1": {
+						Name:       "Service 1",
 						Kind:       "service",
 						Technology: tt.technology,
 					},

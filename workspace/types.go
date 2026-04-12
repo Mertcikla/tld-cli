@@ -37,19 +37,12 @@ type Repository struct {
 	Exclude  []string          `yaml:"exclude,omitempty"`
 }
 
-// ValidationConfig represents diagram validation settings.
+// ValidationConfig represents workspace validation settings.
 type ValidationConfig struct {
 	Level           int      `yaml:"level"`
 	AllowLowInsight bool     `yaml:"allow_low_insight"`
 	IncludeRules    []string `yaml:"include_rules,omitempty"`
 	ExcludeRules    []string `yaml:"exclude_rules,omitempty"`
-}
-
-// Placement is a diagram placement within an Object
-type Placement struct {
-	Diagram   string  `yaml:"diagram"`
-	PositionX float64 `yaml:"position_x,omitempty"`
-	PositionY float64 `yaml:"position_y,omitempty"`
 }
 
 // ViewPlacement is an element placement within another element's internal view.
@@ -143,7 +136,7 @@ type LockFile struct {
 	Metadata      *Meta           `yaml:"metadata,omitempty"`       // Metadata at time of last sync
 }
 
-// ResourceCounts holds diagram, object, edge, and link counts for a workspace version.
+// ResourceCounts holds current model counts plus legacy fields retained for lockfile compatibility.
 type ResourceCounts struct {
 	Diagrams   int `yaml:"diagrams"`
 	Objects    int `yaml:"objects"`
@@ -166,7 +159,7 @@ type Workspace struct {
 	ActiveRepo      string        // active repository scope for plan/apply operations
 }
 
-// Meta contains metadata for all resources in the workspace.
+// Meta contains current-model metadata plus legacy buckets retained for compatibility with older lockfiles and exports.
 type Meta struct {
 	Diagrams   map[string]*ResourceMetadata
 	Objects    map[string]*ResourceMetadata

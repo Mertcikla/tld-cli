@@ -13,8 +13,8 @@ func TestDiffCmd(t *testing.T) {
 	svc := &mockDiagramService{
 		exportFunc: func(_ *diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error) {
 			resp := &diagv1.ExportOrganizationResponse{
-				Diagrams: []*diagv1.Diagram{
-					{Id: 1, Name: "Server Diagram", UpdatedAt: timestamppb.Now()},
+				Elements: []*diagv1.Element{
+					{Id: 1, Name: "Server API", Kind: protoPtr("service"), UpdatedAt: timestamppb.Now()},
 				},
 			}
 			return resp, nil
@@ -24,10 +24,14 @@ func TestDiffCmd(t *testing.T) {
 
 	dir := t.TempDir()
 	setupApplyWorkspace(t, dir, serverURL)
+	seedElementWorkspace(t, dir)
 
-	// Create a local diagram that is different from server
-	diagYAML := "local-diag: {name: Local Diagram}\n"
-	if err := os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte(diagYAML), 0600); err != nil {
+	// Replace the local workspace with a different element set so diff compares current files.
+	elementsYAML := "local-api:\n  name: Local API\n  kind: service\n  placements:\n    - parent: root\n"
+	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(elementsYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "connectors.yaml")); err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
 
@@ -41,12 +45,5 @@ func TestDiffCmd(t *testing.T) {
 		t.Fatalf("diff: %v", err)
 	}
 
-	// stdout should contain diff info (git diff output)
-	// it should show -Server Diagram and +Local Diagram (or similar depending on how git diff handles it)
-	// Given we diff FROM temp TO local:
-	// - server state items should be prefixed with '-'
-	// + local state items should be prefixed with '+'
-
-	// We just check for some expected strings in diff
-	// (git diff might include filenames and line changes)
+	// The command succeeds if the current workspace files can be materialized for both sides.
 }

@@ -79,6 +79,7 @@ func workspaceHashFiles(dir string) []string {
 			return []string{"elements.yaml", "connectors.yaml"}
 		}
 	}
+	// Fall back to the removed file set when hashing a workspace that has not been migrated yet.
 	return []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"}
 }
 
@@ -149,7 +150,7 @@ func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCoun
 	lockFile.Metadata = metadata
 }
 
-// LoadMetadata loads metadata from the _meta sections of YAML files
+// LoadMetadata loads metadata from current files and, when present, legacy files for backward compatibility.
 func LoadMetadata(dir string) (*Meta, error) {
 	meta := &Meta{
 		Diagrams:   make(map[string]*ResourceMetadata),
