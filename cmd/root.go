@@ -35,7 +35,9 @@ and apply them atomically with 'tld apply'.`,
 
 	var wdir string
 	defaultWdir := "."
-	if _, err := os.Stat("tld"); err == nil {
+	if _, err := os.Stat(".tld"); err == nil {
+		defaultWdir = ".tld"
+	} else if _, err := os.Stat("tld"); err == nil {
 		defaultWdir = "tld"
 	}
 	root.PersistentFlags().StringVarP(&wdir, "workspace", "w", defaultWdir, "workspace directory")

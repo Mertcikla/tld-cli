@@ -29,8 +29,11 @@ func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
 	}
 
 	return &Plan{
-		Request: &diagv1.ApplyPlanRequest{OrgId: ws.Config.OrgID},
-		Model:   "workspace",
+		Request: &diagv1.ApplyPlanRequest{
+			OrgId:  ws.Config.OrgID,
+			DryRun: new(bool),
+		},
+		Model: "workspace",
 	}, nil
 }
 
@@ -58,7 +61,10 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 	}
 	sort.Strings(connectorRefs)
 
-	req := &diagv1.ApplyPlanRequest{OrgId: ws.Config.OrgID}
+	req := &diagv1.ApplyPlanRequest{
+		OrgId:  ws.Config.OrgID,
+		DryRun: new(bool),
+	}
 
 	for _, ref := range elementRefs {
 		element := elements[ref]

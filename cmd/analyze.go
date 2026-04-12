@@ -3,16 +3,22 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mertcikla/tld-cli/internal/git"
 	"github.com/mertcikla/tld-cli/internal/ignore"
 	"github.com/mertcikla/tld-cli/internal/symbol"
+	"github.com/mertcikla/tld-cli/internal/term"
 	"github.com/mertcikla/tld-cli/workspace"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
+
+var analyzeSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 func newAnalyzeCmd(wdir *string) *cobra.Command {
 	var deep bool
@@ -45,7 +51,7 @@ for cross-file call references.`,
 				return fmt.Errorf("load workspace: %w", err)
 			}
 
-			repoScopes, err := resolveAnalyzeRepoScopes(ws, absPath)
+			repoScopes, err := ResolveAnalyzeRepoScopes(ws, absPath)
 			if err != nil {
 				return err
 			}
@@ -54,6 +60,7 @@ for cross-file call references.`,
 			totalElements := 0
 			totalConnectors := 0
 			incrementalFiles := 0
+			totalEntries := 0
 			knownElements := buildAnalyzeElementIndex(ws)
 			knownNames := buildAnalyzeElementNameIndex(ws)
 			modeLabel := "shallow"
@@ -67,8 +74,40 @@ for cross-file call references.`,
 			fmt.Fprintf(cmd.OutOrStdout(), "%sAnalyzing %s (%s)...\n", linePrefix, scanPath, modeLabel)
 			workspaceRoot, _ := filepath.Abs(ws.Dir)
 			workspaceScan := samePath(absPath, workspaceRoot)
-
 			for _, repoCtx := range repoScopes {
+				rules := ws.IgnoreRulesForRepository(repoCtx.Name)
+				scanRoot := absPath
+				if workspaceScan {
+					scanRoot = repoCtx.Root
+				}
+				entries, err := countAnalyzeEntries(scanRoot, rules)
+				if err != nil {
+					return fmt.Errorf("count entries: %w", err)
+				}
+				totalEntries += entries
+				if deep && repoCtx.Active() && !samePath(absPath, workspaceRoot) {
+					deepEntries, err := countAnalyzeEntries(repoCtx.Root, rules)
+					if err != nil {
+						return fmt.Errorf("count deep entries: %w", err)
+					}
+					totalEntries += deepEntries
+				}
+			}
+
+			progress := newAnalyzeProgressBar(cmd.ErrOrStderr(), totalEntries)
+			if progress != nil {
+				defer func() {
+					if !progress.IsFinished() {
+						_ = progress.Clear()
+					}
+				}()
+			}
+			processedEntries := 0
+
+			for i, repoCtx := range repoScopes {
+				if progress != nil {
+					progress.Describe(fmt.Sprintf("%s Scanning %s (%d/%d)", analyzeSpinnerFrames[processedEntries%len(analyzeSpinnerFrames)], repoCtx.Name, i+1, len(repoScopes)))
+				}
 				rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 				scanRoot := absPath
 				if workspaceScan {
@@ -76,7 +115,7 @@ for cross-file call references.`,
 				}
 
 				var repoURL, branch string
-				if repoCtx.active() {
+				if repoCtx.Active() {
 					if url, err := git.DetectRemoteURL(repoCtx.Root); err == nil {
 						repoURL = url
 					}
@@ -85,13 +124,21 @@ for cross-file call references.`,
 					}
 				}
 
-				scanResult, err := extractFromPath(ctx, scanRoot, rules)
+				scanResult, err := extractFromPath(ctx, scanRoot, rules, func(path string, isDir bool) {
+					processedEntries++
+					if progress == nil {
+						return
+					}
+					spinner := analyzeSpinnerFrames[processedEntries%len(analyzeSpinnerFrames)]
+					progress.Describe(fmt.Sprintf("%s Scanning %s (%d/%d)", spinner, repoCtx.Name, processedEntries, totalEntries))
+					_ = progress.Add(1)
+				})
 				if err != nil {
 					return fmt.Errorf("extract symbols: %w", err)
 				}
 
 				changedFileSet := map[string]struct{}{}
-				if changedSince != "" && repoCtx.active() {
+				if changedSince != "" && repoCtx.Active() {
 					changed, err := git.FilesChangedSince(repoCtx.Root, changedSince)
 					if err != nil {
 						return fmt.Errorf("git changed-since: %w", err)
@@ -102,8 +149,16 @@ for cross-file call references.`,
 					}
 				}
 
-				if deep && repoCtx.active() && !workspaceScan {
-					deepResult, err := extractFromPath(ctx, repoCtx.Root, rules)
+				if deep && repoCtx.Active() && !workspaceScan {
+					deepResult, err := extractFromPath(ctx, repoCtx.Root, rules, func(path string, isDir bool) {
+						processedEntries++
+						if progress == nil {
+							return
+						}
+						spinner := analyzeSpinnerFrames[processedEntries%len(analyzeSpinnerFrames)]
+						progress.Describe(fmt.Sprintf("%s Scanning %s (%d/%d)", spinner, repoCtx.Name, processedEntries, totalEntries))
+						_ = progress.Add(1)
+					})
 					if err != nil {
 						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: deep scan failed: %v\n", err)
 					} else {
@@ -154,7 +209,7 @@ for cross-file call references.`,
 				symbolFiles := make(map[string]string)
 				repoElements := 1
 
-				for _, relPath := range uniqueFilePaths(filtered, repoCtx.Root, repoCtx.active()) {
+				for _, relPath := range uniqueFilePaths(filtered, repoCtx.Root, repoCtx.Active()) {
 					fileName := filepath.Base(relPath)
 					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
 						Name:      fileName,
@@ -184,7 +239,7 @@ for cross-file call references.`,
 
 				for _, sym := range filtered {
 					relPath := sym.FilePath
-					if repoCtx.active() {
+					if repoCtx.Active() {
 						if rel, err := filepath.Rel(repoCtx.Root, sym.FilePath); err == nil {
 							relPath = rel
 						}
@@ -268,6 +323,9 @@ for cross-file call references.`,
 				totalElements += repoElements
 				totalConnectors += repoConnectors
 			}
+			if progress != nil {
+				_ = progress.Finish()
+			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "%s  OK  %d elements written to elements.yaml\n", linePrefix, totalElements)
 			fmt.Fprintf(cmd.OutOrStdout(), "%s  OK  %d connectors written to connectors.yaml\n", linePrefix, totalConnectors)
@@ -291,18 +349,75 @@ for cross-file call references.`,
 	return c
 }
 
-func extractFromPath(ctx context.Context, path string, rules *ignore.Rules) (*symbol.Result, error) {
+func newAnalyzeProgressBar(out io.Writer, total int) *progressbar.ProgressBar {
+	if total <= 0 || !term.IsTerminal(out) {
+		return nil
+	}
+	return progressbar.NewOptions(total,
+		progressbar.OptionSetWriter(out),
+		progressbar.OptionSetVisibility(true),
+		progressbar.OptionSetDescription("⠋ Scanning"),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetWidth(12),
+		progressbar.OptionFullWidth(),
+		progressbar.OptionClearOnFinish(),
+		progressbar.OptionThrottle(60*time.Millisecond),
+	)
+}
+
+func extractFromPath(ctx context.Context, path string, rules *ignore.Rules, onEntry func(path string, isDir bool)) (*symbol.Result, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
 	if info.IsDir() {
-		return symbol.ExtractDir(ctx, path, rules)
+		return symbol.ExtractDirWithProgress(ctx, path, rules, onEntry)
 	}
 	if rules.ShouldIgnoreFile(path) {
 		return &symbol.Result{}, nil
 	}
+	if onEntry != nil {
+		onEntry(path, false)
+	}
 	return symbol.ExtractFile(ctx, path)
+}
+
+func countAnalyzeEntries(path string, rules *ignore.Rules) (int, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	if !info.IsDir() {
+		if rules.ShouldIgnoreFile(path) {
+			return 0, nil
+		}
+		return 1, nil
+	}
+
+	count := 0
+	err = filepath.WalkDir(path, func(currentPath string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			rel, _ := filepath.Rel(path, currentPath)
+			if rules.ShouldIgnorePath(rel) || rules.ShouldIgnorePath(d.Name()) {
+				return filepath.SkipDir
+			}
+			count++
+			return nil
+		}
+		if rules.ShouldIgnorePath(currentPath) {
+			return nil
+		}
+		count++
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func filterSymbols(symbols []symbol.Symbol, rules *ignore.Rules) []symbol.Symbol {

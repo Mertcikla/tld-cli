@@ -49,6 +49,12 @@ func ExtractSource(ctx context.Context, ext string, src []byte) (*Result, error)
 // ExtractDir walks root (recursively) and extracts symbols from every supported
 // source file, filtering via ignore rules.  All results are merged into one.
 func ExtractDir(ctx context.Context, root string, rules *ignore.Rules) (*Result, error) {
+	return ExtractDirWithProgress(ctx, root, rules, nil)
+}
+
+// ExtractDirWithProgress behaves like ExtractDir and invokes onEntry for every
+// non-ignored directory and file visited while walking root.
+func ExtractDirWithProgress(ctx context.Context, root string, rules *ignore.Rules, onEntry func(path string, isDir bool)) (*Result, error) {
 	merged := &Result{}
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -61,10 +67,16 @@ func ExtractDir(ctx context.Context, root string, rules *ignore.Rules) (*Result,
 			if rules.ShouldIgnorePath(rel) || rules.ShouldIgnorePath(d.Name()) {
 				return filepath.SkipDir
 			}
+			if onEntry != nil {
+				onEntry(path, true)
+			}
 			return nil
 		}
 		if rules.ShouldIgnorePath(path) {
 			return nil
+		}
+		if onEntry != nil {
+			onEntry(path, false)
 		}
 		if _, err := grammarFor(path); err != nil {
 			return nil // unsupported — skip silently

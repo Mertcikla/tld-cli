@@ -11,7 +11,7 @@ func TestInitCmd_CreatesTldDirectory(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("TLD_CONFIG_DIR", configDir)
 
-	// Change to temp dir to test default "tld" directory creation
+	// Change to temp dir to test default ".tld" directory creation
 	oldWd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -27,18 +27,18 @@ func TestInitCmd_CreatesTldDirectory(t *testing.T) {
 		t.Fatalf("init: %v", err)
 	}
 
-	// Check if "tld" directory was created
-	tldDir := filepath.Join(dir, "tld")
+	// Check if ".tld" directory was created
+	tldDir := filepath.Join(dir, ".tld")
 	if stat, err := os.Stat(tldDir); err != nil || !stat.IsDir() {
-		t.Fatalf("tld directory was not created: %v", err)
+		t.Fatalf(".tld directory was not created: %v", err)
 	}
 
-	// Check if new-model YAML files were created in tld/
+	// Check if new-model YAML files were created in .tld/
 	files := []string{"elements.yaml", "connectors.yaml"}
 	for _, f := range files {
 		path := filepath.Join(tldDir, f)
 		if _, err := os.Stat(path); err != nil {
-			t.Errorf("file %s was not created in tld directory", f)
+			t.Errorf("file %s was not created in .tld directory", f)
 		}
 	}
 

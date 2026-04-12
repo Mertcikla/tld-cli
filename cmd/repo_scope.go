@@ -11,7 +11,7 @@ import (
 	"github.com/mertcikla/tld-cli/workspace"
 )
 
-type repoScope struct {
+type RepoScope struct {
 	Root      string
 	Name      string
 	Label     string
@@ -19,7 +19,7 @@ type repoScope struct {
 	Branch    string
 }
 
-func detectRepoScope(startDir, fallbackDir string) repoScope {
+func DetectRepoScope(startDir, fallbackDir string) RepoScope {
 	for _, dir := range []string{startDir, fallbackDir} {
 		if dir == "" {
 			continue
@@ -28,7 +28,7 @@ func detectRepoScope(startDir, fallbackDir string) repoScope {
 		if err != nil {
 			continue
 		}
-		scope := repoScope{Root: root, Name: filepath.Base(root), Label: filepath.Base(root)}
+		scope := RepoScope{Root: root, Name: filepath.Base(root), Label: filepath.Base(root)}
 		if url, err := git.DetectRemoteURL(root); err == nil {
 			scope.RemoteURL = url
 		}
@@ -37,14 +37,14 @@ func detectRepoScope(startDir, fallbackDir string) repoScope {
 		}
 		return scope
 	}
-	return repoScope{}
+	return RepoScope{}
 }
 
-func (s repoScope) active() bool {
+func (s RepoScope) Active() bool {
 	return s.Root != ""
 }
 
-func (s repoScope) displayName() string {
+func (s RepoScope) DisplayName() string {
 	if s.Label != "" {
 		return s.Label
 	}
@@ -54,7 +54,7 @@ func (s repoScope) displayName() string {
 	return "<unknown>"
 }
 
-func (s repoScope) resolvePath(filePath string) string {
+func (s RepoScope) ResolvePath(filePath string) string {
 	if filePath == "" {
 		return ""
 	}
@@ -64,11 +64,11 @@ func (s repoScope) resolvePath(filePath string) string {
 	return filepath.Join(s.Root, filePath)
 }
 
-func (s repoScope) matchesElement(element *workspace.Element) bool {
+func (s RepoScope) MatchesElement(element *workspace.Element) bool {
 	if element == nil {
 		return false
 	}
-	if !s.active() {
+	if !s.Active() {
 		return true
 	}
 	if s.RemoteURL != "" && element.Repo != "" {
@@ -77,7 +77,7 @@ func (s repoScope) matchesElement(element *workspace.Element) bool {
 	if element.FilePath == "" {
 		return false
 	}
-	absolute := s.resolvePath(element.FilePath)
+	absolute := s.ResolvePath(element.FilePath)
 	if absolute == "" {
 		return false
 	}
@@ -89,7 +89,7 @@ func (s repoScope) matchesElement(element *workspace.Element) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
-func configuredRepoScopes(ws *workspace.Workspace) []repoScope {
+func ConfiguredRepoScopes(ws *workspace.Workspace) []RepoScope {
 	if ws == nil || ws.WorkspaceConfig == nil || len(ws.WorkspaceConfig.Repositories) == 0 {
 		return nil
 	}
@@ -100,9 +100,9 @@ func configuredRepoScopes(ws *workspace.Workspace) []repoScope {
 	}
 
 	seen := make(map[string]struct{})
-	scopes := make([]repoScope, 0, len(ws.WorkspaceConfig.Repositories))
+	scopes := make([]RepoScope, 0, len(ws.WorkspaceConfig.Repositories))
 	for repoName, repository := range ws.WorkspaceConfig.Repositories {
-		for _, candidate := range expandRepositoryCandidates(workspaceRoot, repository.LocalDir) {
+		for _, candidate := range ExpandRepositoryCandidates(workspaceRoot, repository.LocalDir) {
 			root, err := git.RepoRoot(candidate)
 			if err != nil {
 				continue
@@ -112,7 +112,7 @@ func configuredRepoScopes(ws *workspace.Workspace) []repoScope {
 				continue
 			}
 			seen[root] = struct{}{}
-			scopes = append(scopes, repoScope{
+			scopes = append(scopes, RepoScope{
 				Root:      root,
 				Name:      repoName,
 				Label:     repositoryLabel(workspaceRoot, root, repoName),
@@ -127,9 +127,9 @@ func configuredRepoScopes(ws *workspace.Workspace) []repoScope {
 	return scopes
 }
 
-func resolveAnalyzeRepoScopes(ws *workspace.Workspace, absPath string) ([]repoScope, error) {
+func ResolveAnalyzeRepoScopes(ws *workspace.Workspace, absPath string) ([]RepoScope, error) {
 	hasConfiguredRepositories := ws != nil && ws.WorkspaceConfig != nil && len(ws.WorkspaceConfig.Repositories) > 0
-	configured := configuredRepoScopes(ws)
+	configured := ConfiguredRepoScopes(ws)
 	if hasConfiguredRepositories {
 		workspaceRoot := ""
 		if ws != nil {
@@ -143,7 +143,7 @@ func resolveAnalyzeRepoScopes(ws *workspace.Workspace, absPath string) ([]repoSc
 		}
 		for _, scope := range configured {
 			if pathWithin(absPath, scope.Root) {
-				return []repoScope{scope}, nil
+				return []RepoScope{scope}, nil
 			}
 		}
 		if len(configured) == 0 {
@@ -152,14 +152,20 @@ func resolveAnalyzeRepoScopes(ws *workspace.Workspace, absPath string) ([]repoSc
 		return nil, fmt.Errorf("path %q is not inside any configured repository", absPath)
 	}
 
-	scope := detectRepoScope(absPath, getWorkingDir())
-	if !scope.active() {
+	scope := DetectRepoScope(absPath, getWorkingDir())
+	if !scope.Active() {
 		return nil, fmt.Errorf("no git repository found for %q", absPath)
 	}
-	return []repoScope{scope}, nil
+	return []RepoScope{scope}, nil
 }
 
-func expandRepositoryCandidates(workspaceRoot, localDir string) []string {
+func ExpandRepositoryCandidates(workspaceRoot, localDir string) []string {
+	if localDir == "" {
+		// If localDir is empty, assume parent directory of the workspace
+		parent := filepath.Dir(workspaceRoot)
+		return []string{parent}
+	}
+
 	cleaned := filepath.Clean(localDir)
 	if filepath.IsAbs(cleaned) {
 		return []string{cleaned}
@@ -201,11 +207,11 @@ func pathWithin(path, root string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
-func (s repoScope) matchesWorkspaceRepo(ws *workspace.Workspace) bool {
+func (s RepoScope) MatchesWorkspaceRepo(ws *workspace.Workspace) bool {
 	if ws == nil || ws.WorkspaceConfig == nil || len(ws.WorkspaceConfig.Repositories) == 0 {
 		return true
 	}
-	if !s.active() {
+	if !s.Active() {
 		return false
 	}
 
@@ -227,6 +233,13 @@ func (s repoScope) matchesWorkspaceRepo(ws *workspace.Workspace) bool {
 	}
 
 	for _, repository := range ws.WorkspaceConfig.Repositories {
+		if repository.LocalDir == "" {
+			// Empty localDir means parent directory of workspace
+			if rel == ".." {
+				return true
+			}
+			continue
+		}
 		trimmed := strings.TrimSuffix(repository.LocalDir, string(os.PathSeparator))
 		if trimmed == "" {
 			continue

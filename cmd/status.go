@@ -32,8 +32,8 @@ any drift from manual changes in the frontend.`,
 				}
 				return err
 			}
-			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
-			if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(ws) {
+			repoCtx := DetectRepoScope(getWorkingDir(), *wdir)
+			if repoCtx.Name != "" && repoCtx.MatchesWorkspaceRepo(ws) {
 				ws.ActiveRepo = repoCtx.Name
 			}
 			lockFile, err := workspace.LoadLockFile(*wdir)

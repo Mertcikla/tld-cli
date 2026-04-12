@@ -11,6 +11,7 @@ func TestShouldIgnorePath(t *testing.T) {
 		{"vendor", true},
 		{"vendor/foo", true},
 		{"node_modules", true},
+		{".venv/", true},
 		{"node_modules/lodash", true},
 		{".git", true},
 		{"src/vendor/lib", false}, // vendor only at root segment

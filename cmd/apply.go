@@ -57,8 +57,8 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load metadata: %w", err)
 			}
-			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
-			if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(ws) {
+			repoCtx := DetectRepoScope(getWorkingDir(), *wdir)
+			if repoCtx.Name != "" && repoCtx.MatchesWorkspaceRepo(ws) {
 				ws.ActiveRepo = repoCtx.Name
 			}
 
@@ -270,7 +270,7 @@ func detectAndHandleConflicts(
 		return nil, nil
 	}
 
-	fmt.Fprintf(cmd.ErrOrStderr(), "⚠️  Version conflict detected:\n")
+	fmt.Fprintf(cmd.ErrOrStderr(), "Version conflict detected:\n")
 	if resp.Msg.Version != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "- Remote has newer version %s (%s) via %s\n",
 			resp.Msg.Version.VersionId, resp.Msg.Version.CreatedAt.AsTime().Format(time.RFC3339), resp.Msg.Version.CreatedBy)
@@ -355,8 +355,8 @@ func pullAndRebuildPlan(cmd *cobra.Command, ws *workspace.Workspace, lockFile *w
 	if err != nil {
 		return nil, fmt.Errorf("reload after merge: %w", err)
 	}
-	repoCtx := detectRepoScope(getWorkingDir(), wdir)
-	if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(mergedWS) {
+	repoCtx := DetectRepoScope(getWorkingDir(), wdir)
+	if repoCtx.Name != "" && repoCtx.MatchesWorkspaceRepo(mergedWS) {
 		mergedWS.ActiveRepo = repoCtx.Name
 	}
 	if errs := mergedWS.ValidateWithOpts(workspace.ValidationOptions{SkipSymbols: true}); len(errs) > 0 {

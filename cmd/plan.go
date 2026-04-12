@@ -10,7 +10,6 @@ import (
 	"github.com/mertcikla/tld-cli/planner"
 	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/proto"
 )
 
 func newPlanCmd(wdir *string) *cobra.Command {
@@ -45,8 +44,8 @@ func newPlanCmd(wdir *string) *cobra.Command {
 				}
 				return fmt.Errorf("workspace has %d validation error(s)", len(errs))
 			}
-			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
-			if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(ws) {
+			repoCtx := DetectRepoScope(getWorkingDir(), *wdir)
+			if repoCtx.Name != "" && repoCtx.MatchesWorkspaceRepo(ws) {
 				ws.ActiveRepo = repoCtx.Name
 			}
 			plan, err := planner.Build(ws, recreateIDs)
@@ -57,7 +56,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 			// Perform dry run on the server to detect conflicts and drift
 			c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 			req := plan.Request
-			req.DryRun = proto.Bool(true)
+			*req.DryRun = true
 
 			resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
@@ -86,7 +85,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 
 			// Show conflicts and drift if any
 			if len(resp.Msg.Conflicts) > 0 {
-				fmt.Fprintf(out, "\n⚠️  %d conflicts detected:\n", len(resp.Msg.Conflicts))
+				fmt.Fprintf(out, "\n  %d conflicts detected:\n", len(resp.Msg.Conflicts))
 				for _, c := range resp.Msg.Conflicts {
 					fmt.Fprintf(out, "  * %s \"%s\" (remote is newer: %s)\n",
 						c.ResourceType, c.Ref, c.RemoteUpdatedAt.AsTime().Format(time.RFC3339))
@@ -94,7 +93,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 			}
 
 			if len(resp.Msg.Drift) > 0 {
-				fmt.Fprintf(out, "\n🔍 %d drift items detected:\n", len(resp.Msg.Drift))
+				fmt.Fprintf(out, "\n %d drift items detected:\n", len(resp.Msg.Drift))
 				for _, d := range resp.Msg.Drift {
 					fmt.Fprintf(out, "  * %s \"%s\": %s\n", d.ResourceType, d.Ref, d.Reason)
 				}
@@ -107,7 +106,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 					level = ws.Config.Validation.Level
 				}
 				levelNames := map[int]string{1: "Minimal", 2: "Standard", 3: "Strict"}
-				fmt.Fprintf(out, "\n⚠️  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
+				fmt.Fprintf(out, "\n  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
 				for _, wg := range warnings {
 					fmt.Fprintf(out, "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)
 					for _, v := range wg.Violations {

@@ -57,7 +57,7 @@ YAML files in workspace/ (usually ./tld/)
 
 ```
 tld
-├── init [dir]         - initializes ./tld/ with .tld.yaml, elements.yaml, and connectors.yaml
+├── init [dir]         - initializes .tld/ with .tld.yaml, elements.yaml, and connectors.yaml
 ├── login
 ├── validate
 ├── plan [-o file]
@@ -82,7 +82,7 @@ tld
 
 ```
 ~/.config/tldiagram/tld.yaml  # Global config: API key, org slug
-./tld/
+.tld/
   ├── .tld.yaml              # Workspace config: project metadata, repositories, excludes
   ├── elements.yaml           # Elements + placements + canonical-view ownership
   ├── connectors.yaml         # Connectors inside element-owned views
@@ -94,7 +94,7 @@ Server-facing bridge logic still materializes legacy backend payloads internally
 
 ### Key patterns
 
-- All commands accept `-w <dir>` (defaults to `./tld` if it exists, else `.`).
+- All commands accept `-w <dir>` (defaults to `.tld` if it exists, else `tld` if it exists, else `.`).
 - `pull` uses surgical merging to preserve local comments and formatting.
 - `rename` cascades changes to all files locally.
 - Version conflicts are detected during `pull` (merge conflicts) and `apply` (server-side version check).

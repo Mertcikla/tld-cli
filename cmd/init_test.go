@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestInitCmd_CreatesWorkspace(t *testing.T) {
 		t.Fatalf("read .tld.yaml from workspace: %v", err)
 	}
 	workspaceContent := string(data)
-	if !strings.Contains(workspaceContent, "repositories") || !strings.Contains(workspaceContent, "exclude:") {
+	if !strings.Contains(workspaceContent, "project_name:") || !strings.Contains(workspaceContent, "exclude:") {
 		t.Errorf(".tld.yaml missing expected keys: %q", workspaceContent)
 	}
 
@@ -39,6 +40,42 @@ func TestInitCmd_CreatesWorkspace(t *testing.T) {
 	content := string(data)
 	if !strings.Contains(content, "server_url") || !strings.Contains(content, "api_key") || !strings.Contains(content, "org_id") {
 		t.Errorf("tld.yaml missing expected keys: %q", content)
+	}
+}
+
+func TestInitCmd_DetectsGit(t *testing.T) {
+	dir := t.TempDir()
+	configDir := t.TempDir()
+	t.Setenv("TLD_CONFIG_DIR", configDir)
+
+	parentDir := filepath.Join(dir, "my-repo")
+	InitTestGitRepo(t, parentDir, "README.md", "# My Repo")
+
+	// We can't easily set a remote in InitTestGitRepo without a real remote URL,
+	// but we can manually add one using git commands.
+	cmd := exec.Command("git", "remote", "add", "origin", "https://github.com/example/repo.git")
+	cmd.Dir = parentDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git remote add: %v", err)
+	}
+
+	workspaceDir := filepath.Join(parentDir, ".tld")
+	_, _, err := runCmd(t, ".", "init", workspaceDir)
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	workspaceCfgPath := filepath.Join(workspaceDir, ".tld.yaml")
+	data, err := os.ReadFile(workspaceCfgPath)
+	if err != nil {
+		t.Fatalf("read .tld.yaml: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "project_name: my-repo") {
+		t.Errorf("project_name = %q, want my-repo", content)
+	}
+	if !strings.Contains(content, "url: https://github.com/example/repo.git") {
+		t.Errorf("url missing from .tld.yaml:\n%s", content)
 	}
 }
 

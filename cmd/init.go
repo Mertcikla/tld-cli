@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mertcikla/tld-cli/internal/git"
 	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -15,6 +16,7 @@ import (
 var defaultWorkspaceExclude = []string{
 	"vendor/",
 	"node_modules/",
+	".venv/",
 	".git/",
 	"**/*_test.go",
 	"**/*.pb.go",
@@ -26,6 +28,7 @@ project_name: ""
 exclude:
 - vendor/
 - node_modules/
+- .venv/
 - .git/
 - "**/*_test.go"
 - "**/*.pb.go"
@@ -41,6 +44,35 @@ repositories: {}
 #     - generated/**
 `
 
+func generateDefaultWorkspaceConfig(dir string) ([]byte, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	parentDir := filepath.Dir(absDir)
+	defaultProjectName := filepath.Base(parentDir)
+
+	config := workspace.WorkspaceConfig{
+		ProjectName: defaultProjectName,
+		Exclude:     append([]string{}, defaultWorkspaceExclude...),
+	}
+
+	// Attempt to detect git remote
+	if remoteURL, err := git.DetectRemoteURL(parentDir); err == nil {
+		config.Repositories = map[string]workspace.Repository{
+			defaultProjectName: {
+				URL:      remoteURL,
+				LocalDir: "", // Assumes parent directory
+				Config: &workspace.RepositoryConfig{
+					Mode: "upsert",
+				},
+			},
+		}
+	}
+
+	return yaml.Marshal(&config)
+}
+
 func newInitCmd() *cobra.Command {
 	var wizard bool
 	cmd := &cobra.Command{
@@ -48,7 +80,7 @@ func newInitCmd() *cobra.Command {
 		Short: "Initialize a new tld workspace",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := "tld"
+			dir := ".tld"
 			if len(args) > 0 {
 				dir = args[0]
 			}
@@ -77,7 +109,11 @@ func newInitCmd() *cobra.Command {
 					return err
 				}
 			} else if _, err := os.Stat(workspaceConfigPath); os.IsNotExist(err) {
-				if err := os.WriteFile(workspaceConfigPath, []byte(defaultWorkspaceConfig), 0600); err != nil {
+				data, err := generateDefaultWorkspaceConfig(dir)
+				if err != nil {
+					return fmt.Errorf("generate default config: %w", err)
+				}
+				if err := os.WriteFile(workspaceConfigPath, data, 0600); err != nil {
 					return fmt.Errorf("create .tld.yaml: %w", err)
 				}
 			} else if err != nil {
@@ -120,22 +156,40 @@ org_id: ""         # UUID of your organisation
 
 func runInitWizard(cmd *cobra.Command, dir string) error {
 	scanner := bufio.NewScanner(cmd.InOrStdin())
-	projectName, err := promptRequired(scanner, cmd.OutOrStdout(), "Project name")
+
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	parentDir := filepath.Dir(absDir)
+	defaultProjectName := filepath.Base(parentDir)
+
+	projectName, err := promptWithDefault(scanner, cmd.OutOrStdout(), "Project name", defaultProjectName)
 	if err != nil {
 		return err
 	}
 
 	repositories := make(map[string]workspace.Repository)
+
+	// Attempt to detect git remote
+	defaultRepoURL := ""
+	defaultRepoName := defaultProjectName
+	if remoteURL, err := git.DetectRemoteURL(parentDir); err == nil {
+		defaultRepoURL = remoteURL
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "Warning: current folder is not a git repository. You can still initialize tld, but automatic source code linking will require manual configuration of repository URL and localDir in .tld.yaml.")
+	}
+
 	for {
-		repoKey, err := promptRequired(scanner, cmd.OutOrStdout(), "Repository key")
+		repoKey, err := promptWithDefault(scanner, cmd.OutOrStdout(), "Repository key", defaultRepoName)
 		if err != nil {
 			return err
 		}
-		url, err := promptRequired(scanner, cmd.OutOrStdout(), "Repository URL")
+		url, err := promptWithDefault(scanner, cmd.OutOrStdout(), "Repository URL", defaultRepoURL)
 		if err != nil {
 			return err
 		}
-		localDir, err := promptRequired(scanner, cmd.OutOrStdout(), "Repository local dir")
+		localDir, err := promptWithDefault(scanner, cmd.OutOrStdout(), "Repository local dir (empty for workspace parent)", "")
 		if err != nil {
 			return err
 		}
@@ -196,6 +250,21 @@ func promptRequired(scanner *bufio.Scanner, out interface{ Write([]byte) (int, e
 			return value, nil
 		}
 	}
+}
+
+func promptWithDefault(scanner *bufio.Scanner, out interface{ Write([]byte) (int, error) }, label, defaultValue string) (string, error) {
+	fmt.Fprintf(out, "%s [%s]: ", label, defaultValue)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", err
+		}
+		return defaultValue, nil
+	}
+	value := strings.TrimSpace(scanner.Text())
+	if value == "" {
+		return defaultValue, nil
+	}
+	return value, nil
 }
 
 func promptRepositoryMode(scanner *bufio.Scanner, out interface{ Write([]byte) (int, error) }) (string, error) {

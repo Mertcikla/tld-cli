@@ -30,7 +30,7 @@ Exit codes:
 			if err != nil {
 				return fmt.Errorf("load workspace: %w", err)
 			}
-			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
+			repoCtx := DetectRepoScope(getWorkingDir(), *wdir)
 			rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 
 			allPassed := true
@@ -91,19 +91,19 @@ Exit codes:
 
 // checkSymbols verifies that elements with file_path+symbol have the symbol present
 // in the referenced file.  Returns a list of human-readable failure messages.
-func checkSymbols(ctx context.Context, ws *workspace.Workspace, repoCtx repoScope, rules *ignore.Rules) []string {
+func checkSymbols(ctx context.Context, ws *workspace.Workspace, repoCtx RepoScope, rules *ignore.Rules) []string {
 	var failures []string
 	for ref, element := range ws.Elements {
 		if element.FilePath == "" || element.Symbol == "" {
 			continue
 		}
-		if !repoCtx.matchesElement(element) {
+		if !repoCtx.MatchesElement(element) {
 			continue
 		}
 		if rules != nil && (rules.ShouldIgnorePath(element.FilePath) || rules.ShouldIgnoreSymbol(element.Symbol)) {
 			continue
 		}
-		absPath := repoCtx.resolvePath(element.FilePath)
+		absPath := repoCtx.ResolvePath(element.FilePath)
 		if _, err := os.Stat(absPath); err != nil {
 			continue // file not accessible locally — skip
 		}
@@ -128,19 +128,19 @@ func checkSymbols(ctx context.Context, ws *workspace.Workspace, repoCtx repoScop
 // checkOutdated compares the last git commit timestamp for each element's file_path
 // against the element's metadata UpdatedAt timestamp.  Returns human-readable messages
 // for elements whose file was committed after the diagram was last synced.
-func checkOutdated(ws *workspace.Workspace, repoCtx repoScope, rules *ignore.Rules) []string {
+func checkOutdated(ws *workspace.Workspace, repoCtx RepoScope, rules *ignore.Rules) []string {
 	var outdated []string
 
 	if ws.Meta == nil || ws.Meta.Elements == nil {
 		return nil
 	}
 
-	if !repoCtx.active() {
+	if !repoCtx.Active() {
 		return nil
 	}
 
 	for ref, element := range ws.Elements {
-		if element.FilePath == "" || !repoCtx.matchesElement(element) {
+		if element.FilePath == "" || !repoCtx.MatchesElement(element) {
 			continue
 		}
 		if rules != nil && rules.ShouldIgnorePath(element.FilePath) {

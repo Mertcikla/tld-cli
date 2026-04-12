@@ -19,7 +19,7 @@ func newValidateCmd(wdir *string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load workspace: %w", err)
 			}
-			repoCtx := detectRepoScope(getWorkingDir(), *wdir)
+			repoCtx := DetectRepoScope(getWorkingDir(), *wdir)
 			rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 
 			// Override strictness if flag is set
@@ -64,7 +64,7 @@ func newValidateCmd(wdir *string) *cobra.Command {
 					level = ws.Config.Validation.Level
 				}
 				levelNames := map[int]string{1: "Minimal", 2: "Standard", 3: "Strict"}
-				fmt.Fprintf(cmd.OutOrStdout(), "\n⚠️  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
+				fmt.Fprintf(cmd.OutOrStdout(), "\n  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
 				for _, wg := range warnings {
 					fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)
 					for _, v := range wg.Violations {
