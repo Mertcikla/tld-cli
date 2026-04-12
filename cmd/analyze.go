@@ -54,6 +54,8 @@ for cross-file call references.`,
 			totalElements := 0
 			totalConnectors := 0
 			incrementalFiles := 0
+			knownElements := buildAnalyzeElementIndex(ws)
+			knownNames := buildAnalyzeElementNameIndex(ws)
 			modeLabel := "shallow"
 			if deep {
 				modeLabel = "deep"
@@ -125,7 +127,7 @@ for cross-file call references.`,
 				}
 
 				repoName := filepath.Base(repoCtx.Root)
-				repoRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, usedRefs, analyzeElementSpec{
+				repoRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
 					Name:      repoName,
 					Kind:      "repository",
 					Owner:     repoCtx.Name,
@@ -154,7 +156,7 @@ for cross-file call references.`,
 
 				for _, relPath := range uniqueFilePaths(filtered, repoCtx.Root, repoCtx.active()) {
 					fileName := filepath.Base(relPath)
-					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, usedRefs, analyzeElementSpec{
+					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
 						Name:      fileName,
 						Kind:      "file",
 						Owner:     repoCtx.Name,
@@ -193,7 +195,7 @@ for cross-file call references.`,
 						continue
 					}
 
-					ref, err := ensureAnalyzeElement(*wdir, dryRun, ws, usedRefs, analyzeElementSpec{
+					ref, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
 						Name:      sym.Name,
 						Kind:      sym.Kind,
 						Owner:     repoCtx.Name,
@@ -354,6 +356,13 @@ type analyzeElementIdentity struct {
 	Name     string
 }
 
+type analyzeElementLookupKey struct {
+	FilePath string
+	Symbol   string
+	Kind     string
+	Name     string
+}
+
 type analyzeElementSpec struct {
 	Name      string
 	Kind      string
@@ -368,22 +377,107 @@ type analyzeElementSpec struct {
 	Identity  analyzeElementIdentity
 }
 
-func ensureAnalyzeElement(wdir string, dryRun bool, ws *workspace.Workspace, usedRefs map[string]struct{}, spec analyzeElementSpec) (string, error) {
-	if ref, ok := findAnalyzeElementRef(ws, spec.Identity); ok {
+func buildAnalyzeElementIndex(ws *workspace.Workspace) map[analyzeElementLookupKey]string {
+	index := make(map[analyzeElementLookupKey]string, len(ws.Elements))
+	for ref, element := range ws.Elements {
+		if element == nil {
+			continue
+		}
+		index[analyzeElementLookupKey{
+			FilePath: filepath.Clean(element.FilePath),
+			Symbol:   element.Symbol,
+			Kind:     element.Kind,
+			Name:     element.Name,
+		}] = ref
+	}
+	return index
+}
+
+func buildAnalyzeElementNameIndex(ws *workspace.Workspace) map[string]string {
+	index := make(map[string]string, len(ws.Elements))
+	for ref, element := range ws.Elements {
+		if element == nil || element.Name == "" {
+			continue
+		}
+		index[element.Name] = ref
+	}
+	return index
+}
+
+func normalizeAnalyzeElementLookupKey(identity analyzeElementIdentity) analyzeElementLookupKey {
+	return analyzeElementLookupKey{
+		FilePath: filepath.Clean(identity.FilePath),
+		Symbol:   identity.Symbol,
+		Kind:     identity.Kind,
+		Name:     identity.Name,
+	}
+}
+
+func ensureAnalyzeElement(wdir string, dryRun bool, ws *workspace.Workspace, known map[analyzeElementLookupKey]string, knownNames map[string]string, usedRefs map[string]struct{}, spec analyzeElementSpec) (string, error) {
+	identity := normalizeAnalyzeElementLookupKey(spec.Identity)
+	if ref, ok := knownNames[spec.Name]; ok {
+		known[identity] = ref
 		if dryRun {
 			return ref, nil
 		}
-		return ref, workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec))
+		if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
+			return "", err
+		}
+		if ws.Elements == nil {
+			ws.Elements = make(map[string]*workspace.Element)
+		}
+		ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
+		return ref, nil
+	}
+	if ref, ok := known[identity]; ok {
+		knownNames[spec.Name] = ref
+		if dryRun {
+			return ref, nil
+		}
+		if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
+			return "", err
+		}
+		if ws.Elements == nil {
+			ws.Elements = make(map[string]*workspace.Element)
+		}
+		ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
+		return ref, nil
+	}
+	if ref, ok := findAnalyzeElementRef(ws, analyzeElementIdentity{
+		FilePath: identity.FilePath,
+		Symbol:   identity.Symbol,
+		Kind:     identity.Kind,
+		Name:     identity.Name,
+	}); ok {
+		known[identity] = ref
+		knownNames[spec.Name] = ref
+		if dryRun {
+			return ref, nil
+		}
+		if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
+			return "", err
+		}
+		if ws.Elements == nil {
+			ws.Elements = make(map[string]*workspace.Element)
+		}
+		ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
+		return ref, nil
 	}
 
 	ref := uniqueAnalyzeRef(spec.Name, spec.FilePath, usedRefs)
 	usedRefs[ref] = struct{}{}
+	known[identity] = ref
+	knownNames[spec.Name] = ref
 	if dryRun {
 		return ref, nil
 	}
 	if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
 		return "", err
 	}
+	if ws.Elements == nil {
+		ws.Elements = make(map[string]*workspace.Element)
+	}
+	ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
 	return ref, nil
 }
 

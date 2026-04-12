@@ -24,7 +24,7 @@ type Plan struct {
 // topologically (parents before children) so the server can resolve
 // parent_diagram_ref in insertion order.
 func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
-	if usesElementWorkspace(ws) {
+	if usesElementWorkspace(ws) || hasActiveRepositoryConfig(ws) {
 		return buildFromElements(ws, recreateIDs)
 	}
 
@@ -39,9 +39,19 @@ func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
 }
 
 func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
+	elements := ws.Elements
+	rootRef, syntheticRoot, err := resolveRepositoryRootElement(ws)
+	if err != nil {
+		return nil, err
+	}
+	if syntheticRoot != nil {
+		elements = cloneElements(ws.Elements)
+		elements[rootRef] = syntheticRoot
+	}
+
 	includedElements := make(map[string]bool)
-	elementRefs := make([]string, 0, len(ws.Elements))
-	for ref := range ws.Elements {
+	elementRefs := make([]string, 0, len(elements))
+	for ref := range elements {
 		elementRefs = append(elementRefs, ref)
 	}
 	sort.Strings(elementRefs)
@@ -55,7 +65,7 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 	req := &diagv1.ApplyPlanRequest{OrgId: ws.Config.OrgID}
 
 	for _, ref := range elementRefs {
-		element := ws.Elements[ref]
+		element := elements[ref]
 		if ws.ActiveRepo != "" && element.Owner != "" && element.Owner != ws.ActiveRepo {
 			continue
 		}
@@ -186,4 +196,107 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 
 func usesElementWorkspace(ws *workspace.Workspace) bool {
 	return len(ws.Elements) > 0 || len(ws.Connectors) > 0
+}
+
+func hasActiveRepositoryConfig(ws *workspace.Workspace) bool {
+	if ws == nil || ws.ActiveRepo == "" || ws.WorkspaceConfig == nil {
+		return false
+	}
+	_, ok := ws.WorkspaceConfig.Repositories[ws.ActiveRepo]
+	return ok
+}
+
+func resolveRepositoryRootElement(ws *workspace.Workspace) (string, *workspace.Element, error) {
+	if ws == nil || ws.ActiveRepo == "" || ws.WorkspaceConfig == nil {
+		return "", nil, nil
+	}
+	repository, ok := ws.WorkspaceConfig.Repositories[ws.ActiveRepo]
+	if !ok {
+		return "", nil, nil
+	}
+
+	if repository.Root != "" {
+		element, ok := ws.Elements[repository.Root]
+		if !ok || element == nil {
+			return "", nil, fmt.Errorf("repository %q root %q not found in elements", ws.ActiveRepo, repository.Root)
+		}
+		if element.Kind != "repository" {
+			return "", nil, fmt.Errorf("repository %q root %q must be kind repository, got %q", ws.ActiveRepo, repository.Root, element.Kind)
+		}
+		return repository.Root, nil, nil
+	}
+
+	candidates := repositoryRootCandidates(ws.Elements, ws.ActiveRepo)
+	switch len(candidates) {
+	case 0:
+		ref := uniqueRepositoryRootRef(ws.ActiveRepo, ws.Elements)
+		return ref, &workspace.Element{
+			Name:      ws.ActiveRepo,
+			Kind:      "repository",
+			Owner:     ws.ActiveRepo,
+			HasView:   true,
+			ViewLabel: ws.ActiveRepo,
+			Placements: []workspace.ViewPlacement{{
+				ParentRef: syntheticRootViewRef,
+			}},
+		}, nil
+	case 1:
+		return candidates[0], nil, nil
+	default:
+		return "", nil, fmt.Errorf("repository %q has multiple root candidates %v; set repositories[%q].root explicitly", ws.ActiveRepo, candidates, ws.ActiveRepo)
+	}
+}
+
+func repositoryRootCandidates(elements map[string]*workspace.Element, repoName string) []string {
+	var candidates []string
+	for ref, element := range elements {
+		if element == nil {
+			continue
+		}
+		if element.Kind != "repository" {
+			continue
+		}
+		if element.Owner != "" && element.Owner != repoName {
+			continue
+		}
+		if len(element.Placements) > 0 {
+			rooted := false
+			for _, placement := range element.Placements {
+				if placement.ParentRef == "root" || placement.ParentRef == syntheticRootViewRef || placement.ParentRef == "" {
+					rooted = true
+					break
+				}
+			}
+			if !rooted {
+				continue
+			}
+		}
+		candidates = append(candidates, ref)
+	}
+	sort.Strings(candidates)
+	return candidates
+}
+
+func uniqueRepositoryRootRef(repoName string, elements map[string]*workspace.Element) string {
+	base := workspace.Slugify(repoName)
+	if base == "" {
+		base = "repository"
+	}
+	if _, taken := elements[base]; !taken {
+		return base
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, i)
+		if _, taken := elements[candidate]; !taken {
+			return candidate
+		}
+	}
+}
+
+func cloneElements(source map[string]*workspace.Element) map[string]*workspace.Element {
+	cloned := make(map[string]*workspace.Element, len(source))
+	for ref, element := range source {
+		cloned[ref] = element
+	}
+	return cloned
 }

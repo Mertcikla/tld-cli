@@ -184,3 +184,54 @@ func TestBuild_FiltersByOwnerForActiveRepo(t *testing.T) {
 		t.Fatalf("connectors = %d, want 0 when target owner is excluded", len(plan.Request.Connectors))
 	}
 }
+
+func TestBuild_RejectsMissingConfiguredRepositoryRoot(t *testing.T) {
+	ws := elementWorkspace()
+	ws.ActiveRepo = "frontend"
+	ws.WorkspaceConfig = &workspace.WorkspaceConfig{
+		Repositories: map[string]workspace.Repository{
+			"frontend": {Root: "missing-root"},
+		},
+	}
+
+	_, err := planner.Build(ws, false)
+	if err == nil {
+		t.Fatal("expected build to fail for missing configured repository root")
+	}
+	if got := err.Error(); got == "" || got != "repository \"frontend\" root \"missing-root\" not found in elements" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuild_SynthesizesRepositoryRootWhenUnset(t *testing.T) {
+	ws := &workspace.Workspace{
+		Config:     workspace.Config{OrgID: "test-org-id"},
+		ActiveRepo: "frontend",
+		WorkspaceConfig: &workspace.WorkspaceConfig{
+			Repositories: map[string]workspace.Repository{
+				"frontend": {},
+			},
+		},
+	}
+
+	plan, err := planner.Build(ws, false)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(plan.Request.Elements) != 1 {
+		t.Fatalf("Elements = %d, want 1", len(plan.Request.Elements))
+	}
+	root := plan.Request.Elements[0]
+	if root.Ref != "frontend" {
+		t.Fatalf("root ref = %q, want frontend", root.Ref)
+	}
+	if root.Kind == nil || *root.Kind != "repository" {
+		t.Fatalf("root kind = %v, want repository", root.Kind)
+	}
+	if !root.HasView {
+		t.Fatal("expected synthesized repository root to own a view")
+	}
+	if len(root.Placements) != 1 || root.Placements[0].ParentRef != "root" {
+		t.Fatalf("root placements = %+v, want parent root", root.Placements)
+	}
+}
