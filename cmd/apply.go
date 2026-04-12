@@ -40,7 +40,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 			if err := ensureAPIKey(ws.Config.APIKey); err != nil {
 				return err
 			}
-			if errs := ws.Validate(); len(errs) > 0 {
+			if errs := ws.ValidateWithOpts(workspace.ValidationOptions{SkipSymbols: true}); len(errs) > 0 {
 				for _, e := range errs {
 					fmt.Fprintf(cmd.ErrOrStderr(), "validation error: %s\n", e)
 				}
@@ -359,7 +359,7 @@ func pullAndRebuildPlan(cmd *cobra.Command, ws *workspace.Workspace, lockFile *w
 	if repoCtx.Name != "" && repoCtx.matchesWorkspaceRepo(mergedWS) {
 		mergedWS.ActiveRepo = repoCtx.Name
 	}
-	if errs := mergedWS.Validate(); len(errs) > 0 {
+	if errs := mergedWS.ValidateWithOpts(workspace.ValidationOptions{SkipSymbols: true}); len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Warning (post-merge validation): %s\n", e)
 		}

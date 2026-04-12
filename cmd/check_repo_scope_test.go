@@ -16,12 +16,14 @@ func TestCheckCmd_SkipsForeignRepoSymbols(t *testing.T) {
   kind: service
   file_path: cmd/init.go
   symbol: newInitCmd
+  placements: [ { parent: root } ]
 foreign:
   name: Foreign Service
   kind: service
   file_path: /tmp/foreign/foreign.go
   symbol: doesNotExist
   repo: https://example.com/other.git
+  placements: [ { parent: root } ]
 `
 	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
 		t.Fatalf("write elements.yaml: %v", err)
@@ -48,12 +50,14 @@ func TestValidateCmd_SkipsForeignRepoSymbols(t *testing.T) {
   kind: service
   file_path: cmd/init.go
   symbol: newInitCmd
+  placements: [ { parent: root } ]
 foreign:
   name: Foreign Service
   kind: service
   file_path: /tmp/foreign/foreign.go
   symbol: doesNotExist
   repo: https://example.com/other.git
+  placements: [ { parent: root } ]
 `
 	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
 		t.Fatalf("write elements.yaml: %v", err)

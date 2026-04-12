@@ -19,9 +19,20 @@ func (e ValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Location, e.Message)
 }
 
+// ValidationOptions allows configuring the validation process.
+type ValidationOptions struct {
+	SkipSymbols bool
+}
+
 // Validate checks cross-reference integrity, required fields, and cycle
 // detection in parent_diagram chains.
 func (ws *Workspace) Validate() []ValidationError {
+	// Default to checking symbols for backward compatibility and strictness by default.
+	return ws.ValidateWithOpts(ValidationOptions{SkipSymbols: false})
+}
+
+// ValidateWithOpts checks cross-reference integrity with configurable options.
+func (ws *Workspace) ValidateWithOpts(opts ValidationOptions) []ValidationError {
 	var errs []ValidationError
 	errs = append(errs, ws.validateConflictMarkers()...)
 
@@ -83,7 +94,9 @@ func (ws *Workspace) Validate() []ValidationError {
 
 	// Symbol verification: for elements that declare both file_path and symbol,
 	// confirm the named symbol actually exists in the file (skip if file not locally accessible).
-	errs = append(errs, ws.validateSymbols()...)
+	if !opts.SkipSymbols {
+		errs = append(errs, ws.validateSymbols()...)
+	}
 
 	return errs
 }

@@ -38,6 +38,8 @@ type Repository struct {
 }
 
 // ValidationConfig represents workspace validation settings.
+const DefaultValidationLevel = 2
+
 type ValidationConfig struct {
 	Level           int      `yaml:"level"`
 	AllowLowInsight bool     `yaml:"allow_low_insight"`

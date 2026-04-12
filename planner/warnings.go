@@ -172,7 +172,7 @@ func AnalyzePlan(ws *workspace.Workspace) []WarningGroup {
 }
 
 func newWarningContext(ws *workspace.Workspace) *warningContext {
-	level := 2
+	level := workspace.DefaultValidationLevel
 	allowLowInsight := false
 	var includeRules []string
 	var excludeRules []string

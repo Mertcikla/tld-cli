@@ -18,7 +18,6 @@ func newPlanCmd(wdir *string) *cobra.Command {
 	var recreateIDs bool
 	var verbose bool
 	var strictness int
-	var treeOutput bool
 
 	c := &cobra.Command{
 		Use:   "plan",
@@ -40,7 +39,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 				ws.Config.Validation.Level = strictness
 			}
 
-			if errs := ws.Validate(); len(errs) > 0 {
+			if errs := ws.ValidateWithOpts(workspace.ValidationOptions{SkipSymbols: true}); len(errs) > 0 {
 				for _, e := range errs {
 					fmt.Fprintf(cmd.ErrOrStderr(), "validation error: %s\n", e)
 				}
@@ -85,10 +84,6 @@ func newPlanCmd(wdir *string) *cobra.Command {
 
 			planner.RenderPlanMarkdown(out, plan, ws, verbose)
 
-			if treeOutput {
-				planner.RenderZUITree(out, ws)
-			}
-
 			// Show conflicts and drift if any
 			if len(resp.Msg.Conflicts) > 0 {
 				fmt.Fprintf(out, "\n⚠️  %d conflicts detected:\n", len(resp.Msg.Conflicts))
@@ -107,7 +102,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 
 			// Evaluate Diagram warnings
 			if len(warnings) > 0 {
-				level := 3
+				level := workspace.DefaultValidationLevel
 				if ws.Config.Validation != nil && ws.Config.Validation.Level > 0 {
 					level = ws.Config.Validation.Level
 				}
@@ -130,6 +125,5 @@ func newPlanCmd(wdir *string) *cobra.Command {
 	c.Flags().BoolVar(&recreateIDs, "recreate-ids", false, "ignore existing resource IDs and let the server generate new ones")
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "show detailed resource reporting (elements, diagrams, connectors)")
 	c.Flags().IntVar(&strictness, "strictness", 0, "override validation strictness level [1-3]")
-	c.Flags().BoolVar(&treeOutput, "tree", false, "print diagram in a tree format to visualize navigation and connectivity")
 	return c
 }

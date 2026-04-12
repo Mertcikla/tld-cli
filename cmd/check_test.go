@@ -27,7 +27,7 @@ func TestCheckCmd_AllPass(t *testing.T) {
 	mustInitWorkspace(t, dir)
 	initGitRepo(t, dir, "service.go", "package main\nfunc Service() {}\n")
 	withWorkingDir(t, dir)
-	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Service\n"
+	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Service\n  placements: [ { parent: root } ]\n"
 	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestCheckCmd_BrokenSymbol(t *testing.T) {
 	mustInitWorkspace(t, dir)
 	initGitRepo(t, dir, "service.go", "package main\nfunc Service() {}\n")
 	withWorkingDir(t, dir)
-	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Missing\n"
+	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Missing\n  placements: [ { parent: root } ]\n"
 	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestCheckCmd_OutdatedStrict(t *testing.T) {
 	mustInitWorkspace(t, dir)
 	initGitRepo(t, dir, "service.go", "package main\nfunc Service() {}\n")
 	withWorkingDir(t, dir)
-	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Service\n\n_meta_elements:\n  service:\n    id: 1\n    updated_at: 2000-01-01T00:00:00Z\n"
+	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Service\n  placements: [ { parent: root } ]\n\n_meta_elements:\n  service:\n    id: 1\n    updated_at: 2000-01-01T00:00:00Z\n"
 	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestCheckCmd_OutdatedWarn(t *testing.T) {
 	mustInitWorkspace(t, dir)
 	initGitRepo(t, dir, "service.go", "package main\nfunc Service() {}\n")
 	withWorkingDir(t, dir)
-	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Service\n\n_meta_elements:\n  service:\n    id: 1\n    updated_at: 2000-01-01T00:00:00Z\n"
+	content := "service:\n  name: Service\n  kind: service\n  file_path: service.go\n  symbol: Service\n  placements: [ { parent: root } ]\n\n_meta_elements:\n  service:\n    id: 1\n    updated_at: 2000-01-01T00:00:00Z\n"
 	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}

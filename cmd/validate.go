@@ -59,7 +59,7 @@ func newValidateCmd(wdir *string) *cobra.Command {
 			// Evaluate Diagram warnings
 			warnings := planner.AnalyzePlan(ws)
 			if len(warnings) > 0 {
-				level := 3
+				level := workspace.DefaultValidationLevel
 				if ws.Config.Validation != nil && ws.Config.Validation.Level > 0 {
 					level = ws.Config.Validation.Level
 				}
