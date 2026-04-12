@@ -81,107 +81,6 @@ func (ws *Workspace) Validate() []ValidationError {
 		}
 	}
 
-	// Diagrams: required fields + parent ref integrity + unique names
-	diagramNames := make(map[string]string) // name -> ref
-	for ref, d := range ws.Diagrams {
-		loc := fmt.Sprintf("diagrams.yaml[%s]", ref)
-		if d.Name == "" {
-			errs = append(errs, ValidationError{loc, "name is required"})
-		} else {
-			if existingRef, ok := diagramNames[d.Name]; ok {
-				errs = append(errs, ValidationError{loc, fmt.Sprintf("duplicate diagram name %q (also used by %q)", d.Name, existingRef)})
-			}
-			diagramNames[d.Name] = ref
-		}
-		if d.ParentDiagram != "" {
-			if _, ok := ws.Diagrams[d.ParentDiagram]; !ok {
-				errs = append(errs, ValidationError{
-					loc,
-					fmt.Sprintf("parent_diagram %q not found", d.ParentDiagram),
-				})
-			}
-		}
-	}
-	// Cycle detection in parent chains
-	for ref := range ws.Diagrams {
-		if cycle := detectParentCycle(ws, ref); cycle != "" {
-			errs = append(errs, ValidationError{
-				fmt.Sprintf("diagrams.yaml[%s]", ref),
-				fmt.Sprintf("circular parent_diagram chain: %s", cycle),
-			})
-		}
-	}
-
-	// Objects: required fields + diagram placement refs + unique names
-	objectNames := make(map[string]string) // name -> ref
-	for ref, o := range ws.Objects {
-		loc := fmt.Sprintf("objects.yaml[%s]", ref)
-		if o.Name == "" {
-			errs = append(errs, ValidationError{loc, "name is required"})
-		} else {
-			if existingRef, ok := objectNames[o.Name]; ok {
-				errs = append(errs, ValidationError{loc, fmt.Sprintf("duplicate object name %q (also used by %q)", o.Name, existingRef)})
-			}
-			objectNames[o.Name] = ref
-		}
-		if o.Type == "" {
-			errs = append(errs, ValidationError{loc, "type is required"})
-		}
-		for i, p := range o.Diagrams {
-			ploc := fmt.Sprintf("objects.yaml[%s][diagrams][%d]", ref, i)
-			if p.Diagram == "" {
-				errs = append(errs, ValidationError{ploc, "diagram is required"})
-				continue
-			}
-			if _, ok := ws.Diagrams[p.Diagram]; !ok {
-				errs = append(errs, ValidationError{
-					ploc,
-					fmt.Sprintf("diagram ref %q not found", p.Diagram),
-				})
-			}
-		}
-	}
-
-	// Edges: required fields + ref integrity
-	for ref, e := range ws.Edges {
-		loc := fmt.Sprintf("edges.yaml[%s]", ref)
-		if e.Diagram == "" {
-			errs = append(errs, ValidationError{loc, "diagram is required"})
-		} else if _, ok := ws.Diagrams[e.Diagram]; !ok {
-			errs = append(errs, ValidationError{loc, fmt.Sprintf("diagram ref %q not found", e.Diagram)})
-		}
-		if e.SourceObject == "" {
-			errs = append(errs, ValidationError{loc, "source_object is required"})
-		} else if _, ok := ws.Objects[e.SourceObject]; !ok {
-			errs = append(errs, ValidationError{loc, fmt.Sprintf("source_object ref %q not found", e.SourceObject)})
-		}
-		if e.TargetObject == "" {
-			errs = append(errs, ValidationError{loc, "target_object is required"})
-		} else if _, ok := ws.Objects[e.TargetObject]; !ok {
-			errs = append(errs, ValidationError{loc, fmt.Sprintf("target_object ref %q not found", e.TargetObject)})
-		}
-	}
-
-	// Links: required fields + ref integrity
-	for i, l := range ws.Links {
-		loc := fmt.Sprintf("links.yaml[%d]", i)
-		if l.Object != "" {
-			if _, ok := ws.Objects[l.Object]; !ok {
-				errs = append(errs, ValidationError{loc, fmt.Sprintf("object ref %q not found", l.Object)})
-			}
-		}
-		if l.FromDiagram == "" {
-			errs = append(errs, ValidationError{loc, "from_diagram is required"})
-		} else if _, ok := ws.Diagrams[l.FromDiagram]; !ok {
-			errs = append(errs, ValidationError{loc, fmt.Sprintf("from_diagram ref %q not found", l.FromDiagram)})
-		}
-		if l.ToDiagram == "" {
-			errs = append(errs, ValidationError{loc, "to_diagram is required"})
-		} else if _, ok := ws.Diagrams[l.ToDiagram]; !ok {
-			errs = append(errs, ValidationError{loc, fmt.Sprintf("to_diagram ref %q not found", l.ToDiagram)})
-		}
-	}
-
 	// Symbol verification: for elements that declare both file_path and symbol,
 	// confirm the named symbol actually exists in the file (skip if file not locally accessible).
 	errs = append(errs, ws.validateSymbols()...)
@@ -197,18 +96,6 @@ func (ws *Workspace) validateConflictMarkers() []ValidationError {
 		}
 	}
 
-	for ref, diagram := range ws.Diagrams {
-		loc := fmt.Sprintf("diagrams.yaml[%s]", ref)
-		checkString(loc, diagram.Name)
-		checkString(loc, diagram.Description)
-	}
-	for ref, object := range ws.Objects {
-		loc := fmt.Sprintf("objects.yaml[%s]", ref)
-		checkString(loc, object.Name)
-		checkString(loc, object.Description)
-		checkString(loc, object.Technology)
-		checkString(loc, object.URL)
-	}
 	for ref, element := range ws.Elements {
 		loc := fmt.Sprintf("elements.yaml[%s]", ref)
 		checkString(loc, element.Name)
@@ -258,24 +145,4 @@ func (ws *Workspace) validateSymbols() []ValidationError {
 		}
 	}
 	return errs
-}
-
-// detectParentCycle returns a string describing the cycle if one is found
-// starting from startRef, or "" if no cycle.
-func detectParentCycle(ws *Workspace, startRef string) string {
-	visited := map[string]bool{}
-	cur := startRef
-	path := []string{cur}
-	for {
-		d, ok := ws.Diagrams[cur]
-		if !ok || d.ParentDiagram == "" {
-			return ""
-		}
-		if visited[d.ParentDiagram] {
-			return fmt.Sprintf("%v -> %s", path, d.ParentDiagram)
-		}
-		visited[cur] = true
-		cur = d.ParentDiagram
-		path = append(path, cur)
-	}
 }

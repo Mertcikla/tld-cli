@@ -50,18 +50,10 @@ func newValidateCmd(wdir *string) *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), "Symbol verification: passed")
 
 			if len(ws.Elements) > 0 || len(ws.Connectors) > 0 {
+				diagramCount := countElementDiagrams(ws)
 				fmt.Fprintf(cmd.OutOrStdout(), "Workspace valid: %d elements, %d diagrams, %d connectors\n",
-					len(ws.Elements), countElementDiagrams(ws), len(ws.Connectors))
-				diagramCount := 0
-				for _, element := range ws.Elements {
-					if element.HasView {
-						diagramCount++
-					}
-				}
+					len(ws.Elements), diagramCount, len(ws.Connectors))
 				fmt.Fprintf(cmd.OutOrStdout(), "Element workspace: %d elements, %d diagrams, %d connectors\n", len(ws.Elements), diagramCount, len(ws.Connectors))
-			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "Workspace valid: %d diagrams, %d objects, %d edges, %d links\n",
-					len(ws.Diagrams), len(ws.Objects), len(ws.Edges), len(ws.Links))
 			}
 
 			// Evaluate Diagram warnings
@@ -74,7 +66,7 @@ func newValidateCmd(wdir *string) *cobra.Command {
 				levelNames := map[int]string{1: "Minimal", 2: "Standard", 3: "Strict"}
 				fmt.Fprintf(cmd.OutOrStdout(), "\n⚠️  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
 				for _, wg := range warnings {
-					fmt.Fprintf(cmd.OutOrStdout(), "[%s]\n%s\n", wg.RuleName, wg.Mediation)
+					fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)
 					for _, v := range wg.Violations {
 						fmt.Fprintf(cmd.OutOrStdout(), "  * %s\n", v)
 					}

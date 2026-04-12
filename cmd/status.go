@@ -145,9 +145,6 @@ func countWorkspaceConflicts(ws *workspace.Workspace) int {
 	}
 	count := 0
 	for _, bucket := range []map[string]*workspace.ResourceMetadata{
-		ws.Meta.Diagrams,
-		ws.Meta.Objects,
-		ws.Meta.Edges,
 		ws.Meta.Elements,
 		ws.Meta.Views,
 		ws.Meta.Connectors,

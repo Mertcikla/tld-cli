@@ -13,7 +13,6 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 	newWS := &workspace.Workspace{
 		Dir:        baseWS.Dir,
 		Config:     baseWS.Config,
-		Diagrams:   make(map[string]*workspace.Diagram),
 		Elements:   make(map[string]*workspace.Element),
 		Connectors: make(map[string]*workspace.Connector),
 		Meta: &workspace.Meta{
@@ -44,13 +43,9 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 			ref = workspace.Slugify(e.Name)
 		}
 		objectIDToRef[e.Id] = ref
-		kind := ""
-		if e != nil {
-			kind = *e.Kind
-		}
 		newWS.Elements[ref] = &workspace.Element{
 			Name:        e.Name,
-			Kind:        kind,
+			Kind:        e.GetKind(),
 			Description: e.GetDescription(),
 			Technology:  e.GetTechnology(),
 			URL:         e.GetUrl(),
@@ -59,6 +54,8 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 			Branch:      e.GetBranch(),
 			Language:    e.GetLanguage(),
 			FilePath:    e.GetFilePath(),
+			HasView:     e.GetHasView(),
+			ViewLabel:   strings.TrimSpace(e.GetViewLabel()),
 		}
 		newWS.Meta.Elements[ref] = &workspace.ResourceMetadata{
 			ID:        workspace.ResourceID(e.Id),
@@ -66,16 +63,7 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 		}
 	}
 
-	ownerByDiagramID := make(map[int32]string)
-	parentByDiagramID := make(map[int32]int32)
-	for _, link := range msg.Connectors {
-		ownerRef, ok := objectIDToRef[link.TargetElementId]
-		if !ok || link.TargetElementId == 0 {
-			continue
-		}
-		ownerByDiagramID[link.TargetElementId] = ownerRef
-		parentByDiagramID[link.TargetElementId] = link.SourceElementId
-	}
+	ownerByDiagramID := buildDiagramOwnerIndex(msg, newWS.Elements, objectIDToRef)
 
 	diagramIDToViewRef := make(map[int32]string)
 	for _, d := range msg.Diagrams {
@@ -83,13 +71,8 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 			diagramIDToViewRef[d.Id] = ownerRef
 			element := newWS.Elements[ownerRef]
 			element.HasView = true
-			if label := exportedDiagramLabel(d, element.Name); label != "" {
+			if label := exportedDiagramLabel(d, element.Name); element.ViewLabel == "" && label != "" {
 				element.ViewLabel = label
-			}
-			newWS.Diagrams[ownerRef] = &workspace.Diagram{
-				Name:        d.Name,
-				Description: d.GetDescription(),
-				LevelLabel:  element.ViewLabel,
 			}
 			newWS.Meta.Views[ownerRef] = &workspace.ResourceMetadata{
 				ID:        workspace.ResourceID(d.Id),
@@ -99,22 +82,6 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 		}
 
 		diagramIDToViewRef[d.Id] = "root"
-		newWS.Diagrams["root"] = &workspace.Diagram{
-			Name:        d.Name,
-			Description: d.GetDescription(),
-			LevelLabel:  exportedDiagramLabel(d, "Workspace Root"),
-		}
-	}
-
-	for childID, parentID := range parentByDiagramID {
-		childRef := diagramIDToViewRef[childID]
-		parentRef := diagramIDToViewRef[parentID]
-		if childRef == "" || childRef == "root" || parentRef == "" {
-			continue
-		}
-		if diagram := newWS.Diagrams[childRef]; diagram != nil {
-			diagram.ParentDiagram = parentRef
-		}
 	}
 
 	for _, p := range msg.Placements {
@@ -180,6 +147,74 @@ func exportedDiagramLabel(diagram *diagv1.Diagram, elementName string) string {
 		return name
 	}
 	return ""
+}
+
+func buildDiagramOwnerIndex(msg *diagv1.ExportOrganizationResponse, elements map[string]*workspace.Element, objectIDToRef map[int32]string) map[int32]string {
+	owners := make(map[int32]string)
+	usedRefs := make(map[string]struct{})
+
+	for _, navigation := range msg.Navigations {
+		ownerRef, ok := objectIDToRef[navigation.ElementId]
+		if !ok || navigation.ToDiagramId == 0 {
+			continue
+		}
+		owners[navigation.ToDiagramId] = ownerRef
+		usedRefs[ownerRef] = struct{}{}
+	}
+
+	for _, diagram := range msg.Diagrams {
+		if _, ok := owners[diagram.Id]; ok {
+			continue
+		}
+		ownerRef, ok := inferDiagramOwnerRef(diagram, elements, usedRefs)
+		if !ok {
+			continue
+		}
+		owners[diagram.Id] = ownerRef
+		usedRefs[ownerRef] = struct{}{}
+	}
+
+	return owners
+}
+
+func inferDiagramOwnerRef(diagram *diagv1.Diagram, elements map[string]*workspace.Element, usedRefs map[string]struct{}) (string, bool) {
+	strictMatches := make([]string, 0, 1)
+	looseMatches := make([]string, 0, 1)
+
+	for ref, element := range elements {
+		if element == nil || !element.HasView {
+			continue
+		}
+		if _, used := usedRefs[ref]; used {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(diagram.Name), strings.TrimSpace(element.Name)) {
+			continue
+		}
+		looseMatches = append(looseMatches, ref)
+		if diagramMatchesOwnedElement(diagram, element) {
+			strictMatches = append(strictMatches, ref)
+		}
+	}
+
+	switch {
+	case len(strictMatches) == 1:
+		return strictMatches[0], true
+	case len(looseMatches) == 1:
+		return looseMatches[0], true
+	default:
+		return "", false
+	}
+}
+
+func diagramMatchesOwnedElement(diagram *diagv1.Diagram, element *workspace.Element) bool {
+	if element == nil {
+		return false
+	}
+	return strings.EqualFold(
+		strings.TrimSpace(exportedDiagramLabel(diagram, element.Name)),
+		strings.TrimSpace(element.ViewLabel),
+	)
 }
 
 func countElementDiagrams(ws *workspace.Workspace) int {

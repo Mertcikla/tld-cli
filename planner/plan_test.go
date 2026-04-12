@@ -67,15 +67,6 @@ func TestBuild_EmptyWorkspace(t *testing.T) {
 	}
 }
 
-func TestBuild_RejectsLegacyWorkspace(t *testing.T) {
-	_, err := planner.Build(&workspace.Workspace{
-		Diagrams: map[string]*workspace.Diagram{"sys": {Name: "System"}},
-	}, false)
-	if err == nil {
-		t.Fatal("expected legacy workspace error")
-	}
-}
-
 func TestBuild_MapsElementsAndConnectors(t *testing.T) {
 	plan, err := planner.Build(elementWorkspace(), false)
 	if err != nil {

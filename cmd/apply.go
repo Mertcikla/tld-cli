@@ -216,7 +216,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 func serverHasDrift(ctx context.Context, ws *workspace.Workspace, plan *planner.Plan) (bool, error) {
 	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 	req := proto.Clone(plan.Request).(*diagv1.ApplyPlanRequest)
-	*req.DryRun = true
+	req.DryRun = proto.Bool(true)
 	resp, err := c.ApplyWorkspacePlan(ctx, connect.NewRequest(req))
 	if err != nil {
 		return false, err
@@ -227,7 +227,7 @@ func serverHasDrift(ctx context.Context, ws *workspace.Workspace, plan *planner.
 func autoPullAndRebuild(cmd *cobra.Command, ws *workspace.Workspace, lockFile *workspace.LockFile, plan *planner.Plan, wdir string, recreateIDs bool) (*planner.Plan, int, error) {
 	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 	req := proto.Clone(plan.Request).(*diagv1.ApplyPlanRequest)
-	*req.DryRun = true
+	req.DryRun = proto.Bool(true)
 	resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
 	if err != nil {
 		return nil, 0, fmt.Errorf("server plan failed: %w", err)

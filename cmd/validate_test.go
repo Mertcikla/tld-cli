@@ -29,9 +29,8 @@ func TestValidateCmd_ValidWorkspace(t *testing.T) {
 func TestValidateCmd_InvalidWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
-	// Diagram with missing name
-	if err := os.WriteFile(filepath.Join(dir, "diagrams.yaml"), []byte("bad: {name: \"\"}\n"), 0600); err != nil {
-		t.Fatalf("write diagrams: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte("bad:\n  kind: service\n"), 0600); err != nil {
+		t.Fatalf("write elements: %v", err)
 	}
 
 	_, stderr, err := runCmd(t, dir, "validate")

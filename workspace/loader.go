@@ -14,8 +14,6 @@ import (
 func Load(dir string) (*Workspace, error) {
 	ws := &Workspace{
 		Dir:        dir,
-		Diagrams:   make(map[string]*Diagram),
-		Objects:    make(map[string]*Object),
 		Elements:   make(map[string]*Element),
 		Connectors: make(map[string]*Connector),
 	}
@@ -57,42 +55,6 @@ func Load(dir string) (*Workspace, error) {
 		ws.IgnoreRules = &ignore.Rules{Exclude: append([]string{}, cfg.Exclude...)}
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read .tld.yaml: %w", err)
-	}
-
-	// Load diagrams from diagrams.yaml
-	diagPath := filepath.Join(dir, "diagrams.yaml")
-	if data, err := os.ReadFile(diagPath); err == nil {
-		if err := yaml.Unmarshal(data, &ws.Diagrams); err != nil {
-			return nil, fmt.Errorf("parse diagrams.yaml: %w", err)
-		}
-		delete(ws.Diagrams, "_meta")
-	}
-
-	// Load objects from objects.yaml
-	objPath := filepath.Join(dir, "objects.yaml")
-	if data, err := os.ReadFile(objPath); err == nil {
-		if err := yaml.Unmarshal(data, &ws.Objects); err != nil {
-			return nil, fmt.Errorf("parse objects.yaml: %w", err)
-		}
-		delete(ws.Objects, "_meta")
-	}
-
-	// Load edges from edges.yaml
-	edgesFile := filepath.Join(dir, "edges.yaml")
-	if data, err := os.ReadFile(edgesFile); err == nil {
-		ws.Edges = make(map[string]*Edge)
-		if err := yaml.Unmarshal(data, &ws.Edges); err != nil {
-			return nil, fmt.Errorf("parse edges.yaml: %w", err)
-		}
-		delete(ws.Edges, "_meta")
-	}
-
-	// Load links from links.yaml
-	linksFile := filepath.Join(dir, "links.yaml")
-	if data, err := os.ReadFile(linksFile); err == nil {
-		if err := yaml.Unmarshal(data, &ws.Links); err != nil {
-			return nil, fmt.Errorf("parse links.yaml: %w", err)
-		}
 	}
 
 	// Load elements from elements.yaml

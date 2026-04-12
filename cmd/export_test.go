@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
+	"github.com/mertcikla/tld-cli/workspace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -51,5 +52,73 @@ func TestExportCmd(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "connectors.yaml")); os.IsNotExist(err) {
 		t.Error("connectors.yaml not created")
+	}
+}
+
+func TestExportCmd_MapsOwnedViewsToElements(t *testing.T) {
+	now := timestamppb.Now()
+	rootID := int32(1)
+	apiViewID := int32(2)
+
+	svc := &mockDiagramService{
+		exportFunc: func(_ *diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error) {
+			resp := &diagv1.ExportOrganizationResponse{
+				Diagrams: []*diagv1.Diagram{
+					{Id: rootID, Name: "Workspace Root", UpdatedAt: now},
+					{Id: apiViewID, Name: "API Service", LevelLabel: protoPtr("Container"), ParentDiagramId: &rootID, UpdatedAt: now},
+				},
+				Elements: []*diagv1.Element{
+					{Id: 10, Name: "API Service", Kind: protoPtr("service"), HasView: true, ViewLabel: protoPtr("Container"), UpdatedAt: now},
+					{Id: 11, Name: "Worker", Kind: protoPtr("service"), UpdatedAt: now},
+				},
+				Navigations: []*diagv1.ElementNavigation{
+					{Id: 20, ElementId: 10, FromDiagramId: rootID, ToDiagramId: apiViewID},
+				},
+				Placements: []*diagv1.ElementPlacement{
+					{ViewId: rootID, ElementId: 10, PositionX: 10, PositionY: 20},
+					{ViewId: apiViewID, ElementId: 11, PositionX: 30, PositionY: 40},
+				},
+			}
+			return resp, nil
+		},
+	}
+	serverURL := newMockServer(t, svc)
+
+	dir := t.TempDir()
+	setupApplyWorkspace(t, dir, serverURL)
+
+	stdout, _, err := runCmd(t, dir, "export")
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if !strings.Contains(stdout, "Exported 2 elements, 1 diagrams, 0 connectors") {
+		t.Fatalf("stdout %q does not contain owned-view count summary", stdout)
+	}
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("load workspace: %v", err)
+	}
+
+	api := ws.Elements["api-service"]
+	if api == nil {
+		t.Fatal("api-service element missing from exported workspace")
+	}
+	if !api.HasView || api.ViewLabel != "Container" {
+		t.Fatalf("api-service view metadata = %+v, want has_view true and label Container", api)
+	}
+	if len(api.Placements) != 1 || api.Placements[0].ParentRef != "root" {
+		t.Fatalf("api-service placements = %+v, want root placement", api.Placements)
+	}
+
+	worker := ws.Elements["worker"]
+	if worker == nil {
+		t.Fatal("worker element missing from exported workspace")
+	}
+	if len(worker.Placements) != 1 || worker.Placements[0].ParentRef != "api-service" {
+		t.Fatalf("worker placements = %+v, want parent api-service", worker.Placements)
+	}
+	if ws.Meta.Views["api-service"] == nil {
+		t.Fatal("api-service view metadata missing")
 	}
 }

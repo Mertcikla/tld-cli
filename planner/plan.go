@@ -28,10 +28,6 @@ func Build(ws *workspace.Workspace, recreateIDs bool) (*Plan, error) {
 		return buildFromElements(ws, recreateIDs)
 	}
 
-	if len(ws.Diagrams) > 0 || len(ws.Objects) > 0 || len(ws.Edges) > 0 || len(ws.Links) > 0 {
-		return nil, fmt.Errorf("legacy diagram/object/edge/link workspaces are no longer supported; migrate to elements.yaml and connectors.yaml")
-	}
-
 	return &Plan{
 		Request: &diagv1.ApplyPlanRequest{OrgId: ws.Config.OrgID},
 		Model:   "workspace",

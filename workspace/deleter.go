@@ -8,93 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DeleteDiagram removes a diagram from diagrams.yaml and cascades:
-//   - removes edges where diagram == ref
-//   - removes links where from_diagram or to_diagram == ref
-//   - removes placements of this diagram from objects.yaml
-//
-// Returns (edgesRemoved, linksRemoved, placementsRemoved, error).
-// Errors if diagram does not exist.
-func DeleteDiagram(dir, ref string) (int, int, int, error) {
-	err := filterYAMLMap(filepath.Join(dir, "diagrams.yaml"), func(k string, _ any) bool { return k != ref })
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	edgesRemoved, err := filterEdgesYAMLMap(
-		filepath.Join(dir, "edges.yaml"),
-		func(m map[string]any) bool { return strVal(m, "diagram") != ref },
-	)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	linksRemoved, err := filterYAMLList(
-		filepath.Join(dir, "links.yaml"),
-		func(m map[string]any) bool {
-			return strVal(m, "from_diagram") != ref && strVal(m, "to_diagram") != ref
-		},
-	)
-	if err != nil {
-		return 0, 0, edgesRemoved, err
-	}
-
-	placementsRemoved, err := removePlacementsForDiagram(dir, ref)
-	if err != nil {
-		return edgesRemoved, linksRemoved, 0, err
-	}
-
-	return edgesRemoved, linksRemoved, placementsRemoved, nil
-}
-
-// DeleteObject removes an object from objects.yaml and cascades:
-//   - removes edges where source_object or target_object == ref
-//   - removes links where object == ref
-//
-// Returns (edgesRemoved, linksRemoved, error).
-// Errors if object does not exist.
-func DeleteObject(dir, ref string) (int, int, error) {
-	err := filterYAMLMap(filepath.Join(dir, "objects.yaml"), func(k string, _ any) bool { return k != ref })
-	if err != nil {
-		return 0, 0, err
-	}
-
-	edgesRemoved, err := filterEdgesYAMLMap(
-		filepath.Join(dir, "edges.yaml"),
-		func(m map[string]any) bool {
-			return strVal(m, "source_object") != ref && strVal(m, "target_object") != ref
-		},
-	)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	linksRemoved, err := filterYAMLList(
-		filepath.Join(dir, "links.yaml"),
-		func(m map[string]any) bool { return strVal(m, "object") != ref },
-	)
-	if err != nil {
-		return edgesRemoved, 0, err
-	}
-
-	return edgesRemoved, linksRemoved, nil
-}
-
-// RemoveEdge removes all edges from edges.yaml where
-// diagram == diagram AND source_object == source AND target_object == target.
-// Safe: no error if file is absent or no matches found.
-// Returns count of removed edges.
-func RemoveEdge(dir, diagram, source, target string) (int, error) {
-	return filterEdgesYAMLMap(
-		filepath.Join(dir, "edges.yaml"),
-		func(m map[string]any) bool {
-			return strVal(m, "diagram") != diagram ||
-				strVal(m, "source_object") != source ||
-				strVal(m, "target_object") != target
-		},
-	)
-}
-
 // RemoveLink removes all links from links.yaml where
 // from_diagram == fromDiagram AND to_diagram == toDiagram and,
 // when object is non-empty, object == object.
@@ -122,20 +35,12 @@ func RemoveElement(dir, ref string) error {
 
 // RemoveConnector removes connectors from connectors.yaml where view == view AND source == source AND target == target.
 func RemoveConnector(dir, view, source, target string) (int, error) {
-	return filterEdgesYAMLMap(
-		filepath.Join(dir, "connectors.yaml"),
-		func(m map[string]any) bool {
-			return strVal(m, "view") != view ||
-				strVal(m, "source") != source ||
-				strVal(m, "target") != target
-		},
-	)
-}
-
-// filterEdgesYAMLMap reads edges.yaml as map[string]any, skips the _meta key,
-// calls keep(edgeFields) for each edge entry, removes entries where keep returns false,
-// writes back (preserving _meta), and returns count removed. Safe: returns 0,nil if file absent.
-func filterEdgesYAMLMap(path string, keep func(map[string]any) bool) (int, error) {
+	keep := func(m map[string]any) bool {
+		return strVal(m, "view") != view ||
+			strVal(m, "source") != source ||
+			strVal(m, "target") != target
+	}
+	path := filepath.Join(dir, "connectors.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return 0, nil // file absent is fine
@@ -236,50 +141,6 @@ func filterYAMLMap(path string, keep func(string, any) bool) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
-}
-
-// removePlacementsForDiagram reads objects.yaml, strips placements where
-// diagram == ref, and writes back if changed. Returns total placements removed.
-func removePlacementsForDiagram(dir, ref string) (int, error) {
-	path := filepath.Join(dir, "objects.yaml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, nil // objects.yaml absent
-	}
-
-	var objects map[string]*Object
-	if err := yaml.Unmarshal(data, &objects); err != nil {
-		return 0, fmt.Errorf("parse objects.yaml: %w", err)
-	}
-
-	total := 0
-	changed := false
-	for _, o := range objects {
-		before := len(o.Diagrams)
-		var filtered []Placement
-		for _, p := range o.Diagrams {
-			if p.Diagram != ref {
-				filtered = append(filtered, p)
-			}
-		}
-		removed := before - len(filtered)
-		if removed > 0 {
-			o.Diagrams = filtered
-			total += removed
-			changed = true
-		}
-	}
-
-	if changed {
-		out, err := yaml.Marshal(objects)
-		if err != nil {
-			return total, fmt.Errorf("marshal objects: %w", err)
-		}
-		if err := os.WriteFile(path, out, 0600); err != nil {
-			return total, fmt.Errorf("write %s: %w", path, err)
-		}
-	}
-	return total, nil
 }
 
 func strVal(m map[string]any, key string) string {

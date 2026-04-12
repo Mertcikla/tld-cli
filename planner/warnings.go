@@ -10,28 +10,158 @@ import (
 
 // WarningGroup represents a collection of similar architectural warnings.
 type WarningGroup struct {
+	RuleCode    string
 	RuleName    string
 	Description string
 	Mediation   string
 	Violations  []string
 }
 
+const (
+	warningCodeHighDensity      = "ARC001"
+	warningCodeIsolatedObject   = "ARC002"
+	warningCodeSharedContext    = "ARC003"
+	warningCodeDepthMismatch    = "ARC004"
+	warningCodeLowInsightRatio  = "ARC005"
+	warningCodeDeadEndDrilldown = "ARC006"
+	warningCodeAbstractionLeak  = "ARC007"
+
+	warningCodeGenericLabels     = "ARC101"
+	warningCodeMissingTech       = "ARC102"
+	warningCodeUnknownTechnology = "ARC103"
+
+	warningCodeMissingDesc   = "ARC201"
+	warningCodeGenericNaming = "ARC202"
+	warningCodeMissingLabel  = "ARC203"
+)
+
+type warningRule struct {
+	Code        string
+	Name        string
+	Description string
+	Mediation   string
+}
+
+var warningRules = []warningRule{
+	{
+		Code:        warningCodeHighDensity,
+		Name:        "High Density",
+		Description: "View exceeds the element density limit",
+		Mediation:   "Split the view into nested views to reduce cognitive load.",
+	},
+	{
+		Code:        warningCodeIsolatedObject,
+		Name:        "Isolated Element",
+		Description: "Element has 0 connectors in a view",
+		Mediation:   "Explore its relationships further and add connectors in the view where it appears.",
+	},
+	{
+		Code:        warningCodeSharedContext,
+		Name:        "Shared Context",
+		Description: "Shared element has no connectors in a specific view",
+		Mediation:   "Add connectors to the shared element in this view or remove the placement from this view.",
+	},
+	{
+		Code:        warningCodeDepthMismatch,
+		Name:        "Depth Mismatch",
+		Description: "View hierarchy is flat",
+		Mediation:   "Create nested views to establish a zoomable hierarchy.",
+	},
+	{
+		Code:        warningCodeLowInsightRatio,
+		Name:        "Low Insight Ratio",
+		Description: "Connectors < Elements",
+		Mediation:   "Add more connectors to illustrate how elements interact, rather than just listing them.",
+	},
+	{
+		Code:        warningCodeDeadEndDrilldown,
+		Name:        "Dead-End Drilldown",
+		Description: "Element owns a view but it has no content",
+		Mediation:   "Add nested elements or connectors to the element's view, or remove the owned view.",
+	},
+	{
+		Code:        warningCodeAbstractionLeak,
+		Name:        "Abstraction Leak",
+		Description: "Implementation types at Root level",
+		Mediation:   "Move functions and classes into sub-diagrams. Keep root views at the Service/Subsystem level.",
+	},
+	{
+		Code:        warningCodeGenericLabels,
+		Name:        "Generic Labels",
+		Description: "Connector label is overly generic",
+		Mediation:   "Replace generic labels with domain-specific verbs like 'validates JWT' or 'SQL Query'.",
+	},
+	{
+		Code:        warningCodeMissingTech,
+		Name:        "Missing Tech",
+		Description: "No `technology` field",
+		Mediation:   "Add a 'technology' field (e.g. Go, React) to clarify the stack.",
+	},
+	{
+		Code:        warningCodeUnknownTechnology,
+		Name:        "Unknown Technology",
+		Description: "Catalog mismatch",
+		Mediation:   "Use recognized technology names (e.g. Go, React) or double check spelling.",
+	},
+	{
+		Code:        warningCodeMissingDesc,
+		Name:        "Missing Desc",
+		Description: "`description` field is empty",
+		Mediation:   "Add a one-sentence summary to help readers understand the responsibility.",
+	},
+	{
+		Code:        warningCodeGenericNaming,
+		Name:        "Generic Naming",
+		Description: "Vague names make the map harder to understand",
+		Mediation:   "Rename the element with a domain-specific, descriptive name.",
+	},
+	{
+		Code:        warningCodeMissingLabel,
+		Name:        "Missing Label",
+		Description: "Connector has no `label`",
+		Mediation:   "A connector without a label is just a line. Add a 'label' field to tell what it does.",
+	},
+}
+
+var warningRuleCodesByLevel = map[int][]string{
+	1: {
+		warningCodeHighDensity,
+		warningCodeIsolatedObject,
+		warningCodeSharedContext,
+		warningCodeDepthMismatch,
+		warningCodeLowInsightRatio,
+		warningCodeDeadEndDrilldown,
+		warningCodeAbstractionLeak,
+	},
+	2: {
+		warningCodeMissingTech,
+		warningCodeUnknownTechnology,
+	},
+	3: {
+		warningCodeGenericLabels,
+		warningCodeMissingDesc,
+		warningCodeGenericNaming,
+		warningCodeMissingLabel,
+	},
+}
+
 type warningContext struct {
 	ws              *workspace.Workspace
 	level           int
 	allowLowInsight bool
+	activeRules     []warningRule
 	warnings        map[string]*WarningGroup
-	diagramObjects  map[string][]string
-	objectEdges     map[string]map[string]int
-	diagramEdges    map[string]int
+	viewElements    map[string][]string
+	elementViews    map[string]map[string]int
+	viewConnectors  map[string]int
 	maxDepth        int
 }
 
 // AnalyzePlan evaluates the workspace against architectural best practices and
 // returns grouped warnings based on the configured strictness level.
 func AnalyzePlan(ws *workspace.Workspace) []WarningGroup {
-	if usesElementWorkspace(ws) {
-		ws = projectForWarnings(ws)
+	if ws == nil {
+		return nil
 	}
 
 	ctx := newWarningContext(ws)
@@ -41,126 +171,105 @@ func AnalyzePlan(ws *workspace.Workspace) []WarningGroup {
 	return ctx.toSlice()
 }
 
-func projectForWarnings(ws *workspace.Workspace) *workspace.Workspace {
-	projected := &workspace.Workspace{
-		Config:   ws.Config,
-		Diagrams: make(map[string]*workspace.Diagram),
-		Objects:  make(map[string]*workspace.Object),
-		Edges:    make(map[string]*workspace.Edge),
-	}
-
-	for ref, element := range ws.Elements {
-		projected.Objects[ref] = &workspace.Object{
-			Name:        element.Name,
-			Type:        element.Kind,
-			Description: element.Description,
-			Technology:  element.Technology,
-			URL:         element.URL,
-			LogoURL:     element.LogoURL,
-			Repo:        element.Repo,
-			Branch:      element.Branch,
-			Language:    element.Language,
-			FilePath:    element.FilePath,
-		}
-		if element.HasView {
-			projected.Diagrams[ref] = &workspace.Diagram{
-				Name:        element.Name,
-				Description: element.Description,
-				LevelLabel:  element.ViewLabel,
-			}
-		}
-		for _, placement := range element.Placements {
-			parentRef := placement.ParentRef
-			if parentRef == "" || parentRef == "root" || parentRef == syntheticRootViewRef {
-				parentRef = syntheticRootViewRef
-				if _, ok := projected.Diagrams[parentRef]; !ok {
-					projected.Diagrams[parentRef] = &workspace.Diagram{Name: "Workspace Root", LevelLabel: "Root"}
-				}
-			} else if element.HasView {
-				projected.Diagrams[ref].ParentDiagram = parentRef
-			}
-			projected.Objects[ref].Diagrams = append(projected.Objects[ref].Diagrams, workspace.Placement{
-				Diagram:   parentRef,
-				PositionX: placement.PositionX,
-				PositionY: placement.PositionY,
-			})
-		}
-	}
-
-	for ref, connector := range ws.Connectors {
-		viewRef := connector.View
-		if viewRef == "" || viewRef == "root" {
-			viewRef = syntheticRootViewRef
-			if _, ok := projected.Diagrams[viewRef]; !ok {
-				projected.Diagrams[viewRef] = &workspace.Diagram{Name: "Workspace Root", LevelLabel: "Root"}
-			}
-		}
-		projected.Edges[ref] = &workspace.Edge{
-			Diagram:          viewRef,
-			SourceObject:     connector.Source,
-			TargetObject:     connector.Target,
-			Label:            connector.Label,
-			Description:      connector.Description,
-			RelationshipType: connector.Relationship,
-			Direction:        connector.Direction,
-			EdgeType:         connector.Style,
-			URL:              connector.URL,
-			SourceHandle:     connector.SourceHandle,
-			TargetHandle:     connector.TargetHandle,
-		}
-	}
-
-	return projected
-}
-
 func newWarningContext(ws *workspace.Workspace) *warningContext {
-	level := 3
+	level := 2
 	allowLowInsight := false
+	var includeRules []string
+	var excludeRules []string
 	if ws.Config.Validation != nil {
 		if ws.Config.Validation.Level > 0 {
 			level = ws.Config.Validation.Level
 		}
 		allowLowInsight = ws.Config.Validation.AllowLowInsight
+		includeRules = ws.Config.Validation.IncludeRules
+		excludeRules = ws.Config.Validation.ExcludeRules
 	}
 
 	return &warningContext{
 		ws:              ws,
 		level:           level,
 		allowLowInsight: allowLowInsight,
+		activeRules:     resolveConfiguredWarningRules(level, includeRules, excludeRules),
 		warnings:        make(map[string]*WarningGroup),
-		diagramObjects:  make(map[string][]string),
-		objectEdges:     make(map[string]map[string]int),
-		diagramEdges:    make(map[string]int),
+		viewElements:    make(map[string][]string),
+		elementViews:    make(map[string]map[string]int),
+		viewConnectors:  make(map[string]int),
 	}
 }
 
-func (ctx *warningContext) addWarning(rule, desc, mediation, violation string) {
-	if _, ok := ctx.warnings[rule]; !ok {
-		ctx.warnings[rule] = &WarningGroup{
-			RuleName:    rule,
-			Description: desc,
-			Mediation:   mediation,
+func resolveConfiguredWarningRules(level int, includeRules, excludeRules []string) []warningRule {
+	enabled := make(map[string]struct{})
+	for currentLevel := 1; currentLevel <= level; currentLevel++ {
+		for _, code := range warningRuleCodesByLevel[currentLevel] {
+			enabled[code] = struct{}{}
+		}
+	}
+	for _, code := range includeRules {
+		normalized := normalizeWarningRuleCode(code)
+		if normalized != "" {
+			enabled[normalized] = struct{}{}
+		}
+	}
+	for _, code := range excludeRules {
+		delete(enabled, normalizeWarningRuleCode(code))
+	}
+
+	resolved := make([]warningRule, 0, len(enabled))
+	for _, rule := range warningRules {
+		if _, ok := enabled[rule.Code]; ok {
+			resolved = append(resolved, rule)
+		}
+	}
+	return resolved
+}
+
+func normalizeWarningRuleCode(code string) string {
+	return strings.ToUpper(strings.TrimSpace(code))
+}
+
+func warningRuleByCode(code string) (warningRule, bool) {
+	for _, rule := range warningRules {
+		if rule.Code == code {
+			return rule, true
+		}
+	}
+	return warningRule{}, false
+}
+
+func (ctx *warningContext) addWarning(code, violation string) {
+	rule, ok := warningRuleByCode(code)
+	if !ok {
+		return
+	}
+	if _, exists := ctx.warnings[code]; !exists {
+		ctx.warnings[code] = &WarningGroup{
+			RuleCode:    rule.Code,
+			RuleName:    rule.Name,
+			Description: rule.Description,
+			Mediation:   rule.Mediation,
 			Violations:  []string{},
 		}
 	}
-	ctx.warnings[rule].Violations = append(ctx.warnings[rule].Violations, violation)
+	ctx.warnings[code].Violations = append(ctx.warnings[code].Violations, violation)
 }
 
 func (ctx *warningContext) prepareData() {
-	for objRef, o := range ctx.ws.Objects {
-		for _, p := range o.Diagrams {
-			ctx.diagramObjects[p.Diagram] = append(ctx.diagramObjects[p.Diagram], objRef)
+	for elementRef, element := range ctx.ws.Elements {
+		ctx.elementViews[elementRef] = make(map[string]int)
+		for _, placement := range element.Placements {
+			viewRef := normalizeWarningViewRef(placement.ParentRef)
+			ctx.viewElements[viewRef] = append(ctx.viewElements[viewRef], elementRef)
 		}
-		ctx.objectEdges[objRef] = make(map[string]int)
 	}
 
-	for _, e := range ctx.ws.Edges {
-		ctx.diagramEdges[e.Diagram]++
-		if objectEdges, ok := ctx.objectEdges[e.SourceObject]; ok {
-			objectEdges[e.Diagram]++
+	for _, connector := range ctx.ws.Connectors {
+		viewRef := normalizeWarningViewRef(connector.View)
+		ctx.viewConnectors[viewRef]++
+		if elementViews, ok := ctx.elementViews[connector.Source]; ok {
+			elementViews[viewRef]++
 		}
-		if objectEdges, ok := ctx.objectEdges[e.TargetObject]; ok {
-			objectEdges[e.Diagram]++
+		if elementViews, ok := ctx.elementViews[connector.Target]; ok {
+			elementViews[viewRef]++
 		}
 	}
 
@@ -168,24 +277,44 @@ func (ctx *warningContext) prepareData() {
 }
 
 func (ctx *warningContext) calculateMaxDepth() {
-	for ref := range ctx.ws.Diagrams {
-		depth := 0
-		cur := ref
-		visited := make(map[string]bool)
-		for cur != "" {
-			if visited[cur] {
-				break
-			}
-			visited[cur] = true
-			if d, ok := ctx.ws.Diagrams[cur]; ok {
-				cur = d.ParentDiagram
-				if cur != "" {
-					depth++
+	memo := make(map[string]int)
+	visiting := make(map[string]bool)
+	var viewDepth func(string) int
+	viewDepth = func(ref string) int {
+		if depth, ok := memo[ref]; ok {
+			return depth
+		}
+		if visiting[ref] {
+			return 0
+		}
+		visiting[ref] = true
+		maxDepth := 0
+		element := ctx.ws.Elements[ref]
+		if element != nil {
+			for _, placement := range element.Placements {
+				parentRef := normalizeWarningViewRef(placement.ParentRef)
+				if parentRef == syntheticRootViewRef {
+					continue
 				}
-			} else {
-				break
+				depth := 1
+				if parentElement, ok := ctx.ws.Elements[parentRef]; ok && parentElement.HasView {
+					depth = viewDepth(parentRef) + 1
+				}
+				if depth > maxDepth {
+					maxDepth = depth
+				}
 			}
 		}
+		visiting[ref] = false
+		memo[ref] = maxDepth
+		return maxDepth
+	}
+
+	for ref, element := range ctx.ws.Elements {
+		if element == nil || !element.HasView {
+			continue
+		}
+		depth := viewDepth(ref)
 		if depth > ctx.maxDepth {
 			ctx.maxDepth = depth
 		}
@@ -193,125 +322,204 @@ func (ctx *warningContext) calculateMaxDepth() {
 }
 
 func (ctx *warningContext) checkAll() {
-	if ctx.level >= 1 {
-		ctx.checkLevel1()
-	}
-	if ctx.level >= 2 {
-		ctx.checkLevel2()
-	}
-	if ctx.level >= 3 {
-		ctx.checkLevel3()
+	for _, rule := range ctx.activeRules {
+		ctx.runWarningRule(rule.Code)
 	}
 }
 
-func (ctx *warningContext) checkLevel1() {
-	if ctx.maxDepth < 1 && len(ctx.ws.Diagrams) > 1 {
-		ctx.addWarning("Depth Mismatch", "Diagram hierarchy is flat", "Create sub-diagrams to establish a zoomable hierarchy.", "Workspace")
+func (ctx *warningContext) runWarningRule(code string) {
+	switch code {
+	case warningCodeHighDensity:
+		ctx.checkHighDensityRule()
+	case warningCodeIsolatedObject:
+		ctx.checkIsolatedObjectRule()
+	case warningCodeSharedContext:
+		ctx.checkSharedContextRule()
+	case warningCodeDepthMismatch:
+		ctx.checkDepthMismatchRule()
+	case warningCodeLowInsightRatio:
+		ctx.checkLowInsightRatioRule()
+	case warningCodeDeadEndDrilldown:
+		ctx.checkDeadEndDrilldownRule()
+	case warningCodeAbstractionLeak:
+		ctx.checkAbstractionLeakRule()
+	case warningCodeGenericLabels:
+		ctx.checkGenericLabelsRule()
+	case warningCodeMissingTech:
+		ctx.checkMissingTechRule()
+	case warningCodeUnknownTechnology:
+		ctx.checkUnknownTechnologyRule()
+	case warningCodeMissingDesc:
+		ctx.checkMissingDescriptionRule()
+	case warningCodeGenericNaming:
+		ctx.checkGenericNamingRule()
+	case warningCodeMissingLabel:
+		ctx.checkMissingLabelRule()
 	}
+}
 
-	for diagRef, objs := range ctx.diagramObjects {
+func (ctx *warningContext) checkDepthMismatchRule() {
+	viewCount := 0
+	for _, element := range ctx.ws.Elements {
+		if element != nil && element.HasView {
+			viewCount++
+		}
+	}
+	if ctx.maxDepth < 1 && viewCount > 1 {
+		ctx.addWarning(warningCodeDepthMismatch, "Workspace views")
+	}
+}
+
+func (ctx *warningContext) checkHighDensityRule() {
+	for viewRef, elements := range ctx.viewElements {
 		densityLimit := 15
 		if ctx.level >= 2 {
 			densityLimit = 12
 		}
-		if len(objs) > densityLimit {
-			ctx.addWarning("High Density", fmt.Sprintf("> %d objects on one diagram", densityLimit), "Split the diagram into sub-diagrams to reduce cognitive load.", fmt.Sprintf("Diagram %q has %d objects", diagRef, len(objs)))
-		}
-
-		if !ctx.allowLowInsight && len(objs) > 0 {
-			edgesCount := ctx.diagramEdges[diagRef]
-			if edgesCount < len(objs) {
-				ctx.addWarning("Low Insight Ratio", "Edges < Objects", "Add more edges to illustrate how components interact, rather than just listing them.", fmt.Sprintf("Diagram %q (Objects: %d, Edges: %d)", diagRef, len(objs), edgesCount))
-			}
-		}
-	}
-
-	ctx.checkObjectsL1()
-
-	for _, l := range ctx.ws.Links {
-		if targetObjects := ctx.diagramObjects[l.ToDiagram]; len(targetObjects) == 0 {
-			ctx.addWarning("Dead-End Drilldown", "Object has a link but no sub-diagram content", "Ensure the linked diagram exists and contains relevant details.", fmt.Sprintf("Link to Diagram %q", l.ToDiagram))
+		if len(elements) > densityLimit {
+			ctx.addWarning(warningCodeHighDensity, fmt.Sprintf("View %q has %d elements", viewRef, len(elements)))
 		}
 	}
 }
 
-func (ctx *warningContext) checkObjectsL1() {
-	for objRef, o := range ctx.ws.Objects {
-		isRootLevel := false
-		for _, p := range o.Diagrams {
-			if d, ok := ctx.ws.Diagrams[p.Diagram]; ok && d.ParentDiagram == "" {
+func (ctx *warningContext) checkLowInsightRatioRule() {
+	if ctx.allowLowInsight {
+		return
+	}
+	for viewRef, elements := range ctx.viewElements {
+		if len(elements) == 0 {
+			continue
+		}
+		connectorCount := ctx.viewConnectors[viewRef]
+		if connectorCount < len(elements) {
+			ctx.addWarning(warningCodeLowInsightRatio, fmt.Sprintf("View %q (Elements: %d, Connectors: %d)", viewRef, len(elements), connectorCount))
+		}
+	}
+}
+
+func (ctx *warningContext) checkDeadEndDrilldownRule() {
+	for ref, element := range ctx.ws.Elements {
+		if element == nil || !element.HasView {
+			continue
+		}
+		if len(ctx.viewElements[ref]) == 0 && ctx.viewConnectors[ref] == 0 {
+			ctx.addWarning(warningCodeDeadEndDrilldown, fmt.Sprintf("Element %q owns an empty view", ref))
+		}
+	}
+}
+
+func (ctx *warningContext) checkIsolatedObjectRule() {
+	for elementRef, element := range ctx.ws.Elements {
+		if element == nil || len(element.Placements) != 1 {
+			continue
+		}
+		for _, placement := range element.Placements {
+			viewRef := normalizeWarningViewRef(placement.ParentRef)
+			if ctx.elementViews[elementRef][viewRef] == 0 {
+				ctx.addWarning(warningCodeIsolatedObject, fmt.Sprintf("Element %q in View %q", elementRef, viewRef))
+			}
+		}
+	}
+}
+
+func (ctx *warningContext) checkSharedContextRule() {
+	for elementRef, element := range ctx.ws.Elements {
+		if element == nil || len(element.Placements) <= 1 {
+			continue
+		}
+		for _, placement := range element.Placements {
+			viewRef := normalizeWarningViewRef(placement.ParentRef)
+			if ctx.elementViews[elementRef][viewRef] == 0 {
+				ctx.addWarning(warningCodeSharedContext, fmt.Sprintf("Element %q in View %q", elementRef, viewRef))
+			}
+		}
+	}
+}
+
+func (ctx *warningContext) checkAbstractionLeakRule() {
+	for elementRef, element := range ctx.ws.Elements {
+		if element == nil {
+			continue
+		}
+		isRootLevel := len(element.Placements) == 0
+		for _, placement := range element.Placements {
+			if normalizeWarningViewRef(placement.ParentRef) == syntheticRootViewRef {
 				isRootLevel = true
-			}
-
-			if ctx.objectEdges[objRef][p.Diagram] == 0 {
-				if len(o.Diagrams) == 1 {
-					ctx.addWarning("Isolated Object", "Object has 0 edges in a diagram", "explore its relationships further and link it using \"tld create link --from --to\" etc.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
-				} else {
-					ctx.addWarning("Shared Context", "Shared object has no edges in sub-view", "Add edges to the shared object in this specific diagram or remove it from this view.", fmt.Sprintf("Object %q in Diagram %q", objRef, p.Diagram))
-				}
+				break
 			}
 		}
-
 		if isRootLevel {
-			lowerType := strings.ToLower(o.Type)
+			lowerType := strings.ToLower(element.Kind)
 			if lowerType == "function" || lowerType == "class" {
-				ctx.addWarning("Abstraction Leak", "Implementation types at Root level", "Move functions and classes into sub-diagrams. Keep root views at the Service/Subsystem level.", fmt.Sprintf("Object %q (Type: %s)", objRef, o.Type))
+				ctx.addWarning(warningCodeAbstractionLeak, fmt.Sprintf("Element %q (Kind: %s)", elementRef, element.Kind))
 			}
 		}
 	}
 }
 
-func (ctx *warningContext) checkLevel2() {
-	for objRef, o := range ctx.ws.Objects {
-		if o.Technology == "" {
-			ctx.addWarning("Missing Tech", "No `technology` field", "Add a 'technology' field (e.g. Go, React) to clarify the stack.", fmt.Sprintf("Object %q", objRef))
-		} else {
-			missing := tech.Validate(o.Technology)
-			if len(missing) > 0 {
-				ctx.addWarning("Unknown Technology", "Catalog mismatch", "Use recognized technology names (e.g. Go, React) or double check spelling.", fmt.Sprintf("Object %q has unknown: %s", objRef, strings.Join(missing, ", ")))
-			}
-		}
-	}
-	for edgeRef, e := range ctx.ws.Edges {
-		if isGenericLabel(e.Label) {
-			ctx.addWarning("Generic Labels", "Label is overly generic", "Replace generic labels with domain-specific verbs like 'validates JWT' or 'SQL Query'.", fmt.Sprintf("Edge %q in Diagram %q (Label: %q)", edgeRef, e.Diagram, e.Label))
+func (ctx *warningContext) checkMissingTechRule() {
+	for elementRef, element := range ctx.ws.Elements {
+		if element != nil && element.Technology == "" {
+			ctx.addWarning(warningCodeMissingTech, fmt.Sprintf("Element %q", elementRef))
 		}
 	}
 }
 
-func (ctx *warningContext) checkLevel3() {
-	for diagRef, d := range ctx.ws.Diagrams {
-		if d.Description == "" {
-			ctx.addWarning("Missing Desc", "`description` field is empty", "Add a one-sentence summary to help readers understand the responsibility.", fmt.Sprintf("Diagram %q", diagRef))
+func (ctx *warningContext) checkUnknownTechnologyRule() {
+	for elementRef, element := range ctx.ws.Elements {
+		if element == nil || element.Technology == "" {
+			continue
 		}
-		if isGenericName(d.Name) {
-			ctx.addWarning("Generic Naming", "Vague names make the map harder to understand", "Rename the element with a domain-specific, descriptive name.", fmt.Sprintf("Diagram %q (Name: %q)", diagRef, d.Name))
-		}
-	}
-	for objRef, o := range ctx.ws.Objects {
-		if o.Description == "" {
-			ctx.addWarning("Missing Desc", "`description` field is empty", "Add a one-sentence summary to help readers understand the responsibility.", fmt.Sprintf("Object %q", objRef))
-		}
-		if isGenericName(o.Name) {
-			ctx.addWarning("Generic Naming", "Vague names make the map harder to understand", "Rename the element with a domain-specific, descriptive name.", fmt.Sprintf("Object %q (Name: %q)", objRef, o.Name))
+		missing := tech.Validate(element.Technology)
+		if len(missing) > 0 {
+			ctx.addWarning(warningCodeUnknownTechnology, fmt.Sprintf("Element %q has unknown: %s", elementRef, strings.Join(missing, ", ")))
 		}
 	}
-	for edgeRef, e := range ctx.ws.Edges {
-		if e.Label == "" {
-			ctx.addWarning("Missing Label", "Edge has no `label`", "An edge without a label is just a line. Add a 'label' field to tell what it does.", fmt.Sprintf("Edge %q in Diagram %q", edgeRef, e.Diagram))
+}
+
+func (ctx *warningContext) checkGenericLabelsRule() {
+	for connectorRef, connector := range ctx.ws.Connectors {
+		if connector != nil && isGenericLabel(connector.Label) {
+			ctx.addWarning(warningCodeGenericLabels, fmt.Sprintf("Connector %q in View %q (Label: %q)", connectorRef, normalizeWarningViewRef(connector.View), connector.Label))
 		}
 	}
+}
+
+func (ctx *warningContext) checkMissingDescriptionRule() {
+	for elementRef, element := range ctx.ws.Elements {
+		if element != nil && element.Description == "" {
+			ctx.addWarning(warningCodeMissingDesc, fmt.Sprintf("Element %q", elementRef))
+		}
+	}
+}
+
+func (ctx *warningContext) checkGenericNamingRule() {
+	for elementRef, element := range ctx.ws.Elements {
+		if element != nil && isGenericName(element.Name) {
+			ctx.addWarning(warningCodeGenericNaming, fmt.Sprintf("Element %q (Name: %q)", elementRef, element.Name))
+		}
+	}
+}
+
+func (ctx *warningContext) checkMissingLabelRule() {
+	for connectorRef, connector := range ctx.ws.Connectors {
+		if connector != nil && connector.Label == "" {
+			ctx.addWarning(warningCodeMissingLabel, fmt.Sprintf("Connector %q in View %q", connectorRef, normalizeWarningViewRef(connector.View)))
+		}
+	}
+}
+
+func normalizeWarningViewRef(ref string) string {
+	if ref == "" || ref == "root" {
+		return syntheticRootViewRef
+	}
+	return ref
 }
 
 func (ctx *warningContext) toSlice() []WarningGroup {
 	var result []WarningGroup
-	order := []string{
-		"High Density", "Isolated Object", "Shared Context", "Depth Mismatch", "Low Insight Ratio", "Dead-End Drilldown", "Abstraction Leak",
-		"Generic Labels", "Missing Tech", "Unknown Technology",
-		"Missing Desc", "Generic Naming", "Missing Label",
-	}
-	for _, rule := range order {
-		if wg, ok := ctx.warnings[rule]; ok {
+	for _, rule := range warningRules {
+		if wg, ok := ctx.warnings[rule.Code]; ok {
 			result = append(result, *wg)
 		}
 	}

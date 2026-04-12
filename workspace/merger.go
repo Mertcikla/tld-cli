@@ -49,32 +49,6 @@ func MergeWorkspace(dir string, newWS *Workspace, lastSyncMeta *Meta, currentMet
 		return nil
 	}
 
-	// Merge diagrams
-	if err := mergeYAMLMapWithConflicts(filepath.Join(dir, "diagrams.yaml"), newWS.Diagrams, newWS.Meta.Diagrams, lastSyncMeta.Diagrams, currentMeta.Diagrams); err != nil {
-		return fmt.Errorf("merge diagrams: %w", err)
-	}
-
-	// Merge objects
-	if err := mergeYAMLMapWithConflicts(filepath.Join(dir, "objects.yaml"), newWS.Objects, newWS.Meta.Objects, lastSyncMeta.Objects, currentMeta.Objects); err != nil {
-		return fmt.Errorf("merge objects: %w", err)
-	}
-
-	// Merge edges
-	if err := mergeYAMLMapWithConflicts(filepath.Join(dir, "edges.yaml"), newWS.Edges, newWS.Meta.Edges, lastSyncMeta.Edges, currentMeta.Edges); err != nil {
-		return fmt.Errorf("merge edges: %w", err)
-	}
-
-	// For links, we just overwrite for now
-	if len(newWS.Links) > 0 {
-		data, err := yaml.Marshal(newWS.Links)
-		if err != nil {
-			return fmt.Errorf("marshal links: %w", err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "links.yaml"), data, 0600); err != nil {
-			return fmt.Errorf("write links: %w", err)
-		}
-	}
-
 	return nil
 }
 

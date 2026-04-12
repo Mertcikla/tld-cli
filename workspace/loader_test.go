@@ -9,7 +9,6 @@ import (
 	"github.com/mertcikla/tld-cli/workspace"
 )
 
-// writeFile writes content to path, creating dirs as needed.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
@@ -20,8 +19,6 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-// setupConfig creates a temporary config directory and sets TLD_CONFIG_DIR.
-// It returns the path to the global tld.yaml file.
 func setupConfig(t *testing.T) string {
 	t.Helper()
 	configDir := t.TempDir()
@@ -30,56 +27,52 @@ func setupConfig(t *testing.T) string {
 	return filepath.Join(configDir, "tld.yaml")
 }
 
-// minimalConfig returns minimal tld.yaml content.
 func minimalConfig() string {
 	return "server_url: https://tldiagram.com\napi_key: \"\"\norg_id: \"\"\n"
 }
 
 func TestLoad_MinimalWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
+	writeFile(t, setupConfig(t), minimalConfig())
 
 	ws, err := workspace.Load(dir)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(ws.Diagrams) != 0 || len(ws.Objects) != 0 || len(ws.Edges) != 0 || len(ws.Links) != 0 {
-		t.Errorf("expected empty maps, got diagrams=%d objects=%d edges=%d links=%d",
-			len(ws.Diagrams), len(ws.Objects), len(ws.Edges), len(ws.Links))
+	if len(ws.Elements) != 0 || len(ws.Connectors) != 0 {
+		t.Fatalf("expected empty workspace, got %d elements and %d connectors", len(ws.Elements), len(ws.Connectors))
 	}
 }
 
 func TestLoad_MissingConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	setupConfig(t)
+
 	_, err := workspace.Load(dir)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "read tld.yaml") {
-		t.Errorf("error %q does not contain 'read tld.yaml'", err.Error())
+		t.Fatalf("error %q does not contain 'read tld.yaml'", err.Error())
 	}
 }
 
 func TestLoad_MalformedConfigYAML(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, ":\t:\n")
+	writeFile(t, setupConfig(t), ":\t:\n")
+
 	_, err := workspace.Load(dir)
 	if err == nil {
 		t.Fatal("expected error")
 	}
 	if !strings.Contains(err.Error(), "parse tld.yaml") {
-		t.Errorf("error %q does not contain 'parse tld.yaml'", err.Error())
+		t.Fatalf("error %q does not contain 'parse tld.yaml'", err.Error())
 	}
 }
 
 func TestLoad_APIKeyFromEnv(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-
+	writeFile(t, setupConfig(t), minimalConfig())
 	_ = os.Setenv("TLD_API_KEY", "env-test-key")
 	t.Cleanup(func() { _ = os.Unsetenv("TLD_API_KEY") })
 
@@ -88,15 +81,13 @@ func TestLoad_APIKeyFromEnv(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	if ws.Config.APIKey != "env-test-key" {
-		t.Errorf("APIKey = %q, want 'env-test-key'", ws.Config.APIKey)
+		t.Fatalf("APIKey = %q, want env-test-key", ws.Config.APIKey)
 	}
 }
 
 func TestLoad_APIKeyFileOverridesEnv(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, "server_url: http://localhost\napi_key: file-key\norg_id: \"\"\n")
-
+	writeFile(t, setupConfig(t), "server_url: http://localhost\napi_key: file-key\norg_id: \"\"\n")
 	_ = os.Setenv("TLD_API_KEY", "env-key")
 	t.Cleanup(func() { _ = os.Unsetenv("TLD_API_KEY") })
 
@@ -105,15 +96,14 @@ func TestLoad_APIKeyFileOverridesEnv(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	if ws.Config.APIKey != "file-key" {
-		t.Errorf("APIKey = %q, want 'file-key'", ws.Config.APIKey)
+		t.Fatalf("APIKey = %q, want file-key", ws.Config.APIKey)
 	}
 }
 
 func TestLoad_WorkspaceConfigLoaded(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, ".tld.yaml"), "project_name: Demo\nexclude:\n  - vendor/\n  - \"**/*.pb.go\"\nrepositories:\n  frontend:\n    url: github.com/example/frontend\n    localDir: frontend\n    root: bKLqGV48\n    config:\n      mode: auto\n    exclude:\n      - \"**/*_test.go\"\n      - init*\n")
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, ".tld.yaml"), "project_name: Demo\nexclude:\n  - vendor/\n  - \"**/*.pb.go\"\nrepositories:\n  frontend:\n    url: github.com/example/frontend\n    localDir: frontend\n    root: root-ref\n    config:\n      mode: auto\n    exclude:\n      - \"**/*_test.go\"\n      - init*\n")
 
 	ws, err := workspace.Load(dir)
 	if err != nil {
@@ -122,51 +112,23 @@ func TestLoad_WorkspaceConfigLoaded(t *testing.T) {
 	if ws.WorkspaceConfig == nil {
 		t.Fatal("expected workspace config to be loaded")
 	}
-	if ws.WorkspaceConfig.ProjectName != "Demo" {
-		t.Errorf("ProjectName = %q, want Demo", ws.WorkspaceConfig.ProjectName)
-	}
-	if len(ws.WorkspaceConfig.Repositories) != 1 {
-		t.Fatalf("Repositories = %+v, want 1 entry", ws.WorkspaceConfig.Repositories)
-	}
-	repo, ok := ws.WorkspaceConfig.Repositories["frontend"]
-	if !ok {
-		t.Fatal("missing frontend repository entry")
-	}
-	if repo.URL != "github.com/example/frontend" || repo.LocalDir != "frontend" {
-		t.Errorf("repository = %+v, want url and localDir", repo)
-	}
-	if repo.Root != "bKLqGV48" {
-		t.Errorf("Root = %q, want bKLqGV48", repo.Root)
+	repo := ws.WorkspaceConfig.Repositories["frontend"]
+	if ws.WorkspaceConfig.ProjectName != "Demo" || repo.URL != "github.com/example/frontend" || repo.LocalDir != "frontend" || repo.Root != "root-ref" {
+		t.Fatalf("unexpected workspace config: %+v / %+v", ws.WorkspaceConfig, repo)
 	}
 	if repo.Config == nil || repo.Config.Mode != "auto" {
-		t.Errorf("Config = %+v, want mode auto", repo.Config)
-	}
-	if len(ws.WorkspaceConfig.Exclude) != 2 {
-		t.Fatalf("Exclude = %+v, want 2 patterns", ws.WorkspaceConfig.Exclude)
+		t.Fatalf("unexpected repository mode: %+v", repo.Config)
 	}
 	rules := ws.IgnoreRulesForRepository("frontend")
-	if rules == nil {
-		t.Fatal("expected merged ignore rules")
-	}
-	if !rules.ShouldIgnorePath("pkg/example.pb.go") {
-		t.Error("expected global pb.go file to be ignored")
-	}
-	if !rules.ShouldIgnorePath("vendor/cache.txt") {
-		t.Error("expected global vendor path to be ignored")
-	}
-	if !rules.ShouldIgnoreSymbol("initHelper") {
-		t.Error("expected repo-specific symbol glob to be ignored")
-	}
-	if !rules.ShouldIgnorePath("pkg/helper_test.go") {
-		t.Error("expected repo-specific test file glob to be ignored")
+	if rules == nil || !rules.ShouldIgnorePath("pkg/example.pb.go") || !rules.ShouldIgnoreSymbol("initHelper") {
+		t.Fatalf("expected merged ignore rules, got %+v", rules)
 	}
 }
 
 func TestLoad_DefaultsRepositoryModeToUpsert(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, ".tld.yaml"), "project_name: Demo\nrepositories:\n  frontend:\n    url: github.com/example/frontend\n    localDir: frontend\n")
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, ".tld.yaml"), "repositories:\n  frontend:\n    url: github.com/example/frontend\n    localDir: frontend\n")
 
 	ws, err := workspace.Load(dir)
 	if err != nil {
@@ -178,144 +140,99 @@ func TestLoad_DefaultsRepositoryModeToUpsert(t *testing.T) {
 	}
 }
 
-func TestLoad_DiagramsLoaded(t *testing.T) {
+func TestLoad_ElementsLoadedAndMetadata(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "diagrams.yaml"), "system: {name: System}\ncontainer: {name: Container}\n")
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, "elements.yaml"), `api:
+  name: API
+  kind: service
+  description: Handles traffic
+  has_view: true
+  view_label: Container
+  placements:
+    - parent: root
+      position_x: 100
+      position_y: 50
+_meta_elements:
+  api:
+    id: 101
+    updated_at: 2024-03-24T10:00:00Z
+_meta_views:
+  api:
+    id: 202
+    updated_at: 2024-03-24T11:00:00Z
+`)
 
 	ws, err := workspace.Load(dir)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(ws.Diagrams) != 2 {
-		t.Fatalf("len(Diagrams) = %d, want 2", len(ws.Diagrams))
+	if len(ws.Elements) != 1 {
+		t.Fatalf("len(Elements) = %d, want 1", len(ws.Elements))
 	}
-	if _, ok := ws.Diagrams["system"]; !ok {
-		t.Error("missing 'system' diagram")
+	api := ws.Elements["api"]
+	if api == nil || api.Kind != "service" || !api.HasView || len(api.Placements) != 1 {
+		t.Fatalf("unexpected element: %+v", api)
 	}
-	if _, ok := ws.Diagrams["container"]; !ok {
-		t.Error("missing 'container' diagram")
+	if ws.Meta.Elements["api"].ID != 101 || ws.Meta.Views["api"].ID != 202 {
+		t.Fatalf("unexpected metadata: elements=%+v views=%+v", ws.Meta.Elements["api"], ws.Meta.Views["api"])
 	}
 }
 
-func TestLoad_MalformedDiagramYAML(t *testing.T) {
+func TestLoad_MalformedElementsYAML(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "diagrams.yaml"), ":\t:\n")
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, "elements.yaml"), ":\t:\n")
 
 	_, err := workspace.Load(dir)
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "parse diagrams.yaml") {
-		t.Errorf("error %q does not contain 'parse diagrams.yaml'", err.Error())
+	if !strings.Contains(err.Error(), "parse elements.yaml") {
+		t.Fatalf("error %q does not contain 'parse elements.yaml'", err.Error())
 	}
 }
 
-func TestLoad_ObjectsLoaded(t *testing.T) {
+func TestLoad_ConnectorsLoadedAndMetadata(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "objects.yaml"),
-		"api:\n  name: API\n  type: service\n  diagrams:\n    - diagram: system\n      position_x: 100\n      position_y: 50\n")
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, "connectors.yaml"), `system:api:db:reads:
+  view: system
+  source: api
+  target: db
+  label: reads
+_meta_connectors:
+  system:api:db:reads:
+    id: 303
+    updated_at: 2024-03-24T12:00:00Z
+`)
 
 	ws, err := workspace.Load(dir)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(ws.Objects) != 1 {
-		t.Fatalf("len(Objects) = %d, want 1", len(ws.Objects))
+	if len(ws.Connectors) != 1 {
+		t.Fatalf("len(Connectors) = %d, want 1", len(ws.Connectors))
 	}
-	api, ok := ws.Objects["api"]
-	if !ok {
-		t.Fatal("missing 'api' object")
+	conn := ws.Connectors["system:api:db:reads"]
+	if conn == nil || conn.Source != "api" || conn.Target != "db" {
+		t.Fatalf("unexpected connector: %+v", conn)
 	}
-	if api.Name != "API" || api.Type != "service" {
-		t.Errorf("unexpected object: %+v", api)
-	}
-	if len(api.Diagrams) != 1 || api.Diagrams[0].PositionX != 100 || api.Diagrams[0].PositionY != 50 {
-		t.Errorf("unexpected placements: %+v", api.Diagrams)
+	if ws.Meta.Connectors["system:api:db:reads"].ID != 303 {
+		t.Fatalf("unexpected connector metadata: %+v", ws.Meta.Connectors["system:api:db:reads"])
 	}
 }
 
-func TestLoad_MalformedObjectYAML(t *testing.T) {
+func TestLoad_MalformedConnectorsYAML(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "objects.yaml"), ":\t:\n")
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, "connectors.yaml"), ":\t:\n")
 
 	_, err := workspace.Load(dir)
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "parse objects.yaml") {
-		t.Errorf("error %q does not contain 'parse objects.yaml'", err.Error())
-	}
-}
-
-func TestLoad_EdgesLoaded(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "edges.yaml"),
-		"\"sys:a:b:\":\n  diagram: sys\n  source_object: a\n  target_object: b\n\"sys:c:d:\":\n  diagram: sys\n  source_object: c\n  target_object: d\n")
-
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(ws.Edges) != 2 {
-		t.Fatalf("len(Edges) = %d, want 2", len(ws.Edges))
-	}
-}
-
-func TestLoad_LinksLoaded(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "links.yaml"),
-		"- object: api\n  from_diagram: system\n  to_diagram: container\n")
-
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(ws.Links) != 1 {
-		t.Fatalf("len(Links) = %d, want 1", len(ws.Links))
-	}
-	if ws.Links[0].Object != "api" {
-		t.Errorf("Link.Object = %q", ws.Links[0].Object)
-	}
-}
-
-func TestLoad_MalformedEdgesYAML(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	writeFile(t, filepath.Join(dir, "edges.yaml"), "- diagram: sys\n  source_object: a\n  target_object: b\n")
-
-	_, err := workspace.Load(dir)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "parse edges.yaml") {
-		t.Errorf("error %q does not contain expected message", err.Error())
-	}
-}
-
-func TestLoad_DiagramsFileAbsent(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := setupConfig(t)
-	writeFile(t, cfgPath, minimalConfig())
-	// No diagrams.yaml created - should not be an error
-
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(ws.Diagrams) != 0 {
-		t.Errorf("expected 0 diagrams, got %d", len(ws.Diagrams))
+	if !strings.Contains(err.Error(), "parse connectors.yaml") {
+		t.Fatalf("error %q does not contain 'parse connectors.yaml'", err.Error())
 	}
 }

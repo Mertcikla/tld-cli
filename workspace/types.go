@@ -39,16 +39,10 @@ type Repository struct {
 
 // ValidationConfig represents diagram validation settings.
 type ValidationConfig struct {
-	Level           int  `yaml:"level"`
-	AllowLowInsight bool `yaml:"allow_low_insight"`
-}
-
-// Diagram represents an entry in diagrams.yaml
-type Diagram struct {
-	Name          string `yaml:"name"`
-	Description   string `yaml:"description,omitempty"`
-	LevelLabel    string `yaml:"level_label,omitempty"`
-	ParentDiagram string `yaml:"parent_diagram,omitempty"`
+	Level           int      `yaml:"level"`
+	AllowLowInsight bool     `yaml:"allow_low_insight"`
+	IncludeRules    []string `yaml:"include_rules,omitempty"`
+	ExcludeRules    []string `yaml:"exclude_rules,omitempty"`
 }
 
 // Placement is a diagram placement within an Object
@@ -64,43 +58,6 @@ type ViewPlacement struct {
 	ParentRef string  `yaml:"parent"`
 	PositionX float64 `yaml:"position_x,omitempty"`
 	PositionY float64 `yaml:"position_y,omitempty"`
-}
-
-// Object represents an entry in objects.yaml
-type Object struct {
-	Name        string      `yaml:"name"`
-	Type        string      `yaml:"type"`
-	Description string      `yaml:"description,omitempty"`
-	Technology  string      `yaml:"technology,omitempty"`
-	URL         string      `yaml:"url,omitempty"`
-	LogoURL     string      `yaml:"logo_url,omitempty"`
-	Repo        string      `yaml:"repo,omitempty"`
-	Branch      string      `yaml:"branch,omitempty"`
-	Language    string      `yaml:"language,omitempty"`
-	FilePath    string      `yaml:"file_path,omitempty"`
-	Diagrams    []Placement `yaml:"diagrams,omitempty"`
-}
-
-// Edge is one entry in edges.yaml
-type Edge struct {
-	Diagram          string `yaml:"diagram"`
-	SourceObject     string `yaml:"source_object"`
-	TargetObject     string `yaml:"target_object"`
-	Label            string `yaml:"label,omitempty"`
-	Description      string `yaml:"description,omitempty"`
-	RelationshipType string `yaml:"relationship_type,omitempty"`
-	Direction        string `yaml:"direction,omitempty"`
-	EdgeType         string `yaml:"edge_type,omitempty"`
-	URL              string `yaml:"url,omitempty"`
-	SourceHandle     string `yaml:"source_handle,omitempty"`
-	TargetHandle     string `yaml:"target_handle,omitempty"`
-}
-
-// Link is one entry in links.yaml
-type Link struct {
-	Object      string `yaml:"object,omitempty"`
-	FromDiagram string `yaml:"from_diagram"`
-	ToDiagram   string `yaml:"to_diagram"`
 }
 
 // Element is the primary workspace resource.
@@ -202,10 +159,6 @@ type Workspace struct {
 	Dir             string
 	Config          Config
 	WorkspaceConfig *WorkspaceConfig
-	Diagrams        map[string]*Diagram // key = ref
-	Objects         map[string]*Object  // key = ref
-	Edges           map[string]*Edge
-	Links           []Link
 	Elements        map[string]*Element // key = ref
 	Connectors      map[string]*Connector
 	Meta            *Meta         // Loaded from separate _meta sections

@@ -15,103 +15,6 @@ type metadataSection struct {
 	values map[string]*ResourceMetadata
 }
 
-// WriteDiagram adds a diagram to diagrams.yaml. Errors if ref already exists.
-func WriteDiagram(dir, ref string, spec *Diagram) error {
-	path := filepath.Join(dir, "diagrams.yaml")
-	return updateYAMLMap(path, ref, spec)
-}
-
-// UpdateDiagram overwrites a diagram in diagrams.yaml.
-func UpdateDiagram(dir, ref string, spec *Diagram) error {
-	path := filepath.Join(dir, "diagrams.yaml")
-	existing := make(map[string]*Diagram)
-	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
-	}
-	existing[ref] = spec
-	data, err := marshalPrettyYAML(existing)
-	if err != nil {
-		return fmt.Errorf("marshal diagrams: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write diagrams.yaml: %w", err)
-	}
-	return nil
-}
-
-// WriteObject adds an object to objects.yaml. Errors if ref already exists.
-func WriteObject(dir, ref string, spec *Object) error {
-	path := filepath.Join(dir, "objects.yaml")
-	return updateYAMLMap(path, ref, spec)
-}
-
-// UpdateObject overwrites an object in objects.yaml.
-func UpdateObject(dir, ref string, spec *Object) error {
-	path := filepath.Join(dir, "objects.yaml")
-	existing := make(map[string]*Object)
-	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
-	}
-	existing[ref] = spec
-	data, err := marshalPrettyYAML(existing)
-	if err != nil {
-		return fmt.Errorf("marshal objects: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write objects.yaml: %w", err)
-	}
-	return nil
-}
-
-// UpsertObject adds an object to objects.yaml or updates an existing one by adding a placement.
-func UpsertObject(dir, ref string, spec *Object) error {
-	return upsertYAMLNodeKey(filepath.Join(dir, "objects.yaml"), ref, spec)
-}
-
-// AppendEdge adds an Edge to edges.yaml keyed by "diagram:source:target:label" (creates file if absent).
-func AppendEdge(dir string, spec *Edge) error {
-	path := filepath.Join(dir, "edges.yaml")
-	existing := make(map[string]*Edge)
-	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
-		delete(existing, "_meta")
-	}
-	key := spec.Diagram + ":" + spec.SourceObject + ":" + spec.TargetObject + ":" + spec.Label
-	existing[key] = spec
-	data, err := marshalPrettyYAML(existing)
-	if err != nil {
-		return fmt.Errorf("marshal edges: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write edges.yaml: %w", err)
-	}
-	return nil
-}
-
-// UpdateEdge overwrites an edge in edges.yaml.
-func UpdateEdge(dir, key string, spec *Edge) error {
-	path := filepath.Join(dir, "edges.yaml")
-	existing := make(map[string]*Edge)
-	if data, err := os.ReadFile(path); err == nil {
-		_ = yaml.Unmarshal(data, &existing)
-	}
-	existing[key] = spec
-	data, err := marshalPrettyYAML(existing)
-	if err != nil {
-		return fmt.Errorf("marshal edges: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("write edges.yaml: %w", err)
-	}
-	return nil
-}
-
-// AppendLink appends a Link to links.yaml (creates file if absent).
-func AppendLink(dir string, spec *Link) error {
-	path := filepath.Join(dir, "links.yaml")
-	return appendYAMLList(path, spec)
-}
-
 // WriteElement adds an element to elements.yaml. Errors if ref already exists.
 func WriteElement(dir, ref string, spec *Element) error {
 	path := filepath.Join(dir, "elements.yaml")
@@ -175,38 +78,6 @@ func Save(ws *Workspace) error {
 			return fmt.Errorf("cleanup legacy workspace files: %w", err)
 		}
 		return nil
-	}
-
-	// Write diagrams
-	if err := WriteFullYAMLMap(filepath.Join(ws.Dir, "diagrams.yaml"), ws.Diagrams, ws.Meta.Diagrams); err != nil {
-		return fmt.Errorf("write diagrams: %w", err)
-	}
-
-	// Write objects
-	if err := WriteFullYAMLMap(filepath.Join(ws.Dir, "objects.yaml"), ws.Objects, ws.Meta.Objects); err != nil {
-		return fmt.Errorf("write objects: %w", err)
-	}
-
-	// Write edges
-	if len(ws.Edges) > 0 {
-		var edgesMeta map[string]*ResourceMetadata
-		if ws.Meta != nil {
-			edgesMeta = ws.Meta.Edges
-		}
-		if err := WriteFullYAMLMap(filepath.Join(ws.Dir, "edges.yaml"), ws.Edges, edgesMeta); err != nil {
-			return fmt.Errorf("write edges: %w", err)
-		}
-	}
-
-	// Write links
-	if len(ws.Links) > 0 {
-		data, err := marshalPrettyYAML(ws.Links)
-		if err != nil {
-			return fmt.Errorf("marshal links: %w", err)
-		}
-		if err := os.WriteFile(filepath.Join(ws.Dir, "links.yaml"), data, 0600); err != nil {
-			return fmt.Errorf("write links: %w", err)
-		}
 	}
 
 	return nil
@@ -294,12 +165,6 @@ func normalizeYAMLStyle(node *yaml.Node) {
 
 func mergeExistingSpec(ref string, existingNode *yaml.Node, spec any) (any, error) {
 	switch incoming := spec.(type) {
-	case *Object:
-		var existing Object
-		if err := existingNode.Decode(&existing); err != nil {
-			return nil, fmt.Errorf("decode existing object %q: %w", ref, err)
-		}
-		return mergeObjectFields(ref, &existing, incoming)
 	case *Element:
 		var existing Element
 		if err := existingNode.Decode(&existing); err != nil {
@@ -309,41 +174,6 @@ func mergeExistingSpec(ref string, existingNode *yaml.Node, spec any) (any, erro
 	default:
 		return spec, nil
 	}
-}
-
-func mergeObjectFields(ref string, existing, incoming *Object) (*Object, error) {
-	if existing.Type != incoming.Type {
-		return nil, fmt.Errorf("object %q already exists with type %q (tried to reuse as %q)", ref, existing.Type, incoming.Type)
-	}
-
-	merged := *existing
-	if merged.Name == "" {
-		merged.Name = incoming.Name
-	}
-	if merged.Description == "" {
-		merged.Description = incoming.Description
-	}
-	if merged.Technology == "" {
-		merged.Technology = incoming.Technology
-	}
-	if merged.URL == "" {
-		merged.URL = incoming.URL
-	}
-	for _, newPlacement := range incoming.Diagrams {
-		found := false
-		for index, placement := range merged.Diagrams {
-			if placement.Diagram == newPlacement.Diagram {
-				merged.Diagrams[index].PositionX = newPlacement.PositionX
-				merged.Diagrams[index].PositionY = newPlacement.PositionY
-				found = true
-				break
-			}
-		}
-		if !found {
-			merged.Diagrams = append(merged.Diagrams, newPlacement)
-		}
-	}
-	return &merged, nil
 }
 
 func mergeElementFields(ref string, existing, incoming *Element) (*Element, error) {
@@ -533,35 +363,6 @@ func EncodeMeta(meta map[string]*ResourceMetadata) (*yaml.Node, error) {
 	return metaNode, nil
 }
 
-// RenameDiagram changes a diagram ref in diagrams.yaml and cascades to all references.
-func RenameDiagram(dir, oldRef, newRef string) error {
-	if oldRef == newRef {
-		return nil
-	}
-
-	// 1. Update diagrams.yaml
-	if err := updateDiagramsYamlForRename(dir, oldRef, newRef); err != nil {
-		return err
-	}
-
-	// 2. Update objects.yaml (placements)
-	if err := updateObjectsYamlForDiagramRename(dir, oldRef, newRef); err != nil {
-		return err
-	}
-
-	// 3. Update edges.yaml (diagram field and keys)
-	if err := updateEdgesYamlForDiagramRename(dir, oldRef, newRef); err != nil {
-		return err
-	}
-
-	// 4. Update links.yaml
-	if err := updateLinksYamlForDiagramRename(dir, oldRef, newRef); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func updateDiagramsYamlForRename(dir, oldRef, newRef string) error {
 	path := filepath.Join(dir, "diagrams.yaml")
 	data, err := os.ReadFile(path)
@@ -597,147 +398,6 @@ func updateDiagramsYamlForRename(dir, oldRef, newRef string) error {
 	if err := os.WriteFile(path, out, 0600); err != nil {
 		return fmt.Errorf("write diagrams.yaml: %w", err)
 	}
-	return nil
-}
-
-func updateObjectsYamlForDiagramRename(dir, oldRef, newRef string) error {
-	objPath := filepath.Join(dir, "objects.yaml")
-	data, err := os.ReadFile(objPath)
-	if err != nil {
-		return nil // File might not exist, which is fine
-	}
-	var objects map[string]*Object
-	if err := yaml.Unmarshal(data, &objects); err != nil {
-		return nil // Invalid YAML or not objects.yaml, skip
-	}
-	changed := false
-	for _, o := range objects {
-		for i, p := range o.Diagrams {
-			if p.Diagram == oldRef {
-				o.Diagrams[i].Diagram = newRef
-				changed = true
-			}
-		}
-	}
-	if changed {
-		out, err := marshalPrettyYAML(objects)
-		if err != nil {
-			return fmt.Errorf("marshal objects: %w", err)
-		}
-		if err := os.WriteFile(objPath, out, 0600); err != nil {
-			return fmt.Errorf("write objects.yaml: %w", err)
-		}
-	}
-	return nil
-}
-
-func updateEdgesYamlForDiagramRename(dir, oldRef, newRef string) error {
-	edgePath := filepath.Join(dir, "edges.yaml")
-	data, err := os.ReadFile(edgePath)
-	if err != nil {
-		return nil
-	}
-	var edges map[string]any
-	if err := yaml.Unmarshal(data, &edges); err != nil {
-		return nil
-	}
-	newEdges := make(map[string]any)
-	changed := false
-	for k, v := range edges {
-		if k == "_meta" {
-			newEdges[k] = v
-			// Update _meta keys if needed
-			if meta, ok := v.(map[string]any); ok {
-				for mk, mv := range meta {
-					if strings.HasPrefix(mk, oldRef+":") {
-						newMk := newRef + mk[len(oldRef):]
-						meta[newMk] = mv
-						delete(meta, mk)
-						changed = true
-					}
-				}
-			}
-			continue
-		}
-		if m, ok := v.(map[string]any); ok {
-			if d, ok := m["diagram"].(string); ok && d == oldRef {
-				m["diagram"] = newRef
-				newKey := newRef + k[len(oldRef):]
-				newEdges[newKey] = m
-				changed = true
-			} else {
-				newEdges[k] = v
-			}
-		} else {
-			newEdges[k] = v
-		}
-	}
-	if changed {
-		out, err := marshalPrettyYAML(newEdges)
-		if err != nil {
-			return fmt.Errorf("marshal edges: %w", err)
-		}
-		if err := os.WriteFile(edgePath, out, 0600); err != nil {
-			return fmt.Errorf("write edges.yaml: %w", err)
-		}
-	}
-	return nil
-}
-
-func updateLinksYamlForDiagramRename(dir, oldRef, newRef string) error {
-	linkPath := filepath.Join(dir, "links.yaml")
-	data, err := os.ReadFile(linkPath)
-	if err != nil {
-		return nil
-	}
-	var links []map[string]any
-	if err := yaml.Unmarshal(data, &links); err != nil {
-		return nil
-	}
-	changed := false
-	for _, l := range links {
-		if f, ok := l["from_diagram"].(string); ok && f == oldRef {
-			l["from_diagram"] = newRef
-			changed = true
-		}
-		if t, ok := l["to_diagram"].(string); ok && t == oldRef {
-			l["to_diagram"] = newRef
-			changed = true
-		}
-	}
-	if changed {
-		out, err := marshalPrettyYAML(links)
-		if err != nil {
-			return fmt.Errorf("marshal links: %w", err)
-		}
-		if err := os.WriteFile(linkPath, out, 0600); err != nil {
-			return fmt.Errorf("write links.yaml: %w", err)
-		}
-	}
-	return nil
-}
-
-// RenameObject changes an object ref in objects.yaml and cascades to all references.
-func RenameObject(dir, oldRef, newRef string) error {
-	if oldRef == newRef {
-		return nil
-	}
-
-	// 1. Update objects.yaml
-	if err := updateObjectsYamlForRename(dir, oldRef, newRef); err != nil {
-		return err
-	}
-
-	// 2. Update edges.yaml (source_object and target_object fields and keys)
-	if err := updateEdgesYamlForObjectRename(dir, oldRef, newRef); err != nil {
-		return err
-	}
-
-	// 3. Update links.yaml
-	if err := updateLinksYamlForObjectRename(dir, oldRef, newRef); err != nil {
-		return err
-	}
-
 	return nil
 }
 

@@ -59,7 +59,7 @@ func buildPlanJSONOutput(ws *workspace.Workspace, resp *diagv1.ApplyPlanResponse
 	}
 	for _, group := range warnings {
 		for _, violation := range group.Violations {
-			output.Warnings = append(output.Warnings, fmt.Sprintf("[%s] %s", group.RuleName, violation))
+			output.Warnings = append(output.Warnings, fmt.Sprintf("[%s] %s: %s", group.RuleCode, group.RuleName, violation))
 		}
 	}
 	return output
