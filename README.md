@@ -94,8 +94,8 @@ A tld workspace consists of the following directory structure:
 - `tld connect --from <source> --to <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
 - `tld remove element <ref>`: Remove an element from the workspace.
 - `tld remove connector --view <ref> --from <source_ref> --to <target_ref>`: Remove matching connector(s).
-- `tld rename element <old-ref> <new-ref>`: Rename an element reference and cascade the change through placements and connector endpoints.
-- `tld rename connector <old-ref> <new-ref>`: Rename a connector key.
+- `tld update element <ref> <field> <value>`: Update an element field. Use `field=ref` to rename an element reference and cascade the change through placements and connector endpoints.
+- `tld update connector <ref> <field> <value>`: Update a connector field. Use `field=ref` to rename a connector key.
 
 ## Conflict Resolution
 

@@ -64,8 +64,8 @@ and apply them atomically with 'tld apply'.`,
 	removeCmd := newRemoveCmd(&wdir)
 	removeCmd.GroupID = resourceGroup.ID
 
-	renameCmd := newRenameCmd(&wdir)
-	renameCmd.GroupID = resourceGroup.ID
+	updateCmd := newUpdateCmd(&wdir)
+	updateCmd.GroupID = resourceGroup.ID
 
 	// Secondary Commands
 	initCmd := newInitCmd()
@@ -117,7 +117,7 @@ and apply them atomically with 'tld apply'.`,
 		addCmd,
 		connectCmd,
 		removeCmd,
-		renameCmd,
+		updateCmd,
 		analyzeCmd,
 		checkCmd,
 		versionCmd,

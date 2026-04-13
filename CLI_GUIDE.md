@@ -114,11 +114,11 @@ The CLI only exposes the unified element and connector workflow. Server export a
 
 ### Connecting and Linking Resources
 
-#### `tld rename element <old-ref> <new-ref>`
-Rename an element reference in `elements.yaml` and cascade the change through placements, connector endpoints, and metadata.
+#### `tld update element <ref> <field> <value>`
+Update one element field in `elements.yaml`. Use `field=ref` to rename an element reference and cascade the change through placements, connector endpoints, and metadata.
 
-#### `tld rename connector <old-ref> <new-ref>`
-Rename a connector key in `connectors.yaml`.
+#### `tld update connector <ref> <field> <value>`
+Update one connector field in `connectors.yaml`. Updating `view`, `source`, `target`, or `label` regenerates the connector key. Use `field=ref` to rename a connector key directly.
 
 ### Workspace Workflow
 

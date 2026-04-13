@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -401,6 +402,42 @@ func RenameElement(dir, oldRef, newRef string) error {
 	return RenameConnector(dir, oldRef, newRef)
 }
 
+// UpdateElementField updates one scalar field on an element by ref.
+// Special case: field "ref" performs a cascading element rename.
+func UpdateElementField(dir, ref, field, value string) error {
+	if field == "ref" {
+		return RenameElement(dir, ref, value)
+	}
+
+	path := filepath.Join(dir, "elements.yaml")
+	root, mapping, err := loadYAMLMappingNode(path)
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		keyNode := mapping.Content[i]
+		if keyNode.Value == "_meta_elements" || keyNode.Value == "_meta_views" {
+			continue
+		}
+		if keyNode.Value != ref {
+			continue
+		}
+		found = true
+		if err := setMappingScalarField(mapping.Content[i+1], field, value); err != nil {
+			return fmt.Errorf("update element %q field %q: %w", ref, field, err)
+		}
+		break
+	}
+
+	if !found {
+		return fmt.Errorf("element %q not found", ref)
+	}
+
+	return writeYAMLNode(path, root)
+}
+
 func updatePlacementParentRefs(node *yaml.Node, oldRef, newRef string) {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return
@@ -503,6 +540,85 @@ func RenameConnector(dir, oldRef, newRef string) error {
 	return writeYAMLNode(path, root)
 }
 
+// UpdateConnectorField updates one scalar field on a connector by key.
+// Special case: field "ref" performs a connector key rename.
+func UpdateConnectorField(dir, ref, field, value string) error {
+	if field == "ref" {
+		return RenameConnector(dir, ref, value)
+	}
+
+	path := filepath.Join(dir, "connectors.yaml")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("connector %q not found", ref)
+		}
+		return fmt.Errorf("stat connectors.yaml: %w", err)
+	}
+
+	root, mapping, err := loadYAMLMappingNode(path)
+	if err != nil {
+		return err
+	}
+
+	found := false
+	renames := make(map[string]string)
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		keyNode := mapping.Content[i]
+		if keyNode.Value == "_meta_connectors" || keyNode.Value == "_meta" {
+			continue
+		}
+		if keyNode.Value != ref {
+			continue
+		}
+
+		found = true
+		valNode := mapping.Content[i+1]
+		if err := setMappingScalarField(valNode, field, value); err != nil {
+			return fmt.Errorf("update connector %q field %q: %w", ref, field, err)
+		}
+
+		newRef := ref
+		if field == "view" || field == "source" || field == "target" || field == "label" {
+			var spec Connector
+			if err := valNode.Decode(&spec); err != nil {
+				return fmt.Errorf("decode connector %q: %w", ref, err)
+			}
+			newRef = connectorKey(&spec)
+		}
+
+		if newRef != ref {
+			for j := 0; j+1 < len(mapping.Content); j += 2 {
+				otherKey := mapping.Content[j].Value
+				if otherKey == "_meta_connectors" || otherKey == "_meta" || otherKey == ref {
+					continue
+				}
+				if otherKey == newRef {
+					return fmt.Errorf("connector %q already exists", newRef)
+				}
+			}
+			keyNode.Value = newRef
+			renames[ref] = newRef
+		}
+		break
+	}
+
+	if !found {
+		return fmt.Errorf("connector %q not found", ref)
+	}
+
+	if len(renames) > 0 {
+		for i := 0; i+1 < len(mapping.Content); i += 2 {
+			keyNode := mapping.Content[i]
+			if keyNode.Value != "_meta_connectors" && keyNode.Value != "_meta" {
+				continue
+			}
+			renameMappingKeys(mapping.Content[i+1], renames)
+		}
+	}
+
+	return writeYAMLNode(path, root)
+}
+
 func updateScalarField(mapping *yaml.Node, fieldName, oldVal, newVal string) bool {
 	if mapping.Kind != yaml.MappingNode {
 		return false
@@ -514,6 +630,80 @@ func updateScalarField(mapping *yaml.Node, fieldName, oldVal, newVal string) boo
 		}
 	}
 	return false
+}
+
+func setMappingScalarField(mapping *yaml.Node, fieldName, value string) error {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return fmt.Errorf("resource value must be a mapping")
+	}
+
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value != fieldName {
+			continue
+		}
+		newNode, err := coerceScalarNode(value, mapping.Content[i+1])
+		if err != nil {
+			return err
+		}
+		mapping.Content[i+1] = newNode
+		return nil
+	}
+
+	mapping.Content = append(mapping.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fieldName},
+		inferScalarNode(value),
+	)
+	return nil
+}
+
+func coerceScalarNode(value string, existing *yaml.Node) (*yaml.Node, error) {
+	if existing != nil && existing.Kind != yaml.ScalarNode {
+		return nil, fmt.Errorf("field is not scalar and cannot be updated with a single value")
+	}
+
+	if existing == nil {
+		return inferScalarNode(value), nil
+	}
+
+	switch existing.Tag {
+	case "!!bool":
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid boolean value %q", value)
+		}
+		if parsed {
+			return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"}, nil
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "false"}, nil
+	case "!!int":
+		if _, err := strconv.Atoi(value); err != nil {
+			return nil, fmt.Errorf("invalid integer value %q", value)
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: value}, nil
+	case "!!float":
+		if _, err := strconv.ParseFloat(value, 64); err != nil {
+			return nil, fmt.Errorf("invalid float value %q", value)
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!float", Value: value}, nil
+	default:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}, nil
+	}
+}
+
+func inferScalarNode(value string) *yaml.Node {
+	if parsedBool, err := strconv.ParseBool(value); err == nil {
+		if parsedBool {
+			return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"}
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "false"}
+	}
+	if _, err := strconv.Atoi(value); err == nil {
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: value}
+	}
+	if _, err := strconv.ParseFloat(value, 64); err == nil && strings.Contains(value, ".") {
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!float", Value: value}
+	}
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 }
 
 func renameMappingKeys(mapping *yaml.Node, renames map[string]string) {

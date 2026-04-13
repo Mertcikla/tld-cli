@@ -7,10 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRenameCmd(wdir *string) *cobra.Command {
+func newUpdateCmd(wdir *string) *cobra.Command {
 	c := &cobra.Command{
-		Use:   "rename",
-		Short: "Rename resource references and cascade changes",
+		Use:   "update",
+		Short: "Update a resource field with a value",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
@@ -19,39 +19,39 @@ func newRenameCmd(wdir *string) *cobra.Command {
 		},
 	}
 
-	c.AddCommand(newRenameElementCmd(wdir))
-	c.AddCommand(newRenameConnectorCmd(wdir))
+	c.AddCommand(newUpdateElementCmd(wdir))
+	c.AddCommand(newUpdateConnectorCmd(wdir))
 
 	return c
 }
 
-func newRenameElementCmd(wdir *string) *cobra.Command {
+func newUpdateElementCmd(wdir *string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "element <old-ref> <new-ref>",
-		Short: "Rename an element reference and all its usages",
-		Args:  cobra.ExactArgs(2),
+		Use:   "element <ref> <field> <value>",
+		Short: "Update an element field",
+		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			oldRef, newRef := args[0], args[1]
-			if err := workspace.RenameElement(*wdir, oldRef, newRef); err != nil {
-				return fmt.Errorf("rename element: %w", err)
+			ref, field, value := args[0], args[1], args[2]
+			if err := workspace.UpdateElementField(*wdir, ref, field, value); err != nil {
+				return fmt.Errorf("update element: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Renamed element %q to %q and updated all references.\n", oldRef, newRef)
+			fmt.Fprintf(cmd.OutOrStdout(), "Updated element %q: %s=%q\n", ref, field, value)
 			return nil
 		},
 	}
 }
 
-func newRenameConnectorCmd(wdir *string) *cobra.Command {
+func newUpdateConnectorCmd(wdir *string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "connector <old-ref> <new-ref>",
-		Short: "Rename a connector reference",
-		Args:  cobra.ExactArgs(2),
+		Use:   "connector <ref> <field> <value>",
+		Short: "Update a connector field",
+		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			oldRef, newRef := args[0], args[1]
-			if err := workspace.RenameConnector(*wdir, oldRef, newRef); err != nil {
-				return fmt.Errorf("rename connector: %w", err)
+			ref, field, value := args[0], args[1], args[2]
+			if err := workspace.UpdateConnectorField(*wdir, ref, field, value); err != nil {
+				return fmt.Errorf("update connector: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Renamed connector %q to %q.\n", oldRef, newRef)
+			fmt.Fprintf(cmd.OutOrStdout(), "Updated connector %q: %s=%q\n", ref, field, value)
 			return nil
 		},
 	}
