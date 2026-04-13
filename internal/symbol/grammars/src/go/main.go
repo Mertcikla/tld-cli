@@ -18,9 +18,11 @@ import (
 )
 
 type Symbol struct {
-	Name string `json:"name"`
-	Kind string `json:"kind"`
-	Line int    `json:"line"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Line    int    `json:"line"`
+	EndLine int    `json:"end_line"`
+	Parent  string `json:"parent,omitempty"`
 }
 
 type Ref struct {
@@ -56,17 +58,31 @@ func main() {
 				return true
 			}
 			kind := "function"
+			parent := ""
 			if node.Recv != nil && len(node.Recv.List) > 0 {
 				kind = "method"
+				// Try to find receiver type name
+				switch t := node.Recv.List[0].Type.(type) {
+				case *ast.Ident:
+					parent = t.Name
+				case *ast.StarExpr:
+					if id, ok := t.X.(*ast.Ident); ok {
+						parent = id.Name
+					}
+				}
 			}
 			pos := fset.Position(node.Name.Pos())
+			end := fset.Position(node.End())
 			result.Symbols = append(result.Symbols, Symbol{
-				Name: node.Name.Name,
-				Kind: kind,
-				Line: pos.Line,
+				Name:    node.Name.Name,
+				Kind:    kind,
+				Line:    pos.Line,
+				EndLine: end.Line,
+				Parent:  parent,
 			})
 		case *ast.TypeSpec:
 			pos := fset.Position(node.Name.Pos())
+			end := fset.Position(node.End())
 			kind := "type"
 			switch node.Type.(type) {
 			case *ast.StructType:
@@ -75,9 +91,10 @@ func main() {
 				kind = "interface"
 			}
 			result.Symbols = append(result.Symbols, Symbol{
-				Name: node.Name.Name,
-				Kind: kind,
-				Line: pos.Line,
+				Name:    node.Name.Name,
+				Kind:    kind,
+				Line:    pos.Line,
+				EndLine: end.Line,
 			})
 		case *ast.CallExpr:
 			// Extract direct function call references

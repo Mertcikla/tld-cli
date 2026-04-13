@@ -265,6 +265,13 @@ for cross-file call references.`,
 						continue
 					}
 
+					parentRef := fileRef
+					if sym.Parent != "" {
+						if p, ok := symbolRefs[sym.Parent]; ok {
+							parentRef = p
+						}
+					}
+
 					ref, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
 						Name:      sym.Name,
 						Kind:      sym.Kind,
@@ -273,7 +280,7 @@ for cross-file call references.`,
 						Branch:    branch,
 						FilePath:  relPath,
 						Symbol:    sym.Name,
-						ParentRef: fileRef,
+						ParentRef: parentRef,
 						Identity: analyzeElementIdentity{
 							Repo:     repoURL,
 							Branch:   branch,
@@ -306,7 +313,7 @@ for cross-file call references.`,
 						continue
 					}
 
-					fromRef := refByFile(ref.FilePath, symbolRefs, filtered)
+					fromRef := refByFileAndLine(ref.FilePath, ref.Line, symbolRefs, filtered)
 					if fromRef == "" || fromRef == toRef {
 						continue
 					}
@@ -486,13 +493,23 @@ func filterRefsByFiles(refs []symbol.Ref, changedFiles map[string]struct{}) []sy
 	return out
 }
 
-func refByFile(filePath string, refMap map[string]string, symbols []symbol.Symbol) string {
+func refByFileAndLine(filePath string, line int, refMap map[string]string, symbols []symbol.Symbol) string {
+	var bestSymbol symbol.Symbol
+	found := false
 	for _, s := range symbols {
 		if filepath.Clean(s.FilePath) == filepath.Clean(filePath) {
-			if ref, ok := refMap[s.Name]; ok {
-				return ref
+			// Check if line is within symbol range
+			if s.Line <= line && (s.EndLine == 0 || s.EndLine >= line) {
+				// Narrowest match: largest Line among candidates
+				if !found || s.Line > bestSymbol.Line {
+					bestSymbol = s
+					found = true
+				}
 			}
 		}
+	}
+	if found {
+		return refMap[bestSymbol.Name]
 	}
 	return ""
 }

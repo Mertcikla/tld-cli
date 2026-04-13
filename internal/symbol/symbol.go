@@ -9,6 +9,8 @@ type Symbol struct {
 	Kind     string `json:"kind"` // "function" | "method" | "class" | "struct" | "interface" | "type"
 	FilePath string `json:"file_path,omitempty"`
 	Line     int    `json:"line"`
+	EndLine  int    `json:"end_line,omitempty"`
+	Parent   string `json:"parent,omitempty"`
 }
 
 // Ref is a call-site reference to a named symbol found within a source file.

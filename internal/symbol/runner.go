@@ -13,9 +13,11 @@ import (
 // wasmResult is the JSON shape written to stdout by each grammar WASM module.
 type wasmResult struct {
 	Symbols []struct {
-		Name string `json:"name"`
-		Kind string `json:"kind"`
-		Line int    `json:"line"`
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
+		Line    int    `json:"line"`
+		EndLine int    `json:"end_line"`
+		Parent  string `json:"parent"`
 	} `json:"symbols"`
 	Refs []struct {
 		Name string `json:"name"`
@@ -61,7 +63,13 @@ func runGrammar(ctx context.Context, wasmBytes []byte, src []byte) (*Result, err
 		Refs:    make([]Ref, 0, len(raw.Refs)),
 	}
 	for _, s := range raw.Symbols {
-		result.Symbols = append(result.Symbols, Symbol{Name: s.Name, Kind: s.Kind, Line: s.Line})
+		result.Symbols = append(result.Symbols, Symbol{
+			Name:    s.Name,
+			Kind:    s.Kind,
+			Line:    s.Line,
+			EndLine: s.EndLine,
+			Parent:  s.Parent,
+		})
 	}
 	for _, r := range raw.Refs {
 		result.Refs = append(result.Refs, Ref{Name: r.Name, Line: r.Line})
