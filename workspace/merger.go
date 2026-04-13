@@ -171,6 +171,7 @@ func mergeYAMLMapWithMetadataSections(path string, serverItems any, serverMeta m
 	mapping.Content = newContent
 
 	// Write back
+	normalizeYAMLStyle(&root)
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)

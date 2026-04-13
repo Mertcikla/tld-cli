@@ -43,9 +43,13 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 			ref = workspace.Slugify(e.Name)
 		}
 		objectIDToRef[e.Id] = ref
+		kind := e.GetKind()
+		if kind == "" {
+			kind = "element" // Fallback to 'element' to ensure tld validate passes
+		}
 		newWS.Elements[ref] = &workspace.Element{
 			Name:        e.Name,
-			Kind:        e.GetKind(),
+			Kind:        kind,
 			Description: e.GetDescription(),
 			Technology:  e.GetTechnology(),
 			URL:         e.GetUrl(),

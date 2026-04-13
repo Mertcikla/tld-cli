@@ -163,9 +163,6 @@ type Workspace struct {
 
 // Meta contains current-model metadata plus legacy buckets retained for compatibility with older lockfiles and exports.
 type Meta struct {
-	Diagrams   map[string]*ResourceMetadata
-	Objects    map[string]*ResourceMetadata
-	Edges      map[string]*ResourceMetadata // key = "diagramRef:srcRef:tgtRef:label"
 	Elements   map[string]*ResourceMetadata
 	Views      map[string]*ResourceMetadata
 	Connectors map[string]*ResourceMetadata

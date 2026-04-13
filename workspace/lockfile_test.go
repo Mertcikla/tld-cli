@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestLockFile(t *testing.T) {
@@ -80,52 +79,6 @@ func TestCalculateWorkspaceHash(t *testing.T) {
 	}
 	if hash1 == hash2 {
 		t.Error("expected different hashes after file change")
-	}
-}
-
-func TestMetadata(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	diagramsYAML := `
-diag1:
-  name: D1
-_meta:
-  diag1:
-    id: "hash1"
-    updated_at: "2024-03-24T10:00:00Z"
-`
-	if err := os.WriteFile(filepath.Join(tmpDir, "diagrams.yaml"), []byte(diagramsYAML), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	meta, err := LoadMetadata(tmpDir)
-	if err != nil {
-		t.Errorf("LoadMetadata failed: %v", err)
-	}
-	if _, ok := meta.Diagrams["diag1"]; !ok {
-		t.Error("expected diag1 in metadata")
-	}
-
-	newMeta := map[string]*ResourceMetadata{
-		"diag2": {
-			ID:        123,
-			UpdatedAt: time.Now().UTC().Truncate(time.Second),
-		},
-	}
-	err = WriteMetadata(tmpDir, "objects.yaml", newMeta)
-	if err != nil {
-		t.Errorf("WriteMetadata failed: %v", err)
-	}
-
-	meta2, err := LoadMetadata(tmpDir)
-	if err != nil {
-		t.Errorf("LoadMetadata failed: %v", err)
-	}
-	if _, ok := meta2.Objects["diag2"]; !ok {
-		t.Error("expected diag2 in metadata")
-	}
-	if meta2.Objects["diag2"].ID != ResourceID(123) {
-		t.Errorf("expected ID 123, got %d", meta2.Objects["diag2"].ID)
 	}
 }
 

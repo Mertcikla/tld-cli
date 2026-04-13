@@ -155,13 +155,62 @@ func encodeYAMLValueNode(spec any) (*yaml.Node, error) {
 }
 
 func normalizeYAMLStyle(node *yaml.Node) {
+	normalizeYAMLStyleRecursive(node, 0)
+}
+
+func normalizeYAMLStyleRecursive(node *yaml.Node, depth int) {
 	if node == nil {
 		return
 	}
 	node.Style &^= yaml.FlowStyle
-	for _, child := range node.Content {
-		normalizeYAMLStyle(child)
+
+	if node.Kind == yaml.MappingNode {
+		// Only add blank lines between top-level resources (depth 1)
+		// and ensure _meta sections also have a leading blank line.
+		if depth == 1 {
+			for i := 2; i < len(node.Content); i += 2 {
+				node.Content[i].HeadComment = "\n"
+			}
+		}
+
+		// Prettify field order within elements (depth 2)
+		// We want 'name' and 'kind' to always be at the top.
+		if depth == 2 {
+			reorderMappingFields(node, []string{"name", "kind"})
+		}
 	}
+
+	for _, child := range node.Content {
+		normalizeYAMLStyleRecursive(child, depth+1)
+	}
+}
+
+func reorderMappingFields(node *yaml.Node, priority []string) {
+	if node.Kind != yaml.MappingNode {
+		return
+	}
+	var newContent []*yaml.Node
+	seen := make(map[int]bool)
+
+	// Pull priority fields to the top
+	for _, fieldName := range priority {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if !seen[i] && node.Content[i].Value == fieldName {
+				newContent = append(newContent, node.Content[i], node.Content[i+1])
+				seen[i] = true
+				break
+			}
+		}
+	}
+
+	// Append everything else in original order
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if !seen[i] {
+			newContent = append(newContent, node.Content[i], node.Content[i+1])
+		}
+	}
+
+	node.Content = newContent
 }
 
 func mergeExistingSpec(ref string, existingNode *yaml.Node, spec any) (any, error) {

@@ -153,27 +153,9 @@ func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCoun
 // LoadMetadata loads metadata from current files and, when present, legacy files for backward compatibility.
 func LoadMetadata(dir string) (*Meta, error) {
 	meta := &Meta{
-		Diagrams:   make(map[string]*ResourceMetadata),
-		Objects:    make(map[string]*ResourceMetadata),
-		Edges:      make(map[string]*ResourceMetadata),
 		Elements:   make(map[string]*ResourceMetadata),
 		Views:      make(map[string]*ResourceMetadata),
 		Connectors: make(map[string]*ResourceMetadata),
-	}
-
-	// Load diagrams metadata
-	if err := loadYAMLMetadataSection(filepath.Join(dir, "diagrams.yaml"), "_meta", meta.Diagrams); err != nil {
-		return nil, fmt.Errorf("load diagrams metadata: %w", err)
-	}
-
-	// Load objects metadata
-	if err := loadYAMLMetadataSection(filepath.Join(dir, "objects.yaml"), "_meta", meta.Objects); err != nil {
-		return nil, fmt.Errorf("load objects metadata: %w", err)
-	}
-
-	// Load edges metadata
-	if err := loadYAMLMetadataSection(filepath.Join(dir, "edges.yaml"), "_meta", meta.Edges); err != nil {
-		return nil, fmt.Errorf("load edges metadata: %w", err)
 	}
 
 	if err := loadYAMLMetadataSection(filepath.Join(dir, "elements.yaml"), "_meta_elements", meta.Elements); err != nil {
