@@ -110,6 +110,7 @@ func (p *javaParser) appendCall(node *sitter.Node, source []byte, path string, r
 		Name:     name,
 		FilePath: path,
 		Line:     line,
+		Column:   int(node.StartPosition().Column) + 1,
 	})
 }
 
@@ -130,6 +131,7 @@ func (p *javaParser) appendObjectCreation(node *sitter.Node, source []byte, path
 		Name:     name,
 		FilePath: path,
 		Line:     line,
+		Column:   int(node.StartPosition().Column) + 1,
 	})
 }
 

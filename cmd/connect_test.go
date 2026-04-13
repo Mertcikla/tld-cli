@@ -5,9 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/mertcikla/tld-cli/workspace"
+	"gopkg.in/yaml.v3"
 )
 
 // setupWorkspaceForLinks creates an element workspace with two children on the same parent diagram.
@@ -28,14 +27,11 @@ func TestConnectCmd_AppendsConnector(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
+	ws, err := workspace.Load(dir)
 	if err != nil {
-		t.Fatalf("read connectors.yaml: %v", err)
+		t.Fatalf("load workspace: %v", err)
 	}
-	var connectors map[string]*workspace.Connector
-	if err := yaml.Unmarshal(data, &connectors); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	connectors := ws.Connectors
 	if len(connectors) != 1 {
 		t.Fatalf("len(connectors) = %d, want 1", len(connectors))
 	}
@@ -56,14 +52,11 @@ func TestConnectCmd_RootElementsInferRootDiagram(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
+	ws, err := workspace.Load(dir)
 	if err != nil {
-		t.Fatalf("read connectors.yaml: %v", err)
+		t.Fatalf("load workspace: %v", err)
 	}
-	var connectors map[string]*workspace.Connector
-	if err := yaml.Unmarshal(data, &connectors); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	connectors := ws.Connectors
 	if len(connectors) != 1 {
 		t.Fatalf("len(connectors) = %d, want 1", len(connectors))
 	}
@@ -86,9 +79,11 @@ func TestConnectCmd_TwoCallsTwoEntries(t *testing.T) {
 		t.Fatalf("second connect: %v", err)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
-	var connectors map[string]*workspace.Connector
-	_ = yaml.Unmarshal(data, &connectors)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("load workspace: %v", err)
+	}
+	connectors := ws.Connectors
 
 	if len(connectors) != 2 {
 		t.Fatalf("len(connectors) = %d, want 2", len(connectors))
@@ -108,9 +103,11 @@ func TestConnectCmd_ElementsInDifferentDiagramsSucceeds(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
-	var connectors map[string]*workspace.Connector
-	_ = yaml.Unmarshal(data, &connectors)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("load workspace: %v", err)
+	}
+	connectors := ws.Connectors
 	connector := connectors["root:api:db:"]
 	if connector == nil || connector.View != "root" {
 		t.Errorf("expected connector in root view, got %+v", connector)
@@ -136,17 +133,24 @@ func TestConnectCmd_ElementsWithMultiplePlacementsSucceeds(t *testing.T) {
 			},
 		},
 	}
-	data, _ := yaml.Marshal(elements)
-	os.WriteFile(filepath.Join(dir, "elements.yaml"), data, 0600)
+	data, err := yaml.Marshal(elements)
+	if err != nil {
+		t.Fatalf("marshal elements: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), data, 0600); err != nil {
+		t.Fatalf("write elements.yaml: %v", err)
+	}
 
-	_, _, err := runCmd(t, dir, "connect", "--from", "api", "--to", "db")
+	_, _, err = runCmd(t, dir, "connect", "--from", "api", "--to", "db")
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 
-	raw, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
-	var connectors map[string]*workspace.Connector
-	_ = yaml.Unmarshal(raw, &connectors)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("load workspace: %v", err)
+	}
+	connectors := ws.Connectors
 	connector := connectors["other:api:db:"]
 	if connector == nil || connector.View != "other" {
 		t.Errorf("expected connector in 'other' view (shared parent), got %+v", connector)

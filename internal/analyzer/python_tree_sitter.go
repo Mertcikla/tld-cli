@@ -77,6 +77,7 @@ func (p *pythonParser) appendCall(node *sitter.Node, source []byte, path string,
 		Name:     name,
 		FilePath: path,
 		Line:     int(functionNode.StartPosition().Row) + 1,
+		Column:   int(functionNode.StartPosition().Column) + 1,
 	})
 }
 

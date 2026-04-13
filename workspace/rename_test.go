@@ -37,6 +37,9 @@ _meta_views:
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{Version: "v1"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "connectors.yaml"), []byte(`platform:platform:api:contains:
   view: platform
   source: platform
@@ -73,8 +76,18 @@ _meta_connectors:
 	if !strings.Contains(elementsText, "parent: platform-core") {
 		t.Fatalf("placement parent was not updated:\n%s", elementsText)
 	}
-	if !strings.Contains(elementsText, "_meta_elements:") || !strings.Contains(elementsText, "_meta_views:") || !strings.Contains(elementsText, "platform-core:") {
+	if strings.Contains(elementsText, "_meta_elements:") || strings.Contains(elementsText, "_meta_views:") || !strings.Contains(elementsText, "platform-core:") {
 		t.Fatalf("element metadata was not updated:\n%s", elementsText)
+	}
+	lockFile, err := workspace.LoadLockFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lockFile.CurrentElements["platform-core"] == nil || lockFile.CurrentElements["platform"] != nil {
+		t.Fatalf("lockfile current element metadata was not renamed: %+v", lockFile.CurrentElements)
+	}
+	if lockFile.CurrentViews["platform-core"] == nil || lockFile.CurrentViews["platform"] != nil {
+		t.Fatalf("lockfile current view metadata was not renamed: %+v", lockFile.CurrentViews)
 	}
 
 	connectorsData, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
@@ -82,17 +95,11 @@ _meta_connectors:
 		t.Fatal(err)
 	}
 	connectorsText := string(connectorsData)
-	if strings.Contains(connectorsText, "platform:platform:api:contains") || strings.Contains(connectorsText, "system:web:platform:calls") {
-		t.Fatalf("old connector keys still exist:\n%s", connectorsText)
-	}
-	if !strings.Contains(connectorsText, "platform-core:platform-core:api:contains") || !strings.Contains(connectorsText, "system:web:platform-core:calls") {
-		t.Fatalf("renamed connector keys missing:\n%s", connectorsText)
-	}
 	if !strings.Contains(connectorsText, "view: platform-core") || !strings.Contains(connectorsText, "source: platform-core") || !strings.Contains(connectorsText, "target: platform-core") {
 		t.Fatalf("connector fields were not updated:\n%s", connectorsText)
 	}
-	if !strings.Contains(connectorsText, "_meta_connectors:") || !strings.Contains(connectorsText, "platform-core:platform-core:api:contains") {
-		t.Fatalf("connector metadata was not renamed:\n%s", connectorsText)
+	if strings.Contains(connectorsText, "updated_at:") {
+		t.Fatalf("connectors.yaml should not keep inline updated_at after rename with lockfile:\n%s", connectorsText)
 	}
 }
 
@@ -129,32 +136,27 @@ _meta_connectors:
 		t.Fatal(err)
 	}
 
-	var got map[string]workspace.Connector
+	var got []workspace.Connector
 	if err := yaml.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := got["system:api-handler:db:reads"]; ok {
-		t.Fatal("old connector key still exists")
+	if len(got) != 2 {
+		t.Fatalf("expected 2 connectors, got %d", len(got))
 	}
-	if _, ok := got["system:web:api-handler:calls"]; ok {
-		t.Fatal("old target connector key still exists")
+	foundSourceRename := false
+	foundTargetRename := false
+	for _, conn := range got {
+		if conn.Source == "api-handler-2" && conn.Target == "db" && conn.Label == "reads" {
+			foundSourceRename = true
+		}
+		if conn.Source == "web" && conn.Target == "api-handler-2" && conn.Label == "calls" {
+			foundTargetRename = true
+		}
 	}
-	if conn, ok := got["system:api-handler-2:db:reads"]; !ok {
-		t.Fatal("renamed source connector key missing")
-	} else if conn.Source != "api-handler-2" {
-		t.Fatalf("source not updated: %+v", conn)
+	if !foundSourceRename {
+		t.Fatalf("renamed source connector missing: %+v", got)
 	}
-	if conn, ok := got["system:web:api-handler-2:calls"]; !ok {
-		t.Fatal("renamed target connector key missing")
-	} else if conn.Target != "api-handler-2" {
-		t.Fatalf("target not updated: %+v", conn)
-	}
-
-	text := string(data)
-	if !strings.Contains(text, "_meta_connectors:") {
-		t.Fatalf("metadata section missing:\n%s", text)
-	}
-	if !strings.Contains(text, "system:api-handler-2:db:reads") || !strings.Contains(text, "system:web:api-handler-2:calls") {
-		t.Fatalf("metadata keys were not renamed:\n%s", text)
+	if !foundTargetRename {
+		t.Fatalf("renamed target connector missing: %+v", got)
 	}
 }

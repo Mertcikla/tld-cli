@@ -147,7 +147,16 @@ func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCoun
 	}
 	lockFile.WorkspaceHash = workspaceHash
 	lockFile.ParentVersion = parentVersion
-	lockFile.Metadata = metadata
+	lockFile.Metadata = cloneMeta(metadata)
+	if metadata == nil {
+		lockFile.CurrentElements = nil
+		lockFile.CurrentViews = nil
+		lockFile.CurrentConnectors = nil
+	} else {
+		lockFile.CurrentElements = cloneResourceMetadataMap(metadata.Elements)
+		lockFile.CurrentViews = cloneResourceMetadataMap(metadata.Views)
+		lockFile.CurrentConnectors = cloneResourceMetadataMap(metadata.Connectors)
+	}
 }
 
 // LoadMetadata loads metadata from current files and, when present, legacy files for backward compatibility.
@@ -158,24 +167,278 @@ func LoadMetadata(dir string) (*Meta, error) {
 		Connectors: make(map[string]*ResourceMetadata),
 	}
 
-	if err := loadYAMLMetadataSection(filepath.Join(dir, "elements.yaml"), "_meta_elements", meta.Elements); err != nil {
-		return nil, fmt.Errorf("load elements metadata: %w", err)
+	lockFile, err := LoadLockFile(dir)
+	if err != nil {
+		return nil, fmt.Errorf("load lock file metadata: %w", err)
 	}
 
-	if err := loadYAMLMetadataSection(filepath.Join(dir, "elements.yaml"), "_meta_views", meta.Views); err != nil {
-		return nil, fmt.Errorf("load view metadata: %w", err)
+	loadedCurrentElements := false
+	if lockFile != nil && len(lockFile.CurrentElements) > 0 {
+		copyResourceMetadataMap(meta.Elements, lockFile.CurrentElements)
+		loadedCurrentElements = true
 	}
 
-	if err := loadYAMLMetadataSection(filepath.Join(dir, "connectors.yaml"), "_meta_connectors", meta.Connectors); err != nil {
-		return nil, fmt.Errorf("load connector metadata: %w", err)
+	if !loadedCurrentElements {
+		if err := loadYAMLMetadataSection(filepath.Join(dir, "elements.yaml"), "_meta_elements", meta.Elements); err != nil {
+			return nil, fmt.Errorf("load elements metadata: %w", err)
+		}
+		if len(meta.Elements) == 0 && lockFile != nil && lockFile.Metadata != nil {
+			copyResourceMetadataMap(meta.Elements, lockFile.Metadata.Elements)
+		}
 	}
 
-	// Also extract inline metadata from connectors list if present
-	if err := extractInlineMetadata(filepath.Join(dir, "connectors.yaml"), meta.Connectors); err != nil {
-		return nil, fmt.Errorf("load inline connector metadata: %w", err)
+	loadedCurrentViews := false
+	if lockFile != nil && len(lockFile.CurrentViews) > 0 {
+		copyResourceMetadataMap(meta.Views, lockFile.CurrentViews)
+		loadedCurrentViews = true
+	}
+	if !loadedCurrentViews {
+		if err := loadYAMLMetadataSection(filepath.Join(dir, "elements.yaml"), "_meta_views", meta.Views); err != nil {
+			return nil, fmt.Errorf("load view metadata: %w", err)
+		}
+		if len(meta.Views) == 0 && lockFile != nil && lockFile.Metadata != nil {
+			copyResourceMetadataMap(meta.Views, lockFile.Metadata.Views)
+		}
+	}
+
+	loadedCurrentConnectors := false
+	if lockFile != nil && len(lockFile.CurrentConnectors) > 0 {
+		copyResourceMetadataMap(meta.Connectors, lockFile.CurrentConnectors)
+		loadedCurrentConnectors = true
+	}
+	if !loadedCurrentConnectors {
+		if err := loadYAMLMetadataSection(filepath.Join(dir, "connectors.yaml"), "_meta_connectors", meta.Connectors); err != nil {
+			return nil, fmt.Errorf("load connector metadata: %w", err)
+		}
+
+		// Also extract inline metadata from connectors list if present.
+		if err := extractInlineMetadata(filepath.Join(dir, "connectors.yaml"), meta.Connectors); err != nil {
+			return nil, fmt.Errorf("load inline connector metadata: %w", err)
+		}
+		if len(meta.Connectors) == 0 && lockFile != nil && lockFile.Metadata != nil {
+			copyResourceMetadataMap(meta.Connectors, lockFile.Metadata.Connectors)
+		}
 	}
 
 	return meta, nil
+}
+
+func PersistCurrentElementMetadata(dir string, metadata map[string]*ResourceMetadata) (bool, error) {
+	return persistCurrentMetadata(dir, func(lockFile *LockFile) {
+		lockFile.CurrentElements = cloneResourceMetadataMap(metadata)
+	})
+}
+
+func PersistCurrentViewMetadata(dir string, metadata map[string]*ResourceMetadata) (bool, error) {
+	return persistCurrentMetadata(dir, func(lockFile *LockFile) {
+		lockFile.CurrentViews = cloneResourceMetadataMap(metadata)
+	})
+}
+
+func PersistCurrentConnectorMetadata(dir string, metadata map[string]*ResourceMetadata) (bool, error) {
+	return persistCurrentMetadata(dir, func(lockFile *LockFile) {
+		lockFile.CurrentConnectors = cloneResourceMetadataMap(metadata)
+	})
+}
+
+func persistCurrentMetadata(dir string, assign func(*LockFile)) (bool, error) {
+	lockFile, err := LoadLockFile(dir)
+	if err != nil {
+		return false, fmt.Errorf("load lock file: %w", err)
+	}
+	if lockFile == nil {
+		return false, nil
+	}
+	assign(lockFile)
+	if err := WriteLockFile(dir, lockFile); err != nil {
+		return false, fmt.Errorf("write lock file: %w", err)
+	}
+	return true, nil
+}
+
+func RenameCurrentElementMetadata(dir, oldRef, newRef string) error {
+	return renameCurrentMetadata(dir, oldRef, newRef,
+		func(lockFile *LockFile) map[string]*ResourceMetadata {
+			source := lockFile.CurrentElements
+			if len(source) == 0 && lockFile.Metadata != nil {
+				return lockFile.Metadata.Elements
+			}
+			return source
+		},
+		func(lockFile *LockFile, metadata map[string]*ResourceMetadata) {
+			lockFile.CurrentElements = metadata
+		},
+	)
+}
+
+func RenameCurrentViewMetadata(dir, oldRef, newRef string) error {
+	return renameCurrentMetadata(dir, oldRef, newRef,
+		func(lockFile *LockFile) map[string]*ResourceMetadata {
+			source := lockFile.CurrentViews
+			if len(source) == 0 && lockFile.Metadata != nil {
+				return lockFile.Metadata.Views
+			}
+			return source
+		},
+		func(lockFile *LockFile, metadata map[string]*ResourceMetadata) {
+			lockFile.CurrentViews = metadata
+		},
+	)
+}
+
+func RenameCurrentConnectorMetadata(dir, oldRef, newRef string) error {
+	return renameCurrentMetadata(dir, oldRef, newRef,
+		func(lockFile *LockFile) map[string]*ResourceMetadata {
+			source := lockFile.CurrentConnectors
+			if len(source) == 0 && lockFile.Metadata != nil {
+				return lockFile.Metadata.Connectors
+			}
+			return source
+		},
+		func(lockFile *LockFile, metadata map[string]*ResourceMetadata) {
+			lockFile.CurrentConnectors = metadata
+		},
+	)
+}
+
+func renameCurrentMetadata(dir, oldRef, newRef string, sourceFn func(*LockFile) map[string]*ResourceMetadata, assign func(*LockFile, map[string]*ResourceMetadata)) error {
+	if oldRef == newRef {
+		return nil
+	}
+	lockFile, err := LoadLockFile(dir)
+	if err != nil {
+		return fmt.Errorf("load lock file: %w", err)
+	}
+	if lockFile == nil {
+		return nil
+	}
+
+	source := sourceFn(lockFile)
+	if len(source) == 0 {
+		return nil
+	}
+
+	current := cloneResourceMetadataMap(source)
+	metadata, ok := current[oldRef]
+	if !ok {
+		return nil
+	}
+	current[newRef] = metadata
+	delete(current, oldRef)
+	assign(lockFile, current)
+	if err := WriteLockFile(dir, lockFile); err != nil {
+		return fmt.Errorf("write lock file: %w", err)
+	}
+	return nil
+}
+
+func DeleteCurrentElementMetadataEntries(dir string, refs ...string) error {
+	return deleteCurrentMetadataEntries(dir, refs,
+		func(lockFile *LockFile) map[string]*ResourceMetadata {
+			source := lockFile.CurrentElements
+			if len(source) == 0 && lockFile.Metadata != nil {
+				return lockFile.Metadata.Elements
+			}
+			return source
+		},
+		func(lockFile *LockFile, metadata map[string]*ResourceMetadata) {
+			lockFile.CurrentElements = metadata
+		},
+	)
+}
+
+func DeleteCurrentViewMetadataEntries(dir string, refs ...string) error {
+	return deleteCurrentMetadataEntries(dir, refs,
+		func(lockFile *LockFile) map[string]*ResourceMetadata {
+			source := lockFile.CurrentViews
+			if len(source) == 0 && lockFile.Metadata != nil {
+				return lockFile.Metadata.Views
+			}
+			return source
+		},
+		func(lockFile *LockFile, metadata map[string]*ResourceMetadata) {
+			lockFile.CurrentViews = metadata
+		},
+	)
+}
+
+func DeleteCurrentConnectorMetadataEntries(dir string, refs ...string) error {
+	return deleteCurrentMetadataEntries(dir, refs,
+		func(lockFile *LockFile) map[string]*ResourceMetadata {
+			source := lockFile.CurrentConnectors
+			if len(source) == 0 && lockFile.Metadata != nil {
+				return lockFile.Metadata.Connectors
+			}
+			return source
+		},
+		func(lockFile *LockFile, metadata map[string]*ResourceMetadata) {
+			lockFile.CurrentConnectors = metadata
+		},
+	)
+}
+
+func deleteCurrentMetadataEntries(dir string, refs []string, sourceFn func(*LockFile) map[string]*ResourceMetadata, assign func(*LockFile, map[string]*ResourceMetadata)) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	lockFile, err := LoadLockFile(dir)
+	if err != nil {
+		return fmt.Errorf("load lock file: %w", err)
+	}
+	if lockFile == nil {
+		return nil
+	}
+	source := sourceFn(lockFile)
+	if len(source) == 0 {
+		return nil
+	}
+	current := cloneResourceMetadataMap(source)
+	changed := false
+	for _, ref := range refs {
+		if _, ok := current[ref]; ok {
+			delete(current, ref)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	assign(lockFile, current)
+	if err := WriteLockFile(dir, lockFile); err != nil {
+		return fmt.Errorf("write lock file: %w", err)
+	}
+	return nil
+}
+
+func cloneMeta(meta *Meta) *Meta {
+	if meta == nil {
+		return nil
+	}
+	return &Meta{
+		Elements:   cloneResourceMetadataMap(meta.Elements),
+		Views:      cloneResourceMetadataMap(meta.Views),
+		Connectors: cloneResourceMetadataMap(meta.Connectors),
+	}
+}
+
+func cloneResourceMetadataMap(source map[string]*ResourceMetadata) map[string]*ResourceMetadata {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]*ResourceMetadata, len(source))
+	copyResourceMetadataMap(cloned, source)
+	return cloned
+}
+
+func copyResourceMetadataMap(target map[string]*ResourceMetadata, source map[string]*ResourceMetadata) {
+	for ref, resourceMeta := range source {
+		if resourceMeta == nil {
+			target[ref] = nil
+			continue
+		}
+		copyMeta := *resourceMeta
+		target[ref] = &copyMeta
+	}
 }
 
 func extractInlineMetadata(path string, target map[string]*ResourceMetadata) error {
@@ -221,38 +484,57 @@ func loadYAMLMetadataSection(filepath, sectionName string, target map[string]*Re
 	}
 
 	if metaSection, ok := yamlMap[sectionName].(map[string]any); ok {
-		for ref, metaData := range metaSection {
-			if metaMap, ok := metaData.(map[string]any); ok {
-				metadata := &ResourceMetadata{}
-				switch idValue := metaMap["id"].(type) {
-				case string:
-					if decoded, err := hashidlib.Decode(idValue); err == nil {
-						metadata.ID = ResourceID(decoded)
-					}
-				case int:
-					metadata.ID = ResourceID(idValue)
-				case int64:
-					metadata.ID = ResourceID(idValue)
-				case float64:
-					metadata.ID = ResourceID(idValue)
-				}
-				switch updatedAtValue := metaMap["updated_at"].(type) {
-				case string:
-					if updatedAt, err := time.Parse(time.RFC3339, updatedAtValue); err == nil {
-						metadata.UpdatedAt = updatedAt
-					}
-				case time.Time:
-					metadata.UpdatedAt = updatedAtValue
-				}
-				if conflict, ok := metaMap["conflict"].(bool); ok {
-					metadata.Conflict = conflict
-				}
-				target[ref] = metadata
-			}
-		}
+		populateMetadataSection(target, metaSection)
 	}
 
 	return nil
+}
+
+func DecodeMetadataSectionNode(node *yaml.Node) (map[string]*ResourceMetadata, error) {
+	if node == nil {
+		return nil, nil
+	}
+	var raw map[string]any
+	if err := node.Decode(&raw); err != nil {
+		return nil, err
+	}
+	decoded := make(map[string]*ResourceMetadata)
+	populateMetadataSection(decoded, raw)
+	return decoded, nil
+}
+
+func populateMetadataSection(target map[string]*ResourceMetadata, metaSection map[string]any) {
+	for ref, metaData := range metaSection {
+		metaMap, ok := metaData.(map[string]any)
+		if !ok {
+			continue
+		}
+		metadata := &ResourceMetadata{}
+		switch idValue := metaMap["id"].(type) {
+		case string:
+			if decoded, err := hashidlib.Decode(idValue); err == nil {
+				metadata.ID = ResourceID(decoded)
+			}
+		case int:
+			metadata.ID = ResourceID(idValue)
+		case int64:
+			metadata.ID = ResourceID(idValue)
+		case float64:
+			metadata.ID = ResourceID(idValue)
+		}
+		switch updatedAtValue := metaMap["updated_at"].(type) {
+		case string:
+			if updatedAt, err := time.Parse(time.RFC3339, updatedAtValue); err == nil {
+				metadata.UpdatedAt = updatedAt
+			}
+		case time.Time:
+			metadata.UpdatedAt = updatedAtValue
+		}
+		if conflict, ok := metaMap["conflict"].(bool); ok {
+			metadata.Conflict = conflict
+		}
+		target[ref] = metadata
+	}
 }
 
 // WriteMetadata writes the _meta section to a YAML file

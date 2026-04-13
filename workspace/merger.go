@@ -20,7 +20,25 @@ var positionKeys = map[string]bool{
 // currentMeta is the metadata loaded from local YAML files (current state on disk).
 func MergeWorkspace(dir string, newWS *Workspace, lastSyncMeta *Meta, currentMeta *Meta) error {
 	if useElementWorkspaceFiles(newWS) {
-		elementMetaSections := []metadataSection{{name: "_meta_elements", values: newWS.Meta.Elements}, {name: "_meta_views", values: newWS.Meta.Views}}
+		var elementMeta map[string]*ResourceMetadata
+		var viewMeta map[string]*ResourceMetadata
+		var connectorMeta map[string]*ResourceMetadata
+		if newWS.Meta != nil {
+			elementMeta = newWS.Meta.Elements
+			viewMeta = newWS.Meta.Views
+			connectorMeta = newWS.Meta.Connectors
+		}
+
+		storedViewMeta, err := PersistCurrentViewMetadata(dir, viewMeta)
+		if err != nil {
+			return fmt.Errorf("persist current view metadata: %w", err)
+		}
+		storedConnectorMeta, err := PersistCurrentConnectorMetadata(dir, connectorMeta)
+		if err != nil {
+			return fmt.Errorf("persist current connector metadata: %w", err)
+		}
+
+		elementMetaSections := []metadataSection{{name: "_meta_elements", values: elementMeta, persist: false}, {name: "_meta_views", values: viewMeta, persist: !storedViewMeta}}
 		if err := mergeYAMLMapWithMetadataSections(
 			filepath.Join(dir, "elements.yaml"),
 			newWS.Elements,
@@ -35,10 +53,10 @@ func MergeWorkspace(dir string, newWS *Workspace, lastSyncMeta *Meta, currentMet
 		if err := mergeYAMLMapWithMetadataSections(
 			filepath.Join(dir, "connectors.yaml"),
 			newWS.Connectors,
-			newWS.Meta.Connectors,
+			connectorMeta,
 			lastSyncMeta.Connectors,
 			currentMeta.Connectors,
-			[]metadataSection{{name: "_meta_connectors", values: newWS.Meta.Connectors}},
+			[]metadataSection{{name: "_meta_connectors", values: connectorMeta, persist: !storedConnectorMeta}},
 		); err != nil {
 			return fmt.Errorf("merge connectors: %w", err)
 		}
@@ -53,7 +71,7 @@ func MergeWorkspace(dir string, newWS *Workspace, lastSyncMeta *Meta, currentMet
 }
 
 func mergeYAMLMapWithConflicts(path string, serverItems any, serverMeta map[string]*ResourceMetadata, lastSyncMeta map[string]*ResourceMetadata, currentMeta map[string]*ResourceMetadata) error {
-	return mergeYAMLMapWithMetadataSections(path, serverItems, serverMeta, lastSyncMeta, currentMeta, []metadataSection{{name: "_meta", values: serverMeta}})
+	return mergeYAMLMapWithMetadataSections(path, serverItems, serverMeta, lastSyncMeta, currentMeta, []metadataSection{{name: "_meta", values: serverMeta, persist: true}})
 }
 
 func mergeYAMLMapWithMetadataSections(path string, serverItems any, serverMeta map[string]*ResourceMetadata, lastSyncMeta map[string]*ResourceMetadata, currentMeta map[string]*ResourceMetadata, sections []metadataSection) error {
@@ -156,7 +174,7 @@ func mergeYAMLMapWithMetadataSections(path string, serverItems any, serverMeta m
 	}
 
 	for _, section := range sections {
-		if len(section.values) == 0 {
+		if !section.persist || len(section.values) == 0 {
 			continue
 		}
 		var metaKeyNode yaml.Node

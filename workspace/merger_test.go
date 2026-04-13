@@ -42,7 +42,7 @@ func TestMergeWorkspace_WritesElementWorkspaceAndCleansLegacyFiles(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(elementsData), "_meta_elements:") || !strings.Contains(string(elementsData), "_meta_views:") {
+	if strings.Contains(string(elementsData), "_meta_elements:") || !strings.Contains(string(elementsData), "_meta_views:") {
 		t.Fatalf("elements metadata missing:\n%s", elementsData)
 	}
 	connectorsData, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))

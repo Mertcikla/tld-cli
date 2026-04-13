@@ -10,7 +10,17 @@ import (
 
 // RemoveElement removes an element from elements.yaml.
 func RemoveElement(dir, ref string) error {
-	return filterYAMLMap(filepath.Join(dir, "elements.yaml"), func(k string, _ any) bool { return k != ref })
+	removed, err := filterYAMLMap(filepath.Join(dir, "elements.yaml"), func(k string, _ any) bool { return k != ref })
+	if err != nil {
+		return err
+	}
+	if !removed {
+		return nil
+	}
+	if err := DeleteCurrentElementMetadataEntries(dir, ref); err != nil {
+		return err
+	}
+	return DeleteCurrentViewMetadataEntries(dir, ref)
 }
 
 // RemoveConnector removes connectors from connectors.yaml where view == view AND source == source AND target == target.
@@ -25,46 +35,82 @@ func RemoveConnector(dir, view, source, target string) (int, error) {
 	if err != nil {
 		return 0, nil // file absent is fine
 	}
-	var items map[string]any
-	if err := yaml.Unmarshal(data, &items); err != nil {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
 		return 0, fmt.Errorf("parse %s: %w", path, err)
 	}
-	removed := 0
-	for k, v := range items {
-		if k == "_meta" {
-			continue
-		}
-		if m, ok := v.(map[string]any); ok {
-			if !keep(m) {
-				delete(items, k)
-				removed++
-			}
-		}
-	}
-	if removed == 0 {
+	if len(root.Content) == 0 {
 		return 0, nil
 	}
-	out, err := yaml.Marshal(items)
-	if err != nil {
-		return 0, fmt.Errorf("marshal %s: %w", path, err)
+
+	removedKeys := make([]string, 0)
+	switch root.Content[0].Kind {
+	case yaml.SequenceNode:
+		var connectors []*Connector
+		if err := root.Content[0].Decode(&connectors); err != nil {
+			return 0, fmt.Errorf("parse %s: %w", path, err)
+		}
+		kept := make([]*Connector, 0, len(connectors))
+		for _, connector := range connectors {
+			if connector == nil {
+				continue
+			}
+			if connector.View == view && connector.Source == source && connector.Target == target {
+				removedKeys = append(removedKeys, ConnectorKey(connector))
+				continue
+			}
+			kept = append(kept, connector)
+		}
+		if len(removedKeys) == 0 {
+			return 0, nil
+		}
+		if err := WriteFullYAMLList(path, kept); err != nil {
+			return 0, err
+		}
+	case yaml.MappingNode:
+		var items map[string]any
+		if err := root.Content[0].Decode(&items); err != nil {
+			return 0, fmt.Errorf("parse %s: %w", path, err)
+		}
+		for key, value := range items {
+			if key == "_meta" || key == "_meta_connectors" || key == "connectors" {
+				continue
+			}
+			if mapped, ok := value.(map[string]any); ok && !keep(mapped) {
+				removedKeys = append(removedKeys, key)
+				delete(items, key)
+			}
+		}
+		if len(removedKeys) == 0 {
+			return 0, nil
+		}
+		out, err := yaml.Marshal(items)
+		if err != nil {
+			return 0, fmt.Errorf("marshal %s: %w", path, err)
+		}
+		if err := os.WriteFile(path, out, 0600); err != nil {
+			return 0, fmt.Errorf("write %s: %w", path, err)
+		}
+	default:
+		return 0, fmt.Errorf("parse %s: expected list or mapping document", path)
 	}
-	if err := os.WriteFile(path, out, 0600); err != nil {
-		return 0, fmt.Errorf("write %s: %w", path, err)
+	if err := DeleteCurrentConnectorMetadataEntries(dir, removedKeys...); err != nil {
+		return 0, err
 	}
-	return removed, nil
+	return len(removedKeys), nil
 }
 
 // filterYAMLMap reads path as map[string]any, keeps only items where keep(key, val)==true,
 // writes back, and returns error if key not found or write fails.
-func filterYAMLMap(path string, keep func(string, any) bool) error {
+func filterYAMLMap(path string, keep func(string, any) bool) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil // file absent is fine
+		return false, nil // file absent is fine
 	}
 
 	var items map[string]any
 	if err := yaml.Unmarshal(data, &items); err != nil {
-		return fmt.Errorf("parse %s: %w", path, err)
+		return false, fmt.Errorf("parse %s: %w", path, err)
 	}
 
 	before := len(items)
@@ -76,17 +122,17 @@ func filterYAMLMap(path string, keep func(string, any) bool) error {
 	}
 
 	if len(kept) == before {
-		return nil
+		return false, nil
 	}
 
 	out, err := yaml.Marshal(kept)
 	if err != nil {
-		return fmt.Errorf("marshal %s: %w", path, err)
+		return false, fmt.Errorf("marshal %s: %w", path, err)
 	}
 	if err := os.WriteFile(path, out, 0600); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+		return false, fmt.Errorf("write %s: %w", path, err)
 	}
-	return nil
+	return true, nil
 }
 
 func strVal(m map[string]any, key string) string {

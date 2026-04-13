@@ -12,6 +12,9 @@ import (
 
 func TestSave_Deterministic(t *testing.T) {
 	dir := t.TempDir()
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{Version: "v1"}); err != nil {
+		t.Fatal(err)
+	}
 
 	ws := &workspace.Workspace{
 		Dir: dir,
@@ -43,19 +46,26 @@ func TestSave_Deterministic(t *testing.T) {
 	s := string(data)
 	aIdx := strings.Index(s, "a-ref:")
 	zIdx := strings.Index(s, "z-ref:")
-	metaIdx := strings.Index(s, "_meta_elements:")
 
-	if aIdx == -1 || zIdx == -1 || metaIdx == -1 {
+	if aIdx == -1 || zIdx == -1 {
 		t.Fatalf("missing keys in YAML:\n%s", s)
 	}
 	if aIdx > zIdx {
 		t.Fatalf("a-ref should come before z-ref in sorted YAML:\n%s", s)
 	}
-	if metaIdx < zIdx {
-		t.Fatalf("_meta_elements should come after resources in YAML:\n%s", s)
+	if strings.Contains(s, "_meta_views:") {
+		t.Fatalf("elements.yaml should not contain _meta_views when lockfile exists:\n%s", s)
 	}
 	if strings.Contains(s, "\n\n") {
 		t.Fatalf("elements.yaml should not contain blank spacer lines:\n%s", s)
+	}
+
+	lockFile, err := workspace.LoadLockFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lockFile.CurrentViews["a-ref"] == nil || lockFile.CurrentViews["z-ref"] == nil {
+		t.Fatalf("lockfile current views missing: %+v", lockFile.CurrentViews)
 	}
 
 	connectorsData, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))

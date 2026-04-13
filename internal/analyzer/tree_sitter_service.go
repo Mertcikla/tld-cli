@@ -129,6 +129,7 @@ func resultFromLegacy(result *symbol.Result) *Result {
 			Name:     ref.Name,
 			FilePath: ref.FilePath,
 			Line:     ref.Line,
+			Column:   0,
 		})
 	}
 	return converted

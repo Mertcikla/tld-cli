@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	hashidlib "github.com/mertcikla/tld-cli/internal/hashids"
 	"github.com/mertcikla/tld-cli/workspace"
@@ -181,6 +182,81 @@ _meta_views:
 	}
 }
 
+func TestLoad_ElementsMetadataFromLockFileCurrentEntries(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, "elements.yaml"), `api:
+  name: API
+  kind: service
+  has_view: true
+  placements:
+    - parent: root
+_meta_views:
+  api:
+    id: 202
+    updated_at: 2024-03-24T11:00:00Z
+`)
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{
+		Version: "v1",
+		Metadata: &workspace.Meta{
+			Elements: map[string]*workspace.ResourceMetadata{"api": {ID: 999, UpdatedAt: time.Date(2024, 3, 24, 10, 0, 0, 0, time.UTC)}},
+			Views:    map[string]*workspace.ResourceMetadata{"api": {ID: 888, UpdatedAt: time.Date(2024, 3, 24, 10, 30, 0, 0, time.UTC)}},
+		},
+		CurrentElements: map[string]*workspace.ResourceMetadata{"api": {ID: 101, UpdatedAt: time.Date(2024, 3, 24, 12, 0, 0, 0, time.UTC)}},
+		CurrentViews:    map[string]*workspace.ResourceMetadata{"api": {ID: 303, UpdatedAt: time.Date(2024, 3, 24, 12, 30, 0, 0, time.UTC)}},
+	}); err != nil {
+		t.Fatalf("WriteLockFile: %v", err)
+	}
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if ws.Meta.Elements["api"].ID != 101 {
+		t.Fatalf("expected current lockfile element metadata to win, got %+v", ws.Meta.Elements["api"])
+	}
+	if ws.Meta.Views["api"].ID != 303 {
+		t.Fatalf("expected current lockfile view metadata to win, got %+v", ws.Meta.Views["api"])
+	}
+}
+
+func TestLoad_ElementsMetadataAllowsRefsNamedLikeElementFields(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, "elements.yaml"), `language:
+  name: Language
+  kind: service
+  placements:
+    - parent: root
+symbol:
+  name: Symbol
+  kind: service
+  placements:
+    - parent: root
+_meta_elements:
+  language:
+    id: 101
+    updated_at: 2024-03-24T10:00:00Z
+  symbol:
+    id: 202
+    updated_at: 2024-03-24T11:00:00Z
+`)
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(ws.Elements) != 2 {
+		t.Fatalf("len(Elements) = %d, want 2", len(ws.Elements))
+	}
+	if ws.Elements["language"] == nil || ws.Elements["symbol"] == nil {
+		t.Fatalf("expected language and symbol elements, got %+v", ws.Elements)
+	}
+	if ws.Meta.Elements["language"].ID != 101 || ws.Meta.Elements["symbol"].ID != 202 {
+		t.Fatalf("unexpected metadata: %+v", ws.Meta.Elements)
+	}
+}
+
 func TestLoad_MalformedElementsYAML(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, setupConfig(t), minimalConfig())
@@ -243,6 +319,47 @@ func TestLoad_ConnectorsListFormatLoadsInlineMetadata(t *testing.T) {
 	}
 	if got := ws.Meta.Connectors["system:api:db:reads"].UpdatedAt.Format("2006-01-02T15:04:05Z07:00"); got != "2024-03-24T12:00:00Z" {
 		t.Fatalf("unexpected connector updated_at: %s", got)
+	}
+}
+
+func TestLoad_ConnectorMetadataFromLockFileCurrentConnectors(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, setupConfig(t), minimalConfig())
+	encodedID := hashidlib.Encode(303)
+	writeFile(t, filepath.Join(dir, "connectors.yaml"), fmt.Sprintf("- view: system\n  source: api\n  target: db\n  label: reads\n  id: %s\n", encodedID))
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{
+		Version: "v1",
+		Metadata: &workspace.Meta{
+			Connectors: map[string]*workspace.ResourceMetadata{"system:api:db:reads": {ID: 404, UpdatedAt: time.Date(2024, 3, 24, 10, 0, 0, 0, time.UTC)}},
+		},
+		CurrentConnectors: map[string]*workspace.ResourceMetadata{"system:api:db:reads": {ID: 505, UpdatedAt: time.Date(2024, 3, 24, 12, 0, 0, 0, time.UTC)}},
+	}); err != nil {
+		t.Fatalf("WriteLockFile: %v", err)
+	}
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if ws.Meta.Connectors["system:api:db:reads"].ID != 505 {
+		t.Fatalf("expected current lockfile connector metadata to win, got %+v", ws.Meta.Connectors["system:api:db:reads"])
+	}
+	if got := ws.Meta.Connectors["system:api:db:reads"].UpdatedAt.Format("2006-01-02T15:04:05Z07:00"); got != "2024-03-24T12:00:00Z" {
+		t.Fatalf("unexpected connector updated_at from current lockfile metadata: %s", got)
+	}
+}
+
+func TestLoad_EmptyConnectorList(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, setupConfig(t), minimalConfig())
+	writeFile(t, filepath.Join(dir, "connectors.yaml"), "[]\n")
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(ws.Connectors) != 0 {
+		t.Fatalf("len(Connectors) = %d, want 0", len(ws.Connectors))
 	}
 }
 

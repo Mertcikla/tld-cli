@@ -8,13 +8,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type metadataSection struct {
-	name   string
-	values map[string]*ResourceMetadata
+	name    string
+	values  map[string]*ResourceMetadata
+	persist bool
 }
 
 // WriteElement adds an element to elements.yaml. Errors if ref already exists.
@@ -78,7 +80,28 @@ func Save(ws *Workspace) error {
 			connectorMeta = ws.Meta.Connectors
 		}
 
-		if err := WriteFullYAMLMapSections(filepath.Join(ws.Dir, "elements.yaml"), ws.Elements, []metadataSection{{name: "_meta_elements", values: elementMeta}, {name: "_meta_views", values: viewMeta}}); err != nil {
+		storedElementMeta, err := PersistCurrentElementMetadata(ws.Dir, elementMeta)
+		if err != nil {
+			return fmt.Errorf("persist current element metadata: %w", err)
+		}
+		storedViewMeta, err := PersistCurrentViewMetadata(ws.Dir, viewMeta)
+		if err != nil {
+			return fmt.Errorf("persist current view metadata: %w", err)
+		}
+		storedConnectorMeta, err := PersistCurrentConnectorMetadata(ws.Dir, connectorMeta)
+		if err != nil {
+			return fmt.Errorf("persist current connector metadata: %w", err)
+		}
+
+		elementSections := []metadataSection{}
+		if !storedElementMeta {
+			elementSections = append(elementSections, metadataSection{name: "_meta_elements", values: elementMeta, persist: true})
+		}
+		if !storedViewMeta {
+			elementSections = append(elementSections, metadataSection{name: "_meta_views", values: viewMeta, persist: true})
+		}
+
+		if err := WriteFullYAMLMapSections(filepath.Join(ws.Dir, "elements.yaml"), ws.Elements, elementSections); err != nil {
 			return fmt.Errorf("write elements: %w", err)
 		}
 		var connectorList []*Connector
@@ -88,12 +111,18 @@ func Save(ws *Workspace) error {
 		}
 		sort.Strings(connectorRefs)
 		for _, ref := range connectorRefs {
-			c := ws.Connectors[ref]
+			copyConnector := *ws.Connectors[ref]
 			if connectorMeta != nil && connectorMeta[ref] != nil {
-				c.ID = connectorMeta[ref].ID
-				c.UpdatedAt = connectorMeta[ref].UpdatedAt
+				copyConnector.ID = connectorMeta[ref].ID
+				if storedConnectorMeta {
+					copyConnector.UpdatedAt = time.Time{}
+				} else {
+					copyConnector.UpdatedAt = connectorMeta[ref].UpdatedAt
+				}
+			} else if storedConnectorMeta {
+				copyConnector.UpdatedAt = time.Time{}
 			}
-			connectorList = append(connectorList, c)
+			connectorList = append(connectorList, &copyConnector)
 		}
 
 		if err := WriteFullYAMLList(filepath.Join(ws.Dir, "connectors.yaml"), connectorList); err != nil {
@@ -159,7 +188,59 @@ func loadYAMLMappingNode(path string) (*yaml.Node, *yaml.Node, error) {
 	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
 		return nil, nil, fmt.Errorf("%s must contain a YAML mapping", filepath.Base(path))
 	}
+	if filepath.Base(path) == "elements.yaml" {
+		if err := migrateDeprecatedElementWorkspaceMetadata(filepath.Dir(path), root.Content[0]); err != nil {
+			return nil, nil, err
+		}
+	}
 	return &root, root.Content[0], nil
+}
+
+func migrateDeprecatedElementWorkspaceMetadata(dir string, mapping *yaml.Node) error {
+	if err := migrateDeprecatedMetadataSection(dir, mapping, "_meta_elements", PersistCurrentElementMetadata); err != nil {
+		return err
+	}
+	return migrateDeprecatedMetadataSection(dir, mapping, "_meta_views", PersistCurrentViewMetadata)
+}
+
+func migrateDeprecatedMetadataSection(dir string, mapping *yaml.Node, sectionName string, persist func(string, map[string]*ResourceMetadata) (bool, error)) error {
+	keyIndex, valueNode := findMappingValueNode(mapping, sectionName)
+	if valueNode == nil {
+		return nil
+	}
+
+	meta, err := DecodeMetadataSectionNode(valueNode)
+	if err != nil {
+		return fmt.Errorf("decode %s: %w", sectionName, err)
+	}
+
+	stored, err := persist(dir, meta)
+	if err != nil {
+		return fmt.Errorf("persist %s to lock file: %w", sectionName, err)
+	}
+	if stored || len(meta) == 0 {
+		removeMappingEntry(mapping, keyIndex)
+	}
+	return nil
+}
+
+func findMappingValueNode(mapping *yaml.Node, key string) (int, *yaml.Node) {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return -1, nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return i, mapping.Content[i+1]
+		}
+	}
+	return -1, nil
+}
+
+func removeMappingEntry(mapping *yaml.Node, keyIndex int) {
+	if mapping == nil || mapping.Kind != yaml.MappingNode || keyIndex < 0 || keyIndex+1 >= len(mapping.Content) {
+		return
+	}
+	mapping.Content = append(mapping.Content[:keyIndex], mapping.Content[keyIndex+2:]...)
 }
 
 func encodeYAMLValueNode(spec any) (*yaml.Node, error) {
@@ -346,7 +427,7 @@ func WriteFullYAMLList(path string, items any) error {
 	return f.Close()
 }
 func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata) error {
-	return WriteFullYAMLMapSections(path, items, []metadataSection{{name: "_meta", values: meta}})
+	return WriteFullYAMLMapSections(path, items, []metadataSection{{name: "_meta", values: meta, persist: true}})
 }
 
 func WriteFullYAMLMapSections(path string, items any, sections []metadataSection) error {
@@ -371,7 +452,7 @@ func WriteFullYAMLMapSections(path string, items any, sections []metadataSection
 	}
 
 	for _, section := range sections {
-		if len(section.values) == 0 {
+		if !section.persist || len(section.values) == 0 {
 			continue
 		}
 		metaNode, err := EncodeMeta(section.values)
@@ -483,6 +564,12 @@ func RenameElement(dir, oldRef, newRef string) error {
 	if err := writeYAMLNode(path, root); err != nil {
 		return err
 	}
+	if err := RenameCurrentElementMetadata(dir, oldRef, newRef); err != nil {
+		return err
+	}
+	if err := RenameCurrentViewMetadata(dir, oldRef, newRef); err != nil {
+		return err
+	}
 	return RenameConnector(dir, oldRef, newRef)
 }
 
@@ -576,6 +663,28 @@ func RenameConnector(dir, oldRef, newRef string) error {
 	}
 
 	if changed {
+		if ws.Meta != nil && ws.Meta.Connectors != nil {
+			updatedMeta := make(map[string]*ResourceMetadata, len(ws.Meta.Connectors))
+			for ref, metadata := range ws.Meta.Connectors {
+				if metadata == nil {
+					updatedMeta[ref] = nil
+					continue
+				}
+				copyMeta := *metadata
+				updatedMeta[ref] = &copyMeta
+			}
+			for oldKey, connector := range ws.Connectors {
+				newKey := ConnectorKey(connector)
+				if oldKey == newKey {
+					continue
+				}
+				if metadata, ok := updatedMeta[oldKey]; ok {
+					updatedMeta[newKey] = metadata
+					delete(updatedMeta, oldKey)
+				}
+			}
+			ws.Meta.Connectors = updatedMeta
+		}
 		ws.Connectors = newConnectors
 		return Save(ws)
 	}
@@ -625,6 +734,12 @@ func UpdateConnectorField(dir, ref, field, value string) error {
 	if changed {
 		newKey := ConnectorKey(c)
 		if newKey != ref {
+			if ws.Meta != nil && ws.Meta.Connectors != nil {
+				if metadata, ok := ws.Meta.Connectors[ref]; ok {
+					ws.Meta.Connectors[newKey] = metadata
+					delete(ws.Meta.Connectors, ref)
+				}
+			}
 			delete(ws.Connectors, ref)
 			ws.Connectors[newKey] = c
 		}

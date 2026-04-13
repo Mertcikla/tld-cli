@@ -54,6 +54,9 @@ _meta_views:
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{Version: "v1"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "connectors.yaml"), []byte(`platform:platform:api:contains:
   view: platform
   source: platform
@@ -80,8 +83,8 @@ _meta_views:
 		t.Fatal(err)
 	}
 	connectorsText := string(connectorsData)
-	if !strings.Contains(connectorsText, "platform-core:platform-core:api:contains") {
-		t.Fatalf("connector key was not cascaded:\n%s", connectorsText)
+	if !strings.Contains(connectorsText, "view: platform-core") || !strings.Contains(connectorsText, "source: platform-core") {
+		t.Fatalf("connector fields were not cascaded:\n%s", connectorsText)
 	}
 }
 
@@ -109,11 +112,8 @@ _meta_connectors:
 		t.Fatal(err)
 	}
 	text := string(data)
-	if strings.Contains(text, "system:web:api:calls") {
-		t.Fatalf("old connector key still exists:\n%s", text)
-	}
-	if !strings.Contains(text, "system:web:api:reads") {
-		t.Fatalf("new connector key missing:\n%s", text)
+	if strings.Contains(text, "label: calls") {
+		t.Fatalf("old connector label still exists:\n%s", text)
 	}
 	if !strings.Contains(text, "label: reads") {
 		t.Fatalf("connector label was not updated:\n%s", text)

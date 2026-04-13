@@ -63,7 +63,7 @@ for cross-file call references.`,
 			incrementalFiles := 0
 			totalEntries := 0
 			knownElements := buildAnalyzeElementIndex(ws)
-			knownNames := buildAnalyzeElementNameIndex(ws)
+			usedNames := buildAnalyzeElementNameOwners(ws)
 			modeLabel := "shallow"
 			if deep {
 				modeLabel = "deep"
@@ -191,7 +191,7 @@ for cross-file call references.`,
 				}
 
 				repoName := filepath.Base(repoCtx.Root)
-				repoRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
+				repoRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
 					Name:      repoName,
 					Kind:      "repository",
 					Owner:     repoCtx.Name,
@@ -218,13 +218,14 @@ for cross-file call references.`,
 				}
 
 				fileRefs := make(map[string]string)
-				symbolRefs := make(map[string]string)
+				symbolRefs := make(map[analyzeElementLookupKey]string)
+				symbolRefsByName := make(map[string][]string)
 				symbolFiles := make(map[string]string)
 				repoElements := 1
 
 				for _, relPath := range filePaths {
 					fileName := filepath.Base(relPath)
-					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
+					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
 						Name:      fileName,
 						Kind:      "file",
 						Owner:     repoCtx.Name,
@@ -255,13 +256,7 @@ for cross-file call references.`,
 				}
 
 				for _, sym := range filtered {
-					relPath := sym.FilePath
-					if repoCtx.Active() {
-						if rel, err := filepath.Rel(repoCtx.Root, sym.FilePath); err == nil {
-							relPath = rel
-						}
-					}
-					relPath = filepath.Clean(relPath)
+					relPath := analyzeRelativeFilePath(sym.FilePath, repoCtx.Root, repoCtx.Active())
 					fileRef := fileRefs[relPath]
 					if fileRef == "" {
 						continue
@@ -269,20 +264,22 @@ for cross-file call references.`,
 
 					parentRef := fileRef
 					if sym.Parent != "" {
-						if p, ok := symbolRefs[sym.Parent]; ok {
+						if refs := symbolRefsByName[sym.Parent]; len(refs) == 1 {
+							p := refs[0]
 							parentRef = p
 						}
 					}
 
-					ref, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, knownNames, usedRefs, analyzeElementSpec{
-						Name:      sym.Name,
-						Kind:      sym.Kind,
-						Owner:     repoCtx.Name,
-						Repo:      repoURL,
-						Branch:    branch,
-						FilePath:  relPath,
-						Symbol:    sym.Name,
-						ParentRef: parentRef,
+					ref, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
+						Name:       sym.Name,
+						Kind:       sym.Kind,
+						Owner:      repoCtx.Name,
+						Repo:       repoURL,
+						Branch:     branch,
+						FilePath:   relPath,
+						Symbol:     sym.Name,
+						ParentName: sym.Parent,
+						ParentRef:  parentRef,
 						Identity: analyzeElementIdentity{
 							Repo:     repoURL,
 							Branch:   branch,
@@ -300,18 +297,25 @@ for cross-file call references.`,
 						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: upsert element %q: %v\n", sym.Name, err)
 						continue
 					}
-					symbolRefs[sym.Name] = ref
+					symbolRefs[analyzeSymbolLookupKey(sym)] = ref
+					symbolRefsByName[sym.Name] = append(symbolRefsByName[sym.Name], ref)
 					symbolFiles[ref] = relPath
 					repoElements++
 				}
+
+				resolverRoot := scanRoot
+				if repoCtx.Active() {
+					resolverRoot = repoCtx.Root
+				}
+				resolver := newAnalyzeLSPResolver(resolverRoot)
 
 				plannedConnectors := make([]*workspace.Connector, 0, len(scanResult.Refs))
 				for _, ref := range scanResult.Refs {
 					if rules.ShouldIgnoreSymbol(ref.Name) {
 						continue
 					}
-					toRef, ok := symbolRefs[ref.Name]
-					if !ok {
+					toRef := resolveAnalyzeTargetRef(ctx, resolver, ref, filtered, symbolRefs, symbolRefsByName)
+					if toRef == "" {
 						continue
 					}
 
@@ -336,6 +340,7 @@ for cross-file call references.`,
 						Direction:    "forward",
 					})
 				}
+				_ = resolver.Close()
 
 				plannedConnectors = uniqueAnalyzeConnectors(plannedConnectors)
 
@@ -480,25 +485,12 @@ func filterRefsByFiles(refs []analyzer.Ref, changedFiles map[string]struct{}) []
 	return out
 }
 
-func refByFileAndLine(filePath string, line int, refMap map[string]string, symbols []analyzer.Symbol) string {
-	var bestSymbol analyzer.Symbol
-	found := false
-	for _, s := range symbols {
-		if filepath.Clean(s.FilePath) == filepath.Clean(filePath) {
-			// Check if line is within symbol range
-			if s.Line <= line && (s.EndLine == 0 || s.EndLine >= line) {
-				// Narrowest match: largest Line among candidates
-				if !found || s.Line > bestSymbol.Line {
-					bestSymbol = s
-					found = true
-				}
-			}
-		}
+func refByFileAndLine(filePath string, line int, refMap map[analyzeElementLookupKey]string, symbols []analyzer.Symbol) string {
+	symbol, ok := symbolByFileAndLine(filePath, line, symbols)
+	if !ok {
+		return ""
 	}
-	if found {
-		return refMap[bestSymbol.Name]
-	}
-	return ""
+	return refMap[analyzeSymbolLookupKey(symbol)]
 }
 
 type analyzeElementIdentity struct {
@@ -511,24 +503,26 @@ type analyzeElementIdentity struct {
 }
 
 type analyzeElementLookupKey struct {
+	Repo     string
+	Branch   string
 	FilePath string
 	Symbol   string
 	Kind     string
-	Name     string
 }
 
 type analyzeElementSpec struct {
-	Name      string
-	Kind      string
-	Owner     string
-	Repo      string
-	Branch    string
-	FilePath  string
-	Symbol    string
-	HasView   bool
-	ViewLabel string
-	ParentRef string
-	Identity  analyzeElementIdentity
+	Name       string
+	Kind       string
+	Owner      string
+	Repo       string
+	Branch     string
+	FilePath   string
+	Symbol     string
+	ParentName string
+	HasView    bool
+	ViewLabel  string
+	ParentRef  string
+	Identity   analyzeElementIdentity
 }
 
 func buildAnalyzeElementIndex(ws *workspace.Workspace) map[analyzeElementLookupKey]string {
@@ -538,101 +532,105 @@ func buildAnalyzeElementIndex(ws *workspace.Workspace) map[analyzeElementLookupK
 			continue
 		}
 		index[analyzeElementLookupKey{
+			Repo:     element.Repo,
+			Branch:   element.Branch,
 			FilePath: filepath.Clean(element.FilePath),
 			Symbol:   element.Symbol,
 			Kind:     element.Kind,
-			Name:     element.Name,
 		}] = ref
 	}
 	return index
 }
 
-func buildAnalyzeElementNameIndex(ws *workspace.Workspace) map[string]string {
-	index := make(map[string]string, len(ws.Elements))
+func buildAnalyzeElementNameOwners(ws *workspace.Workspace) map[string]map[string]struct{} {
+	owners := make(map[string]map[string]struct{}, len(ws.Elements))
 	for ref, element := range ws.Elements {
 		if element == nil || element.Name == "" {
 			continue
 		}
-		index[element.Name] = ref
+		if owners[element.Name] == nil {
+			owners[element.Name] = make(map[string]struct{})
+		}
+		owners[element.Name][ref] = struct{}{}
 	}
-	return index
+	return owners
 }
 
 func normalizeAnalyzeElementLookupKey(identity analyzeElementIdentity) analyzeElementLookupKey {
 	return analyzeElementLookupKey{
+		Repo:     identity.Repo,
+		Branch:   identity.Branch,
 		FilePath: filepath.Clean(identity.FilePath),
 		Symbol:   identity.Symbol,
 		Kind:     identity.Kind,
-		Name:     identity.Name,
 	}
 }
 
-func ensureAnalyzeElement(wdir string, dryRun bool, ws *workspace.Workspace, known map[analyzeElementLookupKey]string, knownNames map[string]string, usedRefs map[string]struct{}, spec analyzeElementSpec) (string, error) {
+func ensureAnalyzeElement(wdir string, dryRun bool, ws *workspace.Workspace, known map[analyzeElementLookupKey]string, usedRefs map[string]struct{}, usedNames map[string]map[string]struct{}, spec analyzeElementSpec) (string, error) {
 	identity := normalizeAnalyzeElementLookupKey(spec.Identity)
-	if ref, ok := knownNames[spec.Name]; ok {
-		known[identity] = ref
-		if dryRun {
-			return ref, nil
-		}
-		if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
-			return "", err
-		}
-		if ws.Elements == nil {
-			ws.Elements = make(map[string]*workspace.Element)
-		}
-		ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
-		return ref, nil
-	}
-	if ref, ok := known[identity]; ok {
-		knownNames[spec.Name] = ref
-		if dryRun {
-			return ref, nil
-		}
-		if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
-			return "", err
-		}
-		if ws.Elements == nil {
-			ws.Elements = make(map[string]*workspace.Element)
-		}
-		ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
-		return ref, nil
-	}
-	if ref, ok := findAnalyzeElementRef(ws, analyzeElementIdentity{
+	ref := ""
+	if knownRef, ok := known[identity]; ok {
+		ref = knownRef
+	} else if existingRef, ok := findAnalyzeElementRef(ws, analyzeElementIdentity{
+		Repo:     identity.Repo,
+		Branch:   identity.Branch,
 		FilePath: identity.FilePath,
 		Symbol:   identity.Symbol,
 		Kind:     identity.Kind,
-		Name:     identity.Name,
 	}); ok {
+		ref = existingRef
 		known[identity] = ref
-		knownNames[spec.Name] = ref
-		if dryRun {
-			return ref, nil
-		}
-		if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
-			return "", err
-		}
-		if ws.Elements == nil {
-			ws.Elements = make(map[string]*workspace.Element)
-		}
-		ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
-		return ref, nil
+	} else {
+		ref = uniqueAnalyzeRef(spec.Name, spec.FilePath, usedRefs)
+		usedRefs[ref] = struct{}{}
+		known[identity] = ref
+	}
+	if ref == "" {
+		ref = uniqueAnalyzeRef(spec.Name, spec.FilePath, usedRefs)
+		usedRefs[ref] = struct{}{}
+		known[identity] = ref
 	}
 
-	ref := uniqueAnalyzeRef(spec.Name, spec.FilePath, usedRefs)
-	usedRefs[ref] = struct{}{}
-	known[identity] = ref
-	knownNames[spec.Name] = ref
+	if ws.Elements != nil {
+		if existing := ws.Elements[ref]; existing != nil && existing.Name != "" {
+			releaseAnalyzeElementName(usedNames, existing.Name, ref)
+		}
+	}
+	spec.Name = uniqueAnalyzeElementName(ref, spec, usedNames)
+	claimAnalyzeElementName(usedNames, spec.Name, ref)
 	if dryRun {
 		return ref, nil
 	}
-	if err := workspace.UpsertElement(wdir, ref, analyzeElementToWorkspaceElement(spec)); err != nil {
+	elementSpec := analyzeElementToWorkspaceElement(spec)
+	if existing := ws.Elements[ref]; existing != nil {
+		if elementSpec.Description == "" {
+			elementSpec.Description = existing.Description
+		}
+		if elementSpec.Technology == "" {
+			elementSpec.Technology = existing.Technology
+		}
+		if elementSpec.URL == "" {
+			elementSpec.URL = existing.URL
+		}
+		if err := workspace.UpdateElement(wdir, ref, elementSpec); err != nil {
+			return "", err
+		}
+	} else if err := workspace.UpsertElement(wdir, ref, elementSpec); err != nil {
 		return "", err
 	}
 	if ws.Elements == nil {
 		ws.Elements = make(map[string]*workspace.Element)
 	}
-	ws.Elements[ref] = analyzeElementToWorkspaceElement(spec)
+	ws.Elements[ref] = elementSpec
 	return ref, nil
+}
+
+func analyzeSymbolLookupKey(symbol analyzer.Symbol) analyzeElementLookupKey {
+	return analyzeElementLookupKey{
+		FilePath: filepath.Clean(symbol.FilePath),
+		Symbol:   symbol.Name,
+		Kind:     symbol.Kind,
+	}
 }
 
 func analyzeElementToWorkspaceElement(spec analyzeElementSpec) *workspace.Element {
@@ -672,12 +670,101 @@ func findAnalyzeElementRef(ws *workspace.Workspace, identity analyzeElementIdent
 		if identity.Kind != "" && element.Kind != identity.Kind {
 			continue
 		}
-		if identity.Name != "" && element.Name != identity.Name {
-			continue
-		}
 		return ref, true
 	}
 	return "", false
+}
+
+func uniqueAnalyzeElementName(ref string, spec analyzeElementSpec, usedNames map[string]map[string]struct{}) string {
+	for _, candidate := range analyzeElementNameCandidates(spec) {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if owners := usedNames[candidate]; len(owners) == 0 || (len(owners) == 1 && containsAnalyzeNameOwner(owners, ref)) {
+			return candidate
+		}
+	}
+	base := spec.Name
+	if candidates := analyzeElementNameCandidates(spec); len(candidates) > 0 {
+		base = candidates[len(candidates)-1]
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s (%d)", base, i)
+		if owners := usedNames[candidate]; len(owners) == 0 || (len(owners) == 1 && containsAnalyzeNameOwner(owners, ref)) {
+			return candidate
+		}
+	}
+}
+
+func analyzeElementNameCandidates(spec analyzeElementSpec) []string {
+	rawName := strings.TrimSpace(spec.Name)
+	filePath := analyzeQualifiedElementPath(spec.Owner, spec.FilePath)
+	qualifiedSymbol := rawName
+	if spec.ParentName != "" {
+		qualifiedSymbol = spec.ParentName + "." + rawName
+	}
+
+	candidates := []string{rawName}
+	switch {
+	case spec.Kind == "repository":
+		if spec.Owner != "" {
+			candidates = append(candidates, spec.Owner)
+		}
+	case spec.Symbol != "":
+		if qualifiedSymbol != rawName {
+			candidates = append(candidates, qualifiedSymbol)
+		}
+		if spec.FilePath != "" {
+			candidates = append(candidates, filepath.ToSlash(filepath.Clean(spec.FilePath))+"::"+qualifiedSymbol)
+		}
+		if filePath != "" {
+			candidates = append(candidates, filePath+"::"+qualifiedSymbol)
+		}
+	case spec.FilePath != "":
+		candidates = append(candidates, filepath.ToSlash(filepath.Clean(spec.FilePath)))
+		if filePath != "" {
+			candidates = append(candidates, filePath)
+		}
+	}
+	return candidates
+}
+
+func analyzeQualifiedElementPath(owner, path string) string {
+	cleanPath := filepath.ToSlash(filepath.Clean(path))
+	if cleanPath == "" || cleanPath == "." {
+		return strings.TrimSpace(owner)
+	}
+	if owner == "" {
+		return cleanPath
+	}
+	return owner + "/" + cleanPath
+}
+
+func claimAnalyzeElementName(usedNames map[string]map[string]struct{}, name, ref string) {
+	if name == "" || ref == "" {
+		return
+	}
+	if usedNames[name] == nil {
+		usedNames[name] = make(map[string]struct{})
+	}
+	usedNames[name][ref] = struct{}{}
+}
+
+func releaseAnalyzeElementName(usedNames map[string]map[string]struct{}, name, ref string) {
+	owners := usedNames[name]
+	if len(owners) == 0 {
+		return
+	}
+	delete(owners, ref)
+	if len(owners) == 0 {
+		delete(usedNames, name)
+	}
+}
+
+func containsAnalyzeNameOwner(owners map[string]struct{}, ref string) bool {
+	_, ok := owners[ref]
+	return ok
 }
 
 func uniqueAnalyzeRef(name, filePath string, used map[string]struct{}) string {
@@ -708,13 +795,7 @@ func uniqueFilePaths(symbols []analyzer.Symbol, repoRoot string, activeRepo bool
 	seen := make(map[string]struct{})
 	paths := make([]string, 0, len(symbols))
 	for _, sym := range symbols {
-		relPath := sym.FilePath
-		if activeRepo {
-			if rel, err := filepath.Rel(repoRoot, sym.FilePath); err == nil {
-				relPath = rel
-			}
-		}
-		relPath = filepath.Clean(relPath)
+		relPath := analyzeRelativeFilePath(sym.FilePath, repoRoot, activeRepo)
 		if _, ok := seen[relPath]; ok {
 			continue
 		}
@@ -722,6 +803,39 @@ func uniqueFilePaths(symbols []analyzer.Symbol, repoRoot string, activeRepo bool
 		paths = append(paths, relPath)
 	}
 	return paths
+}
+
+func analyzeRelativeFilePath(path, repoRoot string, activeRepo bool) string {
+	cleanPath := filepath.Clean(path)
+	if !activeRepo || cleanPath == "" || !filepath.IsAbs(cleanPath) {
+		return cleanPath
+	}
+	if relPath, ok := analyzePathWithinRoot(repoRoot, cleanPath); ok {
+		return relPath
+	}
+	resolvedRoot, rootErr := filepath.EvalSymlinks(repoRoot)
+	resolvedPath, pathErr := filepath.EvalSymlinks(cleanPath)
+	if rootErr == nil && pathErr == nil {
+		if relPath, ok := analyzePathWithinRoot(resolvedRoot, resolvedPath); ok {
+			return relPath
+		}
+	}
+	return cleanPath
+}
+
+func analyzePathWithinRoot(root, path string) (string, bool) {
+	relPath, err := filepath.Rel(root, path)
+	if err != nil {
+		return "", false
+	}
+	relPath = filepath.Clean(relPath)
+	if relPath == "." {
+		return relPath, true
+	}
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
+		return "", false
+	}
+	return relPath, true
 }
 
 func uniqueAnalyzeConnectors(connectors []*workspace.Connector) []*workspace.Connector {

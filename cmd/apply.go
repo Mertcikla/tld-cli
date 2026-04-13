@@ -187,8 +187,12 @@ func newApplyCmd(wdir *string) *cobra.Command {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update metadata: %v\n", err)
 			}
 
-			if err := updateLockFileFromResponse(*wdir, lockFile, currentWS, resp.Msg); err != nil {
+			if err := updateLockFileFromResponse(*wdir, lockFile, currentWS, meta, resp.Msg); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update lock file: %v\n", err)
+			}
+			currentWS.Meta = meta
+			if err := workspace.Save(currentWS); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to rewrite workspace metadata: %v\n", err)
 			}
 
 			if wantsJSONOutput() {
@@ -391,7 +395,7 @@ func applyCanonicalRefs(wdir string, resp *diagv1.ApplyPlanResponse) ([]refRenam
 	return renames, nil
 }
 
-func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *workspace.Workspace, plan *planner.Plan, respMsg *diagv1.ApplyPlanResponse) error {
+func updatePlanMetadataFromResponse(_ string, meta *workspace.Meta, ws *workspace.Workspace, plan *planner.Plan, respMsg *diagv1.ApplyPlanResponse) error {
 	_ = plan
 	if meta == nil {
 		meta = &workspace.Meta{}
@@ -429,21 +433,11 @@ func updatePlanMetadataFromResponse(wdir string, meta *workspace.Meta, ws *works
 		}
 	}
 
-	if err := workspace.WriteMetadataSection(wdir, "elements.yaml", "_meta_elements", meta.Elements); err != nil {
-		return fmt.Errorf("write elements metadata: %w", err)
-	}
-	if err := workspace.WriteMetadataSection(wdir, "elements.yaml", "_meta_views", meta.Views); err != nil {
-		return fmt.Errorf("write view metadata: %w", err)
-	}
-	if err := workspace.WriteMetadataSection(wdir, "connectors.yaml", "_meta_connectors", meta.Connectors); err != nil {
-		return fmt.Errorf("write connector metadata: %w", err)
-	}
-
 	return nil
 }
 
 // updateLockFileFromResponse updates lock file with response data
-func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, ws *workspace.Workspace, respMsg *diagv1.ApplyPlanResponse) error {
+func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, ws *workspace.Workspace, meta *workspace.Meta, respMsg *diagv1.ApplyPlanResponse) error {
 	summary := respMsg.GetSummary()
 	diagramCount := len(respMsg.GetCreatedDiagrams())
 	elementCount := len(respMsg.GetCreatedElements())
@@ -474,12 +468,6 @@ func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, w
 	workspaceHash, err := workspace.CalculateWorkspaceHash(wdir)
 	if err != nil {
 		return fmt.Errorf("calculate workspace hash: %w", err)
-	}
-
-	// Load current metadata from YAMLs to store in lockfile as the sync point
-	meta, err := workspace.LoadMetadata(wdir)
-	if err != nil {
-		return fmt.Errorf("load metadata for lockfile: %w", err)
 	}
 
 	// Update lock file

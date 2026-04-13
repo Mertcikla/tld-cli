@@ -133,6 +133,7 @@ func (p *cppParser) appendCall(node *sitter.Node, source []byte, path string, re
 		Name:     name,
 		FilePath: path,
 		Line:     int(functionNode.StartPosition().Row) + 1,
+		Column:   int(functionNode.StartPosition().Column) + 1,
 	})
 }
 

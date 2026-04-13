@@ -60,39 +60,68 @@ func Load(dir string) (*Workspace, error) {
 	// Load elements from elements.yaml
 	elementsFile := filepath.Join(dir, "elements.yaml")
 	if data, err := os.ReadFile(elementsFile); err == nil {
-		if err := yaml.Unmarshal(data, &ws.Elements); err != nil {
+		var root yaml.Node
+		if err := yaml.Unmarshal(data, &root); err != nil {
 			return nil, fmt.Errorf("parse elements.yaml: %w", err)
 		}
-		delete(ws.Elements, "_meta")
-		delete(ws.Elements, "_meta_elements")
-		delete(ws.Elements, "_meta_views")
+		if len(root.Content) == 0 {
+			goto loadConnectors
+		}
+		mapping := root.Content[0]
+		if mapping.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("parse elements.yaml: expected mapping document")
+		}
+		for index := 0; index+1 < len(mapping.Content); index += 2 {
+			ref := mapping.Content[index].Value
+			node := mapping.Content[index+1]
+			if ref == "_meta" || ref == "_meta_elements" || ref == "_meta_views" {
+				continue
+			}
+			var element Element
+			if err := node.Decode(&element); err != nil {
+				return nil, fmt.Errorf("parse elements.yaml[%s]: %w", ref, err)
+			}
+			ws.Elements[ref] = &element
+		}
 	}
+
+loadConnectors:
 
 	// Load connectors from connectors.yaml
 	connectorsFile := filepath.Join(dir, "connectors.yaml")
 	if data, err := os.ReadFile(connectorsFile); err == nil {
-		// 1. Try flat list (new format)
-		var list []*Connector
-		if err := yaml.Unmarshal(data, &list); err == nil && len(list) > 0 {
-			for _, c := range list {
-				ws.Connectors[ConnectorKey(c)] = c
-			}
-		} else {
-			// 2. Try wrapped list (intermediate format)
-			var wrapper struct {
-				Connectors []*Connector `yaml:"connectors"`
-			}
-			if err := yaml.Unmarshal(data, &wrapper); err == nil && len(wrapper.Connectors) > 0 {
-				for _, c := range wrapper.Connectors {
+		var root yaml.Node
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return nil, fmt.Errorf("parse connectors.yaml: %w", err)
+		}
+		if len(root.Content) > 0 {
+			switch root.Content[0].Kind {
+			case yaml.SequenceNode:
+				var list []*Connector
+				if err := root.Content[0].Decode(&list); err != nil {
+					return nil, fmt.Errorf("parse connectors.yaml: %w", err)
+				}
+				for _, c := range list {
 					ws.Connectors[ConnectorKey(c)] = c
 				}
-			} else {
-				// 3. Legacy format: Load as map
-				if err := yaml.Unmarshal(data, &ws.Connectors); err != nil {
+			case yaml.MappingNode:
+				if connectorsNode := mappingValueNode(root.Content[0], "connectors"); connectorsNode != nil {
+					var list []*Connector
+					if err := connectorsNode.Decode(&list); err != nil {
+						return nil, fmt.Errorf("parse connectors.yaml: %w", err)
+					}
+					for _, c := range list {
+						ws.Connectors[ConnectorKey(c)] = c
+					}
+					break
+				}
+				if err := root.Content[0].Decode(&ws.Connectors); err != nil {
 					return nil, fmt.Errorf("parse connectors.yaml: %w", err)
 				}
 				delete(ws.Connectors, "_meta")
 				delete(ws.Connectors, "_meta_connectors")
+			default:
+				return nil, fmt.Errorf("parse connectors.yaml: expected list or mapping document")
 			}
 		}
 	}
@@ -105,4 +134,16 @@ func Load(dir string) (*Workspace, error) {
 	ws.Meta = meta
 
 	return ws, nil
+}
+
+func mappingValueNode(mapping *yaml.Node, key string) *yaml.Node {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return nil
+	}
+	for index := 0; index+1 < len(mapping.Content); index += 2 {
+		if mapping.Content[index].Value == key {
+			return mapping.Content[index+1]
+		}
+	}
+	return nil
 }

@@ -224,6 +224,37 @@ func TestAnalyzeCmd_ExcludeRules(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCmd_GeneratedNamesAreGloballyUnique(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+
+	repoDir := filepath.Join(dir, "app")
+	if err := os.MkdirAll(filepath.Join(repoDir, "cmd"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, repoDir, filepath.Join("cmd", "main.go"), "package main\nfunc main() {}\n")
+	if err := os.MkdirAll(filepath.Join(repoDir, "tools"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "tools", "main.go"), []byte("package main\nfunc main() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", repoDir)
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, validationErr := range ws.ValidateWithOpts(workspace.ValidationOptions{SkipSymbols: true}) {
+		if strings.Contains(validationErr.Message, "duplicate element name") {
+			t.Fatalf("unexpected duplicate-name validation error: %v", validationErr)
+		}
+	}
+}
+
 func TestAnalyzeCmd_PathNotExist(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)

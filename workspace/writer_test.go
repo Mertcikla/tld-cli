@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	hashidlib "github.com/mertcikla/tld-cli/internal/hashids"
 	"github.com/mertcikla/tld-cli/workspace"
 	"gopkg.in/yaml.v3"
 )
@@ -85,25 +86,27 @@ func TestUpsertElement_ErrorsOnKindMismatch(t *testing.T) {
 	}
 }
 
-func TestUpsertElement_PreservesElementAndViewMetaSections(t *testing.T) {
+func TestUpsertElement_PersistsElementAndViewMetadataToLockFile(t *testing.T) {
 	dir := t.TempDir()
-	content := `api:
-  name: API
-  kind: service
-  placements:
-    - parent: root
-      position_x: 10
-      position_y: 20
-_meta_elements:
-  api:
-    id: elem123
-    updated_at: 2024-01-01T00:00:00Z
-_meta_views:
-  api:
-    id: view123
-    updated_at: 2024-01-02T00:00:00Z
-`
+	content := "api:\n" +
+		"  name: API\n" +
+		"  kind: service\n" +
+		"  placements:\n" +
+		"    - parent: root\n" +
+		"      position_x: 10\n" +
+		"      position_y: 20\n" +
+		"_meta_elements:\n" +
+		"  api:\n" +
+		"    id: 11\n" +
+		"    updated_at: 2024-01-01T00:00:00Z\n" +
+		"_meta_views:\n" +
+		"  api:\n" +
+		"    id: 21\n" +
+		"    updated_at: 2024-01-02T00:00:00Z\n"
 	if err := os.WriteFile(filepath.Join(dir, "elements.yaml"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{Version: "v1"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,23 +124,30 @@ _meta_views:
 		t.Fatal(err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "_meta_elements:") || !strings.Contains(text, "_meta_views:") {
-		t.Fatalf("elements.yaml lost metadata sections:\n%s", text)
+	if strings.Contains(text, "_meta_elements:") || strings.Contains(text, "_meta_views:") {
+		t.Fatalf("elements.yaml should not keep migrated metadata sections:\n%s", text)
 	}
-	if !strings.Contains(text, "id: elem123") || !strings.Contains(text, "id: view123") {
-		t.Fatalf("elements.yaml lost metadata values:\n%s", text)
+	lockFile, err := workspace.LoadLockFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lockFile.CurrentElements["api"] == nil || lockFile.CurrentElements["api"].ID != 11 {
+		t.Fatalf("lockfile current element metadata missing: %+v", lockFile.CurrentElements)
+	}
+	if lockFile.CurrentViews["api"] == nil || lockFile.CurrentViews["api"].ID != 21 {
+		t.Fatalf("lockfile current view metadata missing: %+v", lockFile.CurrentViews)
 	}
 }
 
 func TestAppendConnector_WritesFlatList(t *testing.T) {
 	dir := t.TempDir()
-	content := `- view: system
-  source: api
-  target: db
-  label: reads
-  id: conn123
-  updated_at: 2024-01-01T00:00:00Z
-`
+	encodedID := hashidlib.Encode(1)
+	content := "- view: system\n" +
+		"  source: api\n" +
+		"  target: db\n" +
+		"  label: reads\n" +
+		"  id: " + encodedID + "\n" +
+		"  updated_at: 2024-01-01T00:00:00Z\n"
 	if err := os.WriteFile(filepath.Join(dir, "connectors.yaml"), []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +175,7 @@ func TestAppendConnector_WritesFlatList(t *testing.T) {
 	if !strings.Contains(text, "label: publishes") || !strings.Contains(text, "target: queue") {
 		t.Fatalf("connectors.yaml missing appended connector:\n%s", text)
 	}
-	if !strings.Contains(text, "id: conn123") {
+	if !strings.Contains(text, "id: "+encodedID) {
 		t.Fatalf("connectors.yaml lost connector metadata:\n%s", text)
 	}
 }
@@ -176,6 +186,9 @@ func TestSave_WritesElementsAndConnectorsAndRemovesLegacyFiles(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, legacyFile), []byte("legacy: true\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := workspace.WriteLockFile(dir, &workspace.LockFile{Version: "v1"}); err != nil {
+		t.Fatal(err)
 	}
 
 	ws := &workspace.Workspace{
@@ -214,8 +227,21 @@ func TestSave_WritesElementsAndConnectorsAndRemovesLegacyFiles(t *testing.T) {
 	}
 
 	elementsData, _ := os.ReadFile(filepath.Join(dir, "elements.yaml"))
-	if !strings.Contains(string(elementsData), "_meta_elements:") || !strings.Contains(string(elementsData), "_meta_views:") {
-		t.Fatalf("elements.yaml missing metadata sections:\n%s", elementsData)
+	if strings.Contains(string(elementsData), "_meta_elements:") || strings.Contains(string(elementsData), "_meta_views:") {
+		t.Fatalf("elements.yaml should not contain current metadata sections:\n%s", elementsData)
+	}
+	lockFile, err := workspace.LoadLockFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lockFile.CurrentElements["api"] == nil || lockFile.CurrentElements["api"].ID != 1 {
+		t.Fatalf("lockfile current element metadata missing: %+v", lockFile.CurrentElements)
+	}
+	if lockFile.CurrentViews["api"] == nil || lockFile.CurrentViews["api"].ID != 2 {
+		t.Fatalf("lockfile current view metadata missing: %+v", lockFile.CurrentViews)
+	}
+	if lockFile.CurrentConnectors["api:api:db:reads"] == nil || lockFile.CurrentConnectors["api:api:db:reads"].ID != 3 {
+		t.Fatalf("lockfile current connector metadata missing: %+v", lockFile.CurrentConnectors)
 	}
 	connectorsData, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
 	if strings.Contains(string(connectorsData), "_meta_connectors:") || !strings.Contains(string(connectorsData), "label: reads") {
@@ -223,6 +249,9 @@ func TestSave_WritesElementsAndConnectorsAndRemovesLegacyFiles(t *testing.T) {
 	}
 	if !strings.Contains(string(connectorsData), "id: ") {
 		t.Fatalf("connectors.yaml missing inline metadata:\n%s", connectorsData)
+	}
+	if strings.Contains(string(connectorsData), "updated_at:") {
+		t.Fatalf("connectors.yaml should not keep inline updated_at when lockfile exists:\n%s", connectorsData)
 	}
 	for _, legacyFile := range []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"} {
 		if _, err := os.Stat(filepath.Join(dir, legacyFile)); !os.IsNotExist(err) {

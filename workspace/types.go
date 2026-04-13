@@ -130,14 +130,17 @@ type ResourceMetadata struct {
 
 // LockFile tracks workspace versioning and change history
 type LockFile struct {
-	Version       string          `yaml:"version"`    // "v1"
-	VersionID     string          `yaml:"version_id"` // Workspace version UUID
-	LastApply     time.Time       `yaml:"last_apply"`
-	AppliedBy     string          `yaml:"applied_by"` // "cli" or "frontend"
-	Resources     *ResourceCounts `yaml:"resources"`
-	WorkspaceHash string          `yaml:"workspace_hash"`           // Hash of all YAML files
-	ParentVersion *string         `yaml:"parent_version,omitempty"` // Previous version
-	Metadata      *Meta           `yaml:"metadata,omitempty"`       // Metadata at time of last sync
+	Version           string                       `yaml:"version"`    // "v1"
+	VersionID         string                       `yaml:"version_id"` // Workspace version UUID
+	LastApply         time.Time                    `yaml:"last_apply"`
+	AppliedBy         string                       `yaml:"applied_by"` // "cli" or "frontend"
+	Resources         *ResourceCounts              `yaml:"resources"`
+	WorkspaceHash     string                       `yaml:"workspace_hash"`               // Hash of all YAML files
+	ParentVersion     *string                      `yaml:"parent_version,omitempty"`     // Previous version
+	Metadata          *Meta                        `yaml:"metadata,omitempty"`           // Metadata at time of last sync
+	CurrentElements   map[string]*ResourceMetadata `yaml:"current_elements,omitempty"`   // Current local element metadata, migrated from _meta_elements
+	CurrentViews      map[string]*ResourceMetadata `yaml:"current_views,omitempty"`      // Current local view metadata, migrated from _meta_views
+	CurrentConnectors map[string]*ResourceMetadata `yaml:"current_connectors,omitempty"` // Current local connector metadata; connector timestamps now live here
 }
 
 // ResourceCounts holds current model counts plus legacy fields retained for lockfile compatibility.
