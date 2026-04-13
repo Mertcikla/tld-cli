@@ -10,8 +10,8 @@ import (
 func TestValidateCmd_ValidWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
-	if _, _, err := runCmd(t, dir, "create", "element", "System", "--ref", "sys", "--kind", "workspace"); err != nil {
-		t.Fatalf("create element: %v", err)
+	if _, _, err := runCmd(t, dir, "add", "System", "--ref", "sys", "--kind", "workspace"); err != nil {
+		t.Fatalf("add: %v", err)
 	}
 
 	stdout, _, err := runCmd(t, dir, "validate")

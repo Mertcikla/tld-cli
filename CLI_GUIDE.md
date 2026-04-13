@@ -83,7 +83,7 @@ Validate the workspace YAML and verify linked code symbols in the active reposit
 
 ### Resource Creation
 
-#### `tld create element <name> [flags]`
+#### `tld add <name> [flags]`
 Create or update an element in `elements.yaml`.
 Each created element owns a single canonical diagram.
 **Flags:**
@@ -97,7 +97,7 @@ Each created element owns a single canonical diagram.
 - `--diagram-label`: Optional label for that canonical diagram.
 - `--ref`: Override the generated reference ID.
 
-#### `tld connect elements [flags]`
+#### `tld connect [flags]`
 Add a connector between two elements.
 The owning diagram is inferred from the two elements' shared parent placement.
 **Flags:**
@@ -113,19 +113,6 @@ The owning diagram is inferred from the two elements' shared parent placement.
 The CLI only exposes the unified element and connector workflow. Server export and pull still bridge legacy backend payloads internally, but local workspaces should contain only `elements.yaml`, `connectors.yaml`, and `.tld.lock`.
 
 ### Connecting and Linking Resources
-
-#### `tld create link [flags]`
-Create a connector between two elements.
-The owning diagram is inferred from the two elements' shared parent placement.
-**Flags:**
-- `--from`: Source element reference **(required)**.
-- `--to`: Target element reference **(required)**.
-- `--label`: Connector label.
-- `--description`: Connector description.
-- `--relationship`: Semantic relationship type.
-- `--direction`: Direction of the arrow. Options: `forward`, `backward`, `both`, `none` (default: `forward`).
-- `--style`: Visual style of the connector. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
-- `--url`: External URL for documentation related to this connection.
 
 #### `tld rename element <old-ref> <new-ref>`
 Rename an element reference in `elements.yaml` and cascade the change through placements, connector endpoints, and metadata.
@@ -214,15 +201,15 @@ repositories:
 ### 2. Add the product-level architecture
 Create the top-level element that owns the overall system view.
 ```bash
-tld create element "E-commerce Platform" --kind workspace --diagram-label "System Context" --description "High-level overview of the product architecture."
+tld add "E-commerce Platform" --kind workspace --diagram-label "System Context" --description "High-level overview of the product architecture."
 ```
 
 Then add one child element per repo-owned boundary.
 
 ```bash
-tld create element "Frontend App" --parent e-commerce-platform --kind software_system --file-path frontend/src/main.tsx --symbol App --description "React frontend owned by the frontend repo." --position-x 100 --position-y 260
-tld create element "API Service" --parent e-commerce-platform --kind software_system --file-path backend/cmd/server/main.go --symbol main --description "Go backend owned by the backend repo." --position-x 420 --position-y 260
-tld create element "Payments Worker" --parent e-commerce-platform --kind software_system --file-path services/payments/main.go --symbol main --description "Payments service owned by the payments team." --position-x 740 --position-y 260
+tld add "Frontend App" --parent e-commerce-platform --kind software_system --file-path frontend/src/main.tsx --symbol App --description "React frontend owned by the frontend repo." --position-x 100 --position-y 260
+tld add "API Service" --parent e-commerce-platform --kind software_system --file-path backend/cmd/server/main.go --symbol main --description "Go backend owned by the backend repo." --position-x 420 --position-y 260
+tld add "Payments Worker" --parent e-commerce-platform --kind software_system --file-path services/payments/main.go --symbol main --description "Payments service owned by the payments team." --position-x 740 --position-y 260
 ```
 
 ### 3. Add internal repo symbols
@@ -238,8 +225,8 @@ When you are ready, run it without `--dry-run` to write `elements.yaml` and `con
 ### 4. Connect the main dependencies
 Define how the major systems interact.
 ```bash
-tld connect elements --from "frontend-app" --to "api-service" --label "Calls API" --relationship "uses"
-tld connect elements --from "api-service" --to "payments-worker" --label "Dispatches payment jobs" --relationship "publishes"
+tld connect --from "frontend-app" --to "api-service" --label "Calls API" --relationship "uses"
+tld connect --from "api-service" --to "payments-worker" --label "Dispatches payment jobs" --relationship "publishes"
 ```
 
 ### 5. Validate the active repo

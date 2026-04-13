@@ -9,9 +9,9 @@ func TestRemoveElementCmd_LocalOnly(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 
-	_, _, err := runCmd(t, dir, "create", "element", "API", "--ref", "api", "--kind", "service")
+	_, _, err := runCmd(t, dir, "add", "API", "--ref", "api", "--kind", "service")
 	if err != nil {
-		t.Fatalf("create element: %v", err)
+		t.Fatalf("add: %v", err)
 	}
 
 	stdout, _, err := runCmd(t, dir, "remove", "element", "api")
@@ -27,10 +27,10 @@ func TestRemoveConnectorCmd(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 
-	mustRunCmd(t, dir, "create", "element", "Platform", "--ref", "platform", "--kind", "workspace", "--with-view")
-	mustRunCmd(t, dir, "create", "element", "API", "--ref", "api", "--kind", "service", "--parent", "platform")
-	mustRunCmd(t, dir, "create", "element", "DB", "--ref", "db", "--kind", "database", "--parent", "platform")
-	mustRunCmd(t, dir, "connect", "elements", "--view", "platform", "--from", "api", "--to", "db", "--label", "reads")
+	mustRunCmd(t, dir, "add", "Platform", "--ref", "platform", "--kind", "workspace", "--with-view")
+	mustRunCmd(t, dir, "add", "API", "--ref", "api", "--kind", "service", "--parent", "platform")
+	mustRunCmd(t, dir, "add", "DB", "--ref", "db", "--kind", "database", "--parent", "platform")
+	mustRunCmd(t, dir, "connect", "--view", "platform", "--from", "api", "--to", "db", "--label", "reads")
 
 	stdout, _, err := runCmd(t, dir, "remove", "connector", "--view", "platform", "--from", "api", "--to", "db")
 	if err != nil {

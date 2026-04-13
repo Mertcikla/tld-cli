@@ -48,12 +48,12 @@ This will install the `tld` binary into your `$GOPATH/bin` directory.
 
 3. Create your first element:
    ```bash
-   tld create element "System Overview" --ref system-overview --kind workspace --diagram-label "System Context"
+   tld add "System Overview" --ref system-overview --kind workspace --diagram-label "System Context"
    ```
 
 4. Add elements to that view:
    ```bash
-   tld create element "Web API" --parent system-overview --kind service --technology "Go / Gin"
+   tld add "Web API" --parent system-overview --kind service --technology "Go / Gin"
    ```
 
 5. Validate your workspace:
@@ -90,9 +90,8 @@ A tld workspace consists of the following directory structure:
 
 ### Resource Creation
 
-- `tld create element <name>`: Define a new element. Every created element owns a canonical diagram.
-- `tld create link --from <source_ref> --to <target_ref>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
-- `tld connect elements --from <source> --to <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
+- `tld add <name>`: Define a new element. Every created element owns a canonical diagram.
+- `tld connect --from <source> --to <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
 - `tld remove element <ref>`: Remove an element from the workspace.
 - `tld remove connector --view <ref> --from <source_ref> --to <target_ref>`: Remove matching connector(s).
 - `tld rename element <old-ref> <new-ref>`: Rename an element reference and cascade the change through placements and connector endpoints.

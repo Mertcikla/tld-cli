@@ -14,18 +14,18 @@ import (
 func setupWorkspaceForLinks(t *testing.T, dir string) {
 	t.Helper()
 	mustInitWorkspace(t, dir)
-	mustRunCmd(t, dir, "create", "element", "Platform", "--ref", "platform", "--kind", "workspace")
-	mustRunCmd(t, dir, "create", "element", "API", "--ref", "api", "--parent", "platform", "--kind", "service")
-	mustRunCmd(t, dir, "create", "element", "DB", "--ref", "db", "--parent", "platform", "--kind", "database")
+	mustRunCmd(t, dir, "add", "Platform", "--ref", "platform", "--kind", "workspace")
+	mustRunCmd(t, dir, "add", "API", "--ref", "api", "--parent", "platform", "--kind", "service")
+	mustRunCmd(t, dir, "add", "DB", "--ref", "db", "--parent", "platform", "--kind", "database")
 }
 
-func TestAddLinkCmd_AppendsLink(t *testing.T) {
+func TestConnectCmd_AppendsConnector(t *testing.T) {
 	dir := t.TempDir()
 	setupWorkspaceForLinks(t, dir)
 
-	_, _, err := runCmd(t, dir, "create", "link", "--from", "api", "--to", "db")
+	_, _, err := runCmd(t, dir, "connect", "--from", "api", "--to", "db")
 	if err != nil {
-		t.Fatalf("create link: %v", err)
+		t.Fatalf("connect: %v", err)
 	}
 
 	data, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
@@ -45,15 +45,15 @@ func TestAddLinkCmd_AppendsLink(t *testing.T) {
 	}
 }
 
-func TestAddLinkCmd_RootElementsInferRootDiagram(t *testing.T) {
+func TestConnectCmd_RootElementsInferRootDiagram(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
-	mustRunCmd(t, dir, "create", "element", "API", "--ref", "api", "--kind", "service")
-	mustRunCmd(t, dir, "create", "element", "DB", "--ref", "db", "--kind", "database")
+	mustRunCmd(t, dir, "add", "API", "--ref", "api", "--kind", "service")
+	mustRunCmd(t, dir, "add", "DB", "--ref", "db", "--kind", "database")
 
-	_, _, err := runCmd(t, dir, "create", "link", "--from", "api", "--to", "db")
+	_, _, err := runCmd(t, dir, "connect", "--from", "api", "--to", "db")
 	if err != nil {
-		t.Fatalf("create link: %v", err)
+		t.Fatalf("connect: %v", err)
 	}
 
 	data, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
@@ -73,17 +73,17 @@ func TestAddLinkCmd_RootElementsInferRootDiagram(t *testing.T) {
 	}
 }
 
-func TestAddLinkCmd_TwoCallsTwoEntries(t *testing.T) {
+func TestConnectCmd_TwoCallsTwoEntries(t *testing.T) {
 	dir := t.TempDir()
 	setupWorkspaceForLinks(t, dir)
 
-	_, _, err := runCmd(t, dir, "create", "link", "--from", "api", "--to", "db")
+	_, _, err := runCmd(t, dir, "connect", "--from", "api", "--to", "db")
 	if err != nil {
-		t.Fatalf("first create link: %v", err)
+		t.Fatalf("first connect: %v", err)
 	}
-	_, _, err = runCmd(t, dir, "create", "link", "--from", "db", "--to", "api")
+	_, _, err = runCmd(t, dir, "connect", "--from", "db", "--to", "api")
 	if err != nil {
-		t.Fatalf("second create link: %v", err)
+		t.Fatalf("second connect: %v", err)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
@@ -95,17 +95,17 @@ func TestAddLinkCmd_TwoCallsTwoEntries(t *testing.T) {
 	}
 }
 
-func TestAddLinkCmd_ElementsInDifferentDiagramsSucceeds(t *testing.T) {
+func TestConnectCmd_ElementsInDifferentDiagramsSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
-	mustRunCmd(t, dir, "create", "element", "Parent1", "--ref", "parent1", "--kind", "workspace")
-	mustRunCmd(t, dir, "create", "element", "Parent2", "--ref", "parent2", "--kind", "workspace")
-	mustRunCmd(t, dir, "create", "element", "API", "--ref", "api", "--parent", "parent1", "--kind", "service")
-	mustRunCmd(t, dir, "create", "element", "DB", "--ref", "db", "--parent", "parent2", "--kind", "database")
+	mustRunCmd(t, dir, "add", "Parent1", "--ref", "parent1", "--kind", "workspace")
+	mustRunCmd(t, dir, "add", "Parent2", "--ref", "parent2", "--kind", "workspace")
+	mustRunCmd(t, dir, "add", "API", "--ref", "api", "--parent", "parent1", "--kind", "service")
+	mustRunCmd(t, dir, "add", "DB", "--ref", "db", "--parent", "parent2", "--kind", "database")
 
-	_, _, err := runCmd(t, dir, "create", "link", "--from", "api", "--to", "db")
+	_, _, err := runCmd(t, dir, "connect", "--from", "api", "--to", "db")
 	if err != nil {
-		t.Fatalf("create link: %v", err)
+		t.Fatalf("connect: %v", err)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
@@ -117,7 +117,7 @@ func TestAddLinkCmd_ElementsInDifferentDiagramsSucceeds(t *testing.T) {
 	}
 }
 
-func TestAddLinkCmd_ElementsWithMultiplePlacementsSucceeds(t *testing.T) {
+func TestConnectCmd_ElementsWithMultiplePlacementsSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 	// Create an element with 2 placements manually in elements.yaml
@@ -139,9 +139,9 @@ func TestAddLinkCmd_ElementsWithMultiplePlacementsSucceeds(t *testing.T) {
 	data, _ := yaml.Marshal(elements)
 	os.WriteFile(filepath.Join(dir, "elements.yaml"), data, 0600)
 
-	_, _, err := runCmd(t, dir, "create", "link", "--from", "api", "--to", "db")
+	_, _, err := runCmd(t, dir, "connect", "--from", "api", "--to", "db")
 	if err != nil {
-		t.Fatalf("create link: %v", err)
+		t.Fatalf("connect: %v", err)
 	}
 
 	raw, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
@@ -153,21 +153,21 @@ func TestAddLinkCmd_ElementsWithMultiplePlacementsSucceeds(t *testing.T) {
 	}
 }
 
-func TestAddLinkCmd_MissingFromFlag(t *testing.T) {
+func TestConnectCmd_MissingFromFlag(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 
-	_, _, err := runCmd(t, dir, "create", "link", "--to", "db")
+	_, _, err := runCmd(t, dir, "connect", "--to", "db")
 	if err == nil {
 		t.Fatal("expected error for missing --from")
 	}
 }
 
-func TestAddLinkCmd_MissingToFlag(t *testing.T) {
+func TestConnectCmd_MissingToFlag(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 
-	_, _, err := runCmd(t, dir, "create", "link", "--from", "api")
+	_, _, err := runCmd(t, dir, "connect", "--from", "api")
 	if err == nil {
 		t.Fatal("expected error for missing --to")
 	}

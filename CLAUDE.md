@@ -68,11 +68,8 @@ tld
 ├── rename
 │   ├── element <old> <new>
 │   └── connector <old> <new>
-├── create
-│   ├── element <name> [--ref --kind --description --technology --url --parent --with-view --view-label --position-x --position-y]
-│   └── link --from --to [--label --description --relationship --direction --style --url]
-├── connect
-│   └── elements --view --from --to [--label --relationship --direction --style]
+├── add <name>         - adds or updates an element
+├── connect            - adds a connector between two elements
 └── remove
   ├── element <ref>
   └── connector --view --from --to

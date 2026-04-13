@@ -184,10 +184,10 @@ func setupApplyWorkspace(t *testing.T, dir, serverURL string) {
 
 func seedElementWorkspace(t *testing.T, dir string) {
 	t.Helper()
-	mustRunCmd(t, dir, "create", "element", "Platform", "--ref", "platform", "--kind", "workspace", "--with-view")
-	mustRunCmd(t, dir, "create", "element", "API", "--ref", "api", "--parent", "platform", "--kind", "service", "--with-view")
-	mustRunCmd(t, dir, "create", "element", "DB", "--ref", "db", "--parent", "platform", "--kind", "database")
-	mustRunCmd(t, dir, "connect", "elements", "--view", "platform", "--from", "api", "--to", "db", "--label", "reads")
+	mustRunCmd(t, dir, "add", "Platform", "--ref", "platform", "--kind", "workspace", "--with-view")
+	mustRunCmd(t, dir, "add", "API", "--ref", "api", "--parent", "platform", "--kind", "service", "--with-view")
+	mustRunCmd(t, dir, "add", "DB", "--ref", "db", "--parent", "platform", "--kind", "database")
+	mustRunCmd(t, dir, "connect", "--view", "platform", "--from", "api", "--to", "db", "--label", "reads")
 }
 
 func TestApplyCmd_SuccessAutoApprove(t *testing.T) {

@@ -55,8 +55,8 @@ and apply them atomically with 'tld apply'.`,
 	root.AddGroup(resourceGroup, secondaryGroup)
 
 	// CRUD Commands
-	createCmd := newCreateCmd(&wdir)
-	createCmd.GroupID = resourceGroup.ID
+	addCmd := newAddCmd(&wdir)
+	addCmd.GroupID = resourceGroup.ID
 
 	connectCmd := newConnectCmd(&wdir)
 	connectCmd.GroupID = resourceGroup.ID
@@ -99,7 +99,7 @@ and apply them atomically with 'tld apply'.`,
 	versionCmd.GroupID = secondaryGroup.ID
 
 	analyzeCmd := newAnalyzeCmd(&wdir)
-	analyzeCmd.GroupID = resourceGroup.ID
+	analyzeCmd.GroupID = secondaryGroup.ID
 
 	checkCmd := newCheckCmd(&wdir)
 	checkCmd.GroupID = secondaryGroup.ID
@@ -114,7 +114,7 @@ and apply them atomically with 'tld apply'.`,
 		pullCmd,
 		statusCmd,
 		diffCmd,
-		createCmd,
+		addCmd,
 		connectCmd,
 		removeCmd,
 		renameCmd,
