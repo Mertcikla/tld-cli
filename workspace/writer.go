@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -45,9 +46,17 @@ func UpsertElement(dir, ref string, spec *Element) error {
 	return upsertYAMLNodeKey(filepath.Join(dir, "elements.yaml"), ref, spec)
 }
 
-// AppendConnector adds a connector to connectors.yaml keyed by view:source:target:label.
+// AppendConnector adds a connector to connectors.yaml.
 func AppendConnector(dir string, spec *Connector) error {
-	return upsertYAMLNodeKey(filepath.Join(dir, "connectors.yaml"), connectorKey(spec), spec)
+	ws, err := Load(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		ws = &Workspace{Dir: dir, Elements: make(map[string]*Element), Connectors: make(map[string]*Connector)}
+	}
+	ws.Connectors[ConnectorKey(spec)] = spec
+	return Save(ws)
 }
 
 // Save writes the entire workspace state to YAML files in ws.Dir.
@@ -72,7 +81,22 @@ func Save(ws *Workspace) error {
 		if err := WriteFullYAMLMapSections(filepath.Join(ws.Dir, "elements.yaml"), ws.Elements, []metadataSection{{name: "_meta_elements", values: elementMeta}, {name: "_meta_views", values: viewMeta}}); err != nil {
 			return fmt.Errorf("write elements: %w", err)
 		}
-		if err := WriteFullYAMLMapSections(filepath.Join(ws.Dir, "connectors.yaml"), ws.Connectors, []metadataSection{{name: "_meta_connectors", values: connectorMeta}}); err != nil {
+		var connectorList []*Connector
+		connectorRefs := make([]string, 0, len(ws.Connectors))
+		for ref := range ws.Connectors {
+			connectorRefs = append(connectorRefs, ref)
+		}
+		sort.Strings(connectorRefs)
+		for _, ref := range connectorRefs {
+			c := ws.Connectors[ref]
+			if connectorMeta != nil && connectorMeta[ref] != nil {
+				c.ID = connectorMeta[ref].ID
+				c.UpdatedAt = connectorMeta[ref].UpdatedAt
+			}
+			connectorList = append(connectorList, c)
+		}
+
+		if err := WriteFullYAMLList(filepath.Join(ws.Dir, "connectors.yaml"), connectorList); err != nil {
 			return fmt.Errorf("write connectors: %w", err)
 		}
 		if err := cleanupLegacyWorkspaceFiles(ws.Dir); err != nil {
@@ -165,14 +189,6 @@ func normalizeYAMLStyleRecursive(node *yaml.Node, depth int) {
 	node.Style &^= yaml.FlowStyle
 
 	if node.Kind == yaml.MappingNode {
-		// Only add blank lines between top-level resources (depth 1)
-		// and ensure _meta sections also have a leading blank line.
-		if depth == 1 {
-			for i := 2; i < len(node.Content); i += 2 {
-				node.Content[i].HeadComment = "\n"
-			}
-		}
-
 		// Prettify field order within elements (depth 2)
 		// We want 'name' and 'kind' to always be at the top.
 		if depth == 2 {
@@ -267,7 +283,7 @@ func mergeElementFields(ref string, existing, incoming *Element) (*Element, erro
 	return &merged, nil
 }
 
-func connectorKey(spec *Connector) string {
+func ConnectorKey(spec *Connector) string {
 	return spec.View + ":" + spec.Source + ":" + spec.Target + ":" + spec.Label
 }
 
@@ -309,7 +325,26 @@ func marshalPrettyYAML(v any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// WriteFullYAMLMap writes a map of items to a YAML file, including an optional _meta section.
+// WriteFullYAMLList writes a list of items to a YAML file.
+func WriteFullYAMLList(path string, items any) error {
+	var node yaml.Node
+	if err := node.Encode(items); err != nil {
+		return fmt.Errorf("encode items for %s: %w", path, err)
+	}
+	normalizeYAMLStyle(&node)
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	enc := yaml.NewEncoder(f)
+	enc.SetIndent(2)
+	if err := enc.Encode(&node); err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	return f.Close()
+}
 func WriteFullYAMLMap(path string, items any, meta map[string]*ResourceMetadata) error {
 	return WriteFullYAMLMapSections(path, items, []metadataSection{{name: "_meta", values: meta}})
 }
@@ -506,167 +541,98 @@ func updatePlacementParentRefs(node *yaml.Node, oldRef, newRef string) {
 }
 
 // RenameConnector updates connector refs in connectors.yaml.
-// It renames an explicit connector key and also cascades element ref changes
-// into connector source/target fields and their derived keys.
 func RenameConnector(dir, oldRef, newRef string) error {
-	if oldRef == newRef {
-		return nil
-	}
-
-	path := filepath.Join(dir, "connectors.yaml")
-	if _, err := os.Stat(path); err != nil {
+	ws, err := Load(dir)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("stat connectors.yaml: %w", err)
-	}
-
-	root, mapping, err := loadYAMLMappingNode(path)
-	if err != nil {
 		return err
 	}
 
-	renames := make(map[string]string)
-	usedKeys := make(map[string]string)
-	var metaKey *yaml.Node
-	var metaValue *yaml.Node
-	var newContent []*yaml.Node
-
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		keyNode := mapping.Content[i]
-		valNode := mapping.Content[i+1]
-
-		if keyNode.Value == "_meta_connectors" || keyNode.Value == "_meta" {
-			metaKey = keyNode
-			metaValue = valNode
-			continue
-		}
-
-		entryOldKey := keyNode.Value
+	changed := false
+	newConnectors := make(map[string]*Connector)
+	for ref, c := range ws.Connectors {
 		fieldChanged := false
-		if updateScalarField(valNode, "view", oldRef, newRef) {
+		if c.View == oldRef {
+			c.View = newRef
 			fieldChanged = true
 		}
-		if updateScalarField(valNode, "source", oldRef, newRef) {
+		if c.Source == oldRef {
+			c.Source = newRef
 			fieldChanged = true
 		}
-		if updateScalarField(valNode, "target", oldRef, newRef) {
+		if c.Target == oldRef {
+			c.Target = newRef
 			fieldChanged = true
 		}
 
-		entryNewKey := entryOldKey
-		if entryOldKey == oldRef {
-			entryNewKey = newRef
-		}
 		if fieldChanged {
-			var spec Connector
-			if err := valNode.Decode(&spec); err != nil {
-				return fmt.Errorf("decode connector %q: %w", entryOldKey, err)
-			}
-			entryNewKey = connectorKey(&spec)
+			newConnectors[ConnectorKey(c)] = c
+			changed = true
+		} else {
+			newConnectors[ref] = c
 		}
-
-		if previous, exists := usedKeys[entryNewKey]; exists && previous != entryOldKey {
-			return fmt.Errorf("connector %q already exists", entryNewKey)
-		}
-		usedKeys[entryNewKey] = entryOldKey
-		if entryNewKey != entryOldKey {
-			renames[entryOldKey] = entryNewKey
-		}
-
-		newContent = append(newContent,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: entryNewKey},
-			valNode,
-		)
 	}
 
-	if metaKey != nil && metaValue != nil {
-		renameMappingKeys(metaValue, renames)
-		newContent = append(newContent, metaKey, metaValue)
+	if changed {
+		ws.Connectors = newConnectors
+		return Save(ws)
 	}
-
-	mapping.Content = newContent
-	return writeYAMLNode(path, root)
+	return nil
 }
 
-// UpdateConnectorField updates one scalar field on a connector by key.
-// Special case: field "ref" performs a connector key rename.
+// UpdateConnectorField updates one field on a connector by its key.
 func UpdateConnectorField(dir, ref, field, value string) error {
-	if field == "ref" {
-		return RenameConnector(dir, ref, value)
-	}
-
-	path := filepath.Join(dir, "connectors.yaml")
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("connector %q not found", ref)
-		}
-		return fmt.Errorf("stat connectors.yaml: %w", err)
-	}
-
-	root, mapping, err := loadYAMLMappingNode(path)
+	ws, err := Load(dir)
 	if err != nil {
 		return err
 	}
 
-	found := false
-	renames := make(map[string]string)
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		keyNode := mapping.Content[i]
-		if keyNode.Value == "_meta_connectors" || keyNode.Value == "_meta" {
-			continue
-		}
-		if keyNode.Value != ref {
-			continue
-		}
-
-		found = true
-		valNode := mapping.Content[i+1]
-		if err := setMappingScalarField(valNode, field, value); err != nil {
-			return fmt.Errorf("update connector %q field %q: %w", ref, field, err)
-		}
-
-		newRef := ref
-		if field == "view" || field == "source" || field == "target" || field == "label" {
-			var spec Connector
-			if err := valNode.Decode(&spec); err != nil {
-				return fmt.Errorf("decode connector %q: %w", ref, err)
-			}
-			newRef = connectorKey(&spec)
-		}
-
-		if newRef != ref {
-			for j := 0; j+1 < len(mapping.Content); j += 2 {
-				otherKey := mapping.Content[j].Value
-				if otherKey == "_meta_connectors" || otherKey == "_meta" || otherKey == ref {
-					continue
-				}
-				if otherKey == newRef {
-					return fmt.Errorf("connector %q already exists", newRef)
-				}
-			}
-			keyNode.Value = newRef
-			renames[ref] = newRef
-		}
-		break
-	}
-
-	if !found {
+	c, ok := ws.Connectors[ref]
+	if !ok {
 		return fmt.Errorf("connector %q not found", ref)
 	}
 
-	if len(renames) > 0 {
-		for i := 0; i+1 < len(mapping.Content); i += 2 {
-			keyNode := mapping.Content[i]
-			if keyNode.Value != "_meta_connectors" && keyNode.Value != "_meta" {
-				continue
-			}
-			renameMappingKeys(mapping.Content[i+1], renames)
-		}
+	changed := true
+	switch field {
+	case "view":
+		c.View = value
+	case "source":
+		c.Source = value
+	case "target":
+		c.Target = value
+	case "label":
+		c.Label = value
+	case "description":
+		c.Description = value
+	case "relationship":
+		c.Relationship = value
+	case "direction":
+		c.Direction = value
+	case "style":
+		c.Style = value
+	case "url":
+		c.URL = value
+	case "source_handle":
+		c.SourceHandle = value
+	case "target_handle":
+		c.TargetHandle = value
+	default:
+		changed = false
 	}
 
-	return writeYAMLNode(path, root)
+	if changed {
+		newKey := ConnectorKey(c)
+		if newKey != ref {
+			delete(ws.Connectors, ref)
+			ws.Connectors[newKey] = c
+		}
+		return Save(ws)
+	}
+	return nil
 }
+
 
 func updateScalarField(mapping *yaml.Node, fieldName, oldVal, newVal string) bool {
 	if mapping.Kind != yaml.MappingNode {

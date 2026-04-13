@@ -170,7 +170,34 @@ func LoadMetadata(dir string) (*Meta, error) {
 		return nil, fmt.Errorf("load connector metadata: %w", err)
 	}
 
+	// Also extract inline metadata from connectors list if present
+	if err := extractInlineMetadata(filepath.Join(dir, "connectors.yaml"), meta.Connectors); err != nil {
+		return nil, fmt.Errorf("load inline connector metadata: %w", err)
+	}
+
 	return meta, nil
+}
+
+func extractInlineMetadata(path string, target map[string]*ResourceMetadata) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var list []*Connector
+	if err := yaml.Unmarshal(data, &list); err == nil && len(list) > 0 {
+		for _, c := range list {
+			if c.ID != 0 {
+				target[ConnectorKey(c)] = &ResourceMetadata{
+					ID:        c.ID,
+					UpdatedAt: c.UpdatedAt,
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // loadYAMLMetadataSection loads a metadata section from a YAML file.
@@ -232,6 +259,10 @@ func WriteMetadata(dir, filename string, metadata map[string]*ResourceMetadata) 
 func WriteMetadataSection(dir, filename, sectionName string, metadata map[string]*ResourceMetadata) error {
 	path := filepath.Join(dir, filename)
 
+	if filename == "connectors.yaml" {
+		return writeConnectorListWithMetadata(path, metadata)
+	}
+
 	// Read existing file
 	var yamlMap map[string]any
 	if data, err := os.ReadFile(path); err == nil {
@@ -270,3 +301,25 @@ func WriteMetadataSection(dir, filename, sectionName string, metadata map[string
 
 	return nil
 }
+
+func writeConnectorListWithMetadata(path string, metadata map[string]*ResourceMetadata) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var list []*Connector
+	if err := yaml.Unmarshal(data, &list); err != nil {
+		return err
+	}
+	for _, c := range list {
+		if m, ok := metadata[ConnectorKey(c)]; ok {
+			c.ID = m.ID
+			c.UpdatedAt = m.UpdatedAt
+		}
+	}
+	return WriteFullYAMLList(path, list)
+}
+

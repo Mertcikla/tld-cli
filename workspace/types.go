@@ -77,17 +77,19 @@ type Element struct {
 
 // Connector is one entry in connectors.yaml.
 type Connector struct {
-	View         string `yaml:"view"`
-	Source       string `yaml:"source"`
-	Target       string `yaml:"target"`
-	Label        string `yaml:"label,omitempty"`
-	Description  string `yaml:"description,omitempty"`
-	Relationship string `yaml:"relationship,omitempty"`
-	Direction    string `yaml:"direction,omitempty"`
-	Style        string `yaml:"style,omitempty"`
-	URL          string `yaml:"url,omitempty"`
-	SourceHandle string `yaml:"source_handle,omitempty"`
-	TargetHandle string `yaml:"target_handle,omitempty"`
+	View         string     `yaml:"view"`
+	Source       string     `yaml:"source"`
+	Target       string     `yaml:"target"`
+	Label        string     `yaml:"label,omitempty"`
+	Description  string     `yaml:"description,omitempty"`
+	Relationship string     `yaml:"relationship,omitempty"`
+	Direction    string     `yaml:"direction,omitempty"`
+	Style        string     `yaml:"style,omitempty"`
+	URL          string     `yaml:"url,omitempty"`
+	SourceHandle string     `yaml:"source_handle,omitempty"`
+	TargetHandle string     `yaml:"target_handle,omitempty"`
+	ID           ResourceID `yaml:"id,omitempty"`
+	UpdatedAt    time.Time  `yaml:"updated_at,omitempty"`
 }
 
 // ResourceID is an int32 that serializes to Hashids in YAML

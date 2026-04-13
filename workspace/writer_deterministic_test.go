@@ -54,4 +54,15 @@ func TestSave_Deterministic(t *testing.T) {
 	if metaIdx < zIdx {
 		t.Fatalf("_meta_elements should come after resources in YAML:\n%s", s)
 	}
+	if strings.Contains(s, "\n\n") {
+		t.Fatalf("elements.yaml should not contain blank spacer lines:\n%s", s)
+	}
+
+	connectorsData, err := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(connectorsData), "\n\n") {
+		t.Fatalf("connectors.yaml should not contain blank spacer lines:\n%s", connectorsData)
+	}
 }

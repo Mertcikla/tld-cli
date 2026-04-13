@@ -71,11 +71,30 @@ func Load(dir string) (*Workspace, error) {
 	// Load connectors from connectors.yaml
 	connectorsFile := filepath.Join(dir, "connectors.yaml")
 	if data, err := os.ReadFile(connectorsFile); err == nil {
-		if err := yaml.Unmarshal(data, &ws.Connectors); err != nil {
-			return nil, fmt.Errorf("parse connectors.yaml: %w", err)
+		// 1. Try flat list (new format)
+		var list []*Connector
+		if err := yaml.Unmarshal(data, &list); err == nil && len(list) > 0 {
+			for _, c := range list {
+				ws.Connectors[ConnectorKey(c)] = c
+			}
+		} else {
+			// 2. Try wrapped list (intermediate format)
+			var wrapper struct {
+				Connectors []*Connector `yaml:"connectors"`
+			}
+			if err := yaml.Unmarshal(data, &wrapper); err == nil && len(wrapper.Connectors) > 0 {
+				for _, c := range wrapper.Connectors {
+					ws.Connectors[ConnectorKey(c)] = c
+				}
+			} else {
+				// 3. Legacy format: Load as map
+				if err := yaml.Unmarshal(data, &ws.Connectors); err != nil {
+					return nil, fmt.Errorf("parse connectors.yaml: %w", err)
+				}
+				delete(ws.Connectors, "_meta")
+				delete(ws.Connectors, "_meta_connectors")
+			}
 		}
-		delete(ws.Connectors, "_meta")
-		delete(ws.Connectors, "_meta_connectors")
 	}
 
 	// Load metadata

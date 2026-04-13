@@ -129,17 +129,14 @@ _meta_views:
 	}
 }
 
-func TestAppendConnector_PreservesMetaSection(t *testing.T) {
+func TestAppendConnector_WritesFlatList(t *testing.T) {
 	dir := t.TempDir()
-	content := `system:api:db:reads:
-  view: system
+	content := `- view: system
   source: api
   target: db
   label: reads
-_meta_connectors:
-  system:api:db:reads:
-    id: conn123
-    updated_at: 2024-01-01T00:00:00Z
+  id: conn123
+  updated_at: 2024-01-01T00:00:00Z
 `
 	if err := os.WriteFile(filepath.Join(dir, "connectors.yaml"), []byte(content), 0600); err != nil {
 		t.Fatal(err)
@@ -159,14 +156,14 @@ _meta_connectors:
 		t.Fatal(err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "_meta_connectors:") {
-		t.Fatalf("connectors.yaml lost _meta_connectors:\n%s", text)
+	if strings.Contains(text, "_meta_connectors:") {
+		t.Fatalf("connectors.yaml should not have _meta_connectors:\n%s", text)
 	}
-	if strings.Contains(text, "{view:") {
-		t.Fatalf("connectors.yaml should use block-style YAML, got:\n%s", text)
+	if !strings.Contains(text, "- view: system") {
+		t.Fatalf("connectors.yaml should use list format, got:\n%s", text)
 	}
-	if !strings.Contains(text, "\n  view: system\n") || !strings.Contains(text, "\n  source: api\n") {
-		t.Fatalf("connectors.yaml did not render in a readable block style:\n%s", text)
+	if !strings.Contains(text, "label: publishes") || !strings.Contains(text, "target: queue") {
+		t.Fatalf("connectors.yaml missing appended connector:\n%s", text)
 	}
 	if !strings.Contains(text, "id: conn123") {
 		t.Fatalf("connectors.yaml lost connector metadata:\n%s", text)
@@ -221,8 +218,11 @@ func TestSave_WritesElementsAndConnectorsAndRemovesLegacyFiles(t *testing.T) {
 		t.Fatalf("elements.yaml missing metadata sections:\n%s", elementsData)
 	}
 	connectorsData, _ := os.ReadFile(filepath.Join(dir, "connectors.yaml"))
-	if !strings.Contains(string(connectorsData), "_meta_connectors:") || !strings.Contains(string(connectorsData), "label: reads") {
-		t.Fatalf("connectors.yaml missing connector data or metadata:\n%s", connectorsData)
+	if strings.Contains(string(connectorsData), "_meta_connectors:") || !strings.Contains(string(connectorsData), "label: reads") {
+		t.Fatalf("connectors.yaml unexpected content:\n%s", connectorsData)
+	}
+	if !strings.Contains(string(connectorsData), "id: ") {
+		t.Fatalf("connectors.yaml missing inline metadata:\n%s", connectorsData)
 	}
 	for _, legacyFile := range []string{"diagrams.yaml", "objects.yaml", "edges.yaml", "links.yaml"} {
 		if _, err := os.Stat(filepath.Join(dir, legacyFile)); !os.IsNotExist(err) {
