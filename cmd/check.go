@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mertcikla/tld-cli/internal/analyzer"
 	"github.com/mertcikla/tld-cli/internal/git"
 	"github.com/mertcikla/tld-cli/internal/ignore"
-	"github.com/mertcikla/tld-cli/internal/symbol"
 	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
 )
@@ -107,9 +107,9 @@ func checkSymbols(ctx context.Context, ws *workspace.Workspace, repoCtx RepoScop
 		if _, err := os.Stat(absPath); err != nil {
 			continue // file not accessible locally — skip
 		}
-		found, err := symbol.HasSymbol(ctx, absPath, element.Symbol)
+		found, err := analyzer.HasSymbol(ctx, absPath, element.Symbol)
 		if err != nil {
-			if _, unsupported := err.(symbol.ErrUnsupportedLanguage); unsupported {
+			if analyzer.IsUnsupportedLanguage(err) {
 				continue
 			}
 			failures = append(failures, fmt.Sprintf("elements.yaml[%s]: %v", ref, err))

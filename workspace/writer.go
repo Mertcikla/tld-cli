@@ -633,7 +633,6 @@ func UpdateConnectorField(dir, ref, field, value string) error {
 	return nil
 }
 
-
 func updateScalarField(mapping *yaml.Node, fieldName, oldVal, newVal string) bool {
 	if mapping.Kind != yaml.MappingNode {
 		return false

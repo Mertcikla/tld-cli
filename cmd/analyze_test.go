@@ -155,6 +155,47 @@ func TestAnalyzeCmd_WritesConnectors(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCmd_DeepModeDoesNotDoubleConnectorCounts(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "foo.go"), []byte("package main\nfunc Foo() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bar.go"), []byte("package main\nfunc Bar() { Foo() }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", dir, "--dry-run", "--deep")
+	if err != nil {
+		t.Fatalf("analyze --deep: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run]   OK  1 connectors written to connectors.yaml") {
+		t.Fatalf("unexpected connector count in deep mode\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+}
+
+func TestAnalyzeCmd_WorkspaceRootWithoutConfiguredReposUsesWorkspaceFiles(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "foo.go"), []byte("package main\nfunc Foo() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bar.go"), []byte("package main\nfunc Bar() { Foo() }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run]   OK  5 elements written to elements.yaml") {
+		t.Fatalf("unexpected element count\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[dry-run]   OK  1 connectors written to connectors.yaml") {
+		t.Fatalf("unexpected connector count\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+}
+
 func TestAnalyzeCmd_ExcludeRules(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)

@@ -84,6 +84,7 @@ A tld workspace consists of the following directory structure:
 - `tld init`: Initialize a new workspace.
 - `tld login`: Log in to the configured server.
 - `tld validate`: Check the workspace for structural and reference errors.
+- `tld views`: Show the derived workspace view structure, including root/owned views, depth, child counts, and connector counts.
 - `tld plan`: Generate a preview of the changes and detect conflicts/drift.
 - `tld apply`: Synchronize the local workspace state with the server. Supports interactive conflict resolution.
 - `tld export [org-id]`: Export all diagrams from an organization to the local workspace.

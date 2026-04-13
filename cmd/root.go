@@ -92,6 +92,9 @@ and apply them atomically with 'tld apply'.`,
 	statusCmd := newStatusCmd(&wdir)
 	statusCmd.GroupID = secondaryGroup.ID
 
+	viewsCmd := newViewsCmd(&wdir)
+	viewsCmd.GroupID = secondaryGroup.ID
+
 	diffCmd := newDiffCmd(&wdir)
 	diffCmd.GroupID = secondaryGroup.ID
 
@@ -113,6 +116,7 @@ and apply them atomically with 'tld apply'.`,
 		exportCmd,
 		pullCmd,
 		statusCmd,
+		viewsCmd,
 		diffCmd,
 		addCmd,
 		connectCmd,

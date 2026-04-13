@@ -60,6 +60,7 @@ tld
 ├── init [dir]         - initializes .tld/ with .tld.yaml, elements.yaml, and connectors.yaml
 ├── login
 ├── validate
+├── views              - summarize derived view structure and per-view counts
 ├── plan [-o file]
 ├── apply [--auto-approve]
 ├── pull               - surgical three-way merge from server state

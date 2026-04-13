@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mertcikla/tld-cli/internal/analyzer"
 	"github.com/mertcikla/tld-cli/internal/git"
 	"github.com/mertcikla/tld-cli/internal/ignore"
-	"github.com/mertcikla/tld-cli/internal/symbol"
 	"github.com/mertcikla/tld-cli/internal/term"
 	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/schollz/progressbar/v3"
@@ -19,6 +18,8 @@ import (
 )
 
 var analyzeSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+var analyzeService analyzer.Service = analyzer.DefaultService()
 
 func newAnalyzeCmd(wdir *string) *cobra.Command {
 	var deep bool
@@ -74,10 +75,11 @@ for cross-file call references.`,
 			fmt.Fprintf(cmd.OutOrStdout(), "%sAnalyzing %s (%s)...\n", linePrefix, scanPath, modeLabel)
 			workspaceRoot, _ := filepath.Abs(ws.Dir)
 			workspaceScan := samePath(absPath, workspaceRoot)
+			scanConfiguredRepositories := workspaceScan && ws.WorkspaceConfig != nil && len(ws.WorkspaceConfig.Repositories) > 0
 			for _, repoCtx := range repoScopes {
 				rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 				scanRoot := absPath
-				if workspaceScan {
+				if scanConfiguredRepositories {
 					scanRoot = repoCtx.Root
 				}
 				entries, err := countAnalyzeEntries(scanRoot, rules)
@@ -110,7 +112,7 @@ for cross-file call references.`,
 				}
 				rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 				scanRoot := absPath
-				if workspaceScan {
+				if scanConfiguredRepositories {
 					scanRoot = repoCtx.Root
 				}
 
@@ -124,7 +126,7 @@ for cross-file call references.`,
 					}
 				}
 
-				scanResult, err := extractFromPath(ctx, scanRoot, rules, func(path string, isDir bool) {
+				scanResult, err := analyzeService.ExtractPath(ctx, scanRoot, rules, func(path string, isDir bool) {
 					processedEntries++
 					if progress == nil {
 						return
@@ -150,7 +152,7 @@ for cross-file call references.`,
 				}
 
 				if deep && repoCtx.Active() && !workspaceScan {
-					deepResult, err := extractFromPath(ctx, repoCtx.Root, rules, func(path string, isDir bool) {
+					deepResult, err := analyzeService.ExtractPath(ctx, repoCtx.Root, rules, func(path string, isDir bool) {
 						processedEntries++
 						if progress == nil {
 							return
@@ -335,6 +337,8 @@ for cross-file call references.`,
 					})
 				}
 
+				plannedConnectors = uniqueAnalyzeConnectors(plannedConnectors)
+
 				repoConnectors := 0
 				if progress != nil && !dryRun && len(plannedConnectors) > 0 {
 					progress.AddMax(len(plannedConnectors))
@@ -408,23 +412,6 @@ func advanceAnalyzeWriteProgress(progress *progressbar.ProgressBar, fileName str
 	_ = progress.Add(1)
 }
 
-func extractFromPath(ctx context.Context, path string, rules *ignore.Rules, onEntry func(path string, isDir bool)) (*symbol.Result, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-	if info.IsDir() {
-		return symbol.ExtractDirWithProgress(ctx, path, rules, onEntry)
-	}
-	if rules.ShouldIgnoreFile(path) {
-		return &symbol.Result{}, nil
-	}
-	if onEntry != nil {
-		onEntry(path, false)
-	}
-	return symbol.ExtractFile(ctx, path)
-}
-
 func countAnalyzeEntries(path string, rules *ignore.Rules) (int, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -462,8 +449,8 @@ func countAnalyzeEntries(path string, rules *ignore.Rules) (int, error) {
 	return count, nil
 }
 
-func filterSymbols(symbols []symbol.Symbol, rules *ignore.Rules) []symbol.Symbol {
-	var out []symbol.Symbol
+func filterSymbols(symbols []analyzer.Symbol, rules *ignore.Rules) []analyzer.Symbol {
+	var out []analyzer.Symbol
 	for _, s := range symbols {
 		if rules.ShouldIgnoreSymbol(s.Name) {
 			continue
@@ -473,8 +460,8 @@ func filterSymbols(symbols []symbol.Symbol, rules *ignore.Rules) []symbol.Symbol
 	return out
 }
 
-func filterSymbolsByFiles(symbols []symbol.Symbol, changedFiles map[string]struct{}) []symbol.Symbol {
-	var out []symbol.Symbol
+func filterSymbolsByFiles(symbols []analyzer.Symbol, changedFiles map[string]struct{}) []analyzer.Symbol {
+	var out []analyzer.Symbol
 	for _, sym := range symbols {
 		if _, ok := changedFiles[filepath.Clean(sym.FilePath)]; ok {
 			out = append(out, sym)
@@ -483,8 +470,8 @@ func filterSymbolsByFiles(symbols []symbol.Symbol, changedFiles map[string]struc
 	return out
 }
 
-func filterRefsByFiles(refs []symbol.Ref, changedFiles map[string]struct{}) []symbol.Ref {
-	var out []symbol.Ref
+func filterRefsByFiles(refs []analyzer.Ref, changedFiles map[string]struct{}) []analyzer.Ref {
+	var out []analyzer.Ref
 	for _, ref := range refs {
 		if _, ok := changedFiles[filepath.Clean(ref.FilePath)]; ok {
 			out = append(out, ref)
@@ -493,8 +480,8 @@ func filterRefsByFiles(refs []symbol.Ref, changedFiles map[string]struct{}) []sy
 	return out
 }
 
-func refByFileAndLine(filePath string, line int, refMap map[string]string, symbols []symbol.Symbol) string {
-	var bestSymbol symbol.Symbol
+func refByFileAndLine(filePath string, line int, refMap map[string]string, symbols []analyzer.Symbol) string {
+	var bestSymbol analyzer.Symbol
 	found := false
 	for _, s := range symbols {
 		if filepath.Clean(s.FilePath) == filepath.Clean(filePath) {
@@ -717,7 +704,7 @@ func uniqueAnalyzeRef(name, filePath string, used map[string]struct{}) string {
 	}
 }
 
-func uniqueFilePaths(symbols []symbol.Symbol, repoRoot string, activeRepo bool) []string {
+func uniqueFilePaths(symbols []analyzer.Symbol, repoRoot string, activeRepo bool) []string {
 	seen := make(map[string]struct{})
 	paths := make([]string, 0, len(symbols))
 	for _, sym := range symbols {
@@ -735,4 +722,21 @@ func uniqueFilePaths(symbols []symbol.Symbol, repoRoot string, activeRepo bool) 
 		paths = append(paths, relPath)
 	}
 	return paths
+}
+
+func uniqueAnalyzeConnectors(connectors []*workspace.Connector) []*workspace.Connector {
+	seen := make(map[string]struct{}, len(connectors))
+	unique := make([]*workspace.Connector, 0, len(connectors))
+	for _, connector := range connectors {
+		if connector == nil {
+			continue
+		}
+		key := workspace.ConnectorKey(connector)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		unique = append(unique, connector)
+	}
+	return unique
 }

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mertcikla/tld-cli/internal/symbol"
+	"github.com/mertcikla/tld-cli/internal/analyzer"
 )
 
 // ValidationError describes a single validation failure.
@@ -139,9 +139,9 @@ func (ws *Workspace) validateSymbols() []ValidationError {
 		if _, err := os.Stat(element.FilePath); err != nil {
 			continue // file not accessible locally — skip
 		}
-		found, err := symbol.HasSymbol(ctx, element.FilePath, element.Symbol)
+		found, err := analyzer.HasSymbol(ctx, element.FilePath, element.Symbol)
 		if err != nil {
-			if _, unsupported := err.(symbol.ErrUnsupportedLanguage); unsupported {
+			if analyzer.IsUnsupportedLanguage(err) {
 				continue // language not supported — skip silently
 			}
 			errs = append(errs, ValidationError{

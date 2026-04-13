@@ -210,9 +210,14 @@ func loadYAMLMetadataSection(filepath, sectionName string, target map[string]*Re
 		return fmt.Errorf("read %s: %w", filepath, err)
 	}
 
-	var yamlMap map[string]any
-	if err := yaml.Unmarshal(data, &yamlMap); err != nil {
+	var decoded any
+	if err := yaml.Unmarshal(data, &decoded); err != nil {
 		return fmt.Errorf("parse %s: %w", filepath, err)
+	}
+
+	yamlMap, ok := decoded.(map[string]any)
+	if !ok {
+		return nil
 	}
 
 	if metaSection, ok := yamlMap[sectionName].(map[string]any); ok {
@@ -322,4 +327,3 @@ func writeConnectorListWithMetadata(path string, metadata map[string]*ResourceMe
 	}
 	return WriteFullYAMLList(path, list)
 }
-

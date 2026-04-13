@@ -1,11 +1,13 @@
 package workspace_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	hashidlib "github.com/mertcikla/tld-cli/internal/hashids"
 	"github.com/mertcikla/tld-cli/workspace"
 )
 
@@ -220,6 +222,27 @@ _meta_connectors:
 	}
 	if ws.Meta.Connectors["system:api:db:reads"].ID != 303 {
 		t.Fatalf("unexpected connector metadata: %+v", ws.Meta.Connectors["system:api:db:reads"])
+	}
+}
+
+func TestLoad_ConnectorsListFormatLoadsInlineMetadata(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, setupConfig(t), minimalConfig())
+	encodedID := hashidlib.Encode(303)
+	writeFile(t, filepath.Join(dir, "connectors.yaml"), fmt.Sprintf("- view: system\n  source: api\n  target: db\n  label: reads\n  id: %s\n  updated_at: 2024-03-24T12:00:00Z\n", encodedID))
+
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(ws.Connectors) != 1 {
+		t.Fatalf("len(Connectors) = %d, want 1", len(ws.Connectors))
+	}
+	if ws.Meta.Connectors["system:api:db:reads"].ID != 303 {
+		t.Fatalf("unexpected connector metadata: %+v", ws.Meta.Connectors["system:api:db:reads"])
+	}
+	if got := ws.Meta.Connectors["system:api:db:reads"].UpdatedAt.Format("2006-01-02T15:04:05Z07:00"); got != "2024-03-24T12:00:00Z" {
+		t.Fatalf("unexpected connector updated_at: %s", got)
 	}
 }
 
