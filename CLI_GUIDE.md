@@ -91,8 +91,6 @@ Each created element owns a single canonical diagram.
 - `--description`: Description of the element.
 - `--technology`: Primary technology used by the element.
 - `--url`: External URL for further reference.
-- `--position-x`: Horizontal canvas position inside the parent view.
-- `--position-y`: Vertical canvas position inside the parent view.
 - `--parent`: Parent element reference or `root` (default: `root`).
 - `--diagram-label`: Optional label for that canonical diagram.
 - `--ref`: Override the generated reference ID.
@@ -107,7 +105,6 @@ The owning diagram is inferred from the two elements' shared parent placement.
 - `--description`: Connector description.
 - `--relationship`: Semantic relationship type.
 - `--direction`: Direction of the arrow. Options: `forward`, `backward`, `both`, `none` (default: `forward`).
-- `--style`: Visual style of the connector. Options: `bezier`, `straight`, `step`, `smoothstep` (default: `bezier`).
 - `--url`: External URL for documentation related to this connection.
 
 The CLI only exposes the unified element and connector workflow. Server export and pull still bridge legacy backend payloads internally, but local workspaces should contain only `elements.yaml`, `connectors.yaml`, and `.tld.lock`.
