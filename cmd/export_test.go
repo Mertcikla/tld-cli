@@ -20,7 +20,7 @@ func TestExportCmd(t *testing.T) {
 	svc := &mockDiagramService{
 		exportFunc: func(_ *diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error) {
 			resp := &diagv1.ExportOrganizationResponse{
-				Diagrams: []*diagv1.Diagram{
+				Views: []*diagv1.View{
 					{Id: 1, Name: "D1", UpdatedAt: timestamppb.Now()},
 				},
 				Elements: []*diagv1.Element{
@@ -64,16 +64,16 @@ func TestExportCmd_MapsOwnedViewsToElements(t *testing.T) {
 	svc := &mockDiagramService{
 		exportFunc: func(_ *diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error) {
 			resp := &diagv1.ExportOrganizationResponse{
-				Diagrams: []*diagv1.Diagram{
+				Views: []*diagv1.View{
 					{Id: rootID, Name: "Workspace Root", UpdatedAt: now},
-					{Id: apiViewID, Name: "API Service", LevelLabel: new("Container"), ParentDiagramId: &rootID, UpdatedAt: now},
+					{Id: apiViewID, Name: "API Service", LevelLabel: new("Container"), ParentViewId: &rootID, UpdatedAt: now},
 				},
 				Elements: []*diagv1.Element{
 					{Id: 10, Name: "API Service", Kind: new("service"), HasView: true, ViewLabel: new("Container"), UpdatedAt: now},
 					{Id: 11, Name: "Worker", Kind: new("service"), UpdatedAt: now},
 				},
 				Navigations: []*diagv1.ElementNavigation{
-					{Id: 20, ElementId: 10, FromDiagramId: rootID, ToDiagramId: apiViewID},
+					{Id: 20, ElementId: 10, FromViewId: rootID, ToViewId: apiViewID},
 				},
 				Placements: []*diagv1.ElementPlacement{
 					{ViewId: rootID, ElementId: 10, PositionX: 10, PositionY: 20},

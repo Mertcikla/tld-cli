@@ -320,6 +320,36 @@ func TestAnalyzeCmd_WorkspaceRootWithoutConfiguredReposUsesWorkspaceFiles(t *tes
 	}
 }
 
+func TestAnalyzeCmd_PythonImports(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+
+	repoDir := filepath.Join(dir, "pyapp")
+	if err := os.MkdirAll(filepath.Join(repoDir, "myapp", "utils"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, repoDir, filepath.Join("myapp", "utils", "helper.py"), "def run():\n    pass\n")
+	if err := os.WriteFile(filepath.Join(repoDir, "myapp", "main.py"), []byte("from .utils import helper\nfrom myapp.utils.helper import run\n\ndef main():\n    run()\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", repoDir)
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mainFileRef := findAnalyzeElementRefByKindAndPath(t, ws, "file", filepath.Join("myapp", "main.py"))
+	helperFileRef := findAnalyzeElementRefByKindAndPath(t, ws, "file", filepath.Join("myapp", "utils", "helper.py"))
+	utilsFolderRef := findAnalyzeElementRefByKindAndPath(t, ws, "folder", filepath.Join("myapp", "utils"))
+
+	assertAnalyzeConnectorExists(t, ws, mainFileRef, utilsFolderRef, testAnalyzeDependencyLabelImport)
+	assertAnalyzeConnectorExists(t, ws, mainFileRef, helperFileRef, testAnalyzeDependencyLabelReference)
+}
+
 func TestAnalyzeCmd_ExcludeRules(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)

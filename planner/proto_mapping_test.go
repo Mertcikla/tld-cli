@@ -88,7 +88,7 @@ func TestProtoMapping_ConnectorFields(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	connector := plan.Request.Connectors[0]
-	if connector.DiagramRef != "root" || connector.SourceElementRef != "a" || connector.TargetElementRef != "b" {
+	if connector.ViewRef != "root" || connector.SourceElementRef != "a" || connector.TargetElementRef != "b" {
 		t.Fatalf("unexpected connector mapping: %+v", connector)
 	}
 	if connector.Label == nil || *connector.Label != "reads" {

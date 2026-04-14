@@ -411,7 +411,7 @@ func updatePlanMetadataFromResponse(_ string, meta *workspace.Meta, ws *workspac
 	}
 
 	elementMetadata := canonicalizeMetadata(respMsg.GetElementMetadata(), elementRefRenames(respMsg))
-	viewMetadata := canonicalizeMetadata(respMsg.GetDiagramMetadata(), elementRefRenames(respMsg))
+	viewMetadata := canonicalizeMetadata(respMsg.GetViewMetadata(), elementRefRenames(respMsg))
 	connectorMetadata := canonicalizeConnectorMetadata(respMsg.GetConnectorMetadata(), elementRefRenames(respMsg))
 
 	for ref := range ws.Elements {
@@ -439,14 +439,14 @@ func updatePlanMetadataFromResponse(_ string, meta *workspace.Meta, ws *workspac
 // updateLockFileFromResponse updates lock file with response data
 func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, ws *workspace.Workspace, meta *workspace.Meta, respMsg *diagv1.ApplyPlanResponse) error {
 	summary := respMsg.GetSummary()
-	diagramCount := len(respMsg.GetCreatedDiagrams())
+	diagramCount := len(respMsg.GetCreatedViews())
 	elementCount := len(respMsg.GetCreatedElements())
 	connectorCount := len(respMsg.GetCreatedConnectors())
 	legacyDiagramCount := diagramCount
 	legacyElementCount := elementCount
 	legacyConnectorCount := connectorCount
 	if summary != nil {
-		legacyDiagramCount = int(summary.GetDiagramsCreated())
+		legacyDiagramCount = int(summary.GetViewsCreated())
 		legacyElementCount = int(summary.GetElementsCreated())
 		legacyConnectorCount = int(summary.GetConnectorsCreated())
 	}

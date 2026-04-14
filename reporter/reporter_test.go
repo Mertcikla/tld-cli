@@ -53,8 +53,8 @@ func TestRenderExecutionMarkdown_SummaryTable(t *testing.T) {
 		Summary: &diagv1.PlanSummary{
 			ElementsPlanned:   3,
 			ElementsCreated:   3,
-			DiagramsPlanned:   2,
-			DiagramsCreated:   2,
+			ViewsPlanned:      2,
+			ViewsCreated:      2,
 			ConnectorsPlanned: 1,
 			ConnectorsCreated: 1,
 		},
@@ -69,14 +69,14 @@ func TestRenderExecutionMarkdown_SummaryTable(t *testing.T) {
 	if !strings.Contains(out, "| Elements | 3 | 3 |") {
 		t.Errorf("wrong element count: %q", out)
 	}
-	if !strings.Contains(out, "| Diagrams | 2 | 2 |") {
-		t.Errorf("wrong diagram count: %q", out)
+	if !strings.Contains(out, "| Views | 2 | 2 |") {
+		t.Errorf("wrong view count: %q", out)
 	}
 }
 
-func TestRenderExecutionMarkdown_CreatedDiagramsSection(t *testing.T) {
+func TestRenderExecutionMarkdown_CreatedViewsSection(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
-		CreatedDiagrams: []*diagv1.DiagramSummary{
+		CreatedViews: []*diagv1.ViewSummary{
 			{Id: 1, Name: "System"},
 			{Id: 2, Name: "Container"},
 		},
@@ -85,20 +85,20 @@ func TestRenderExecutionMarkdown_CreatedDiagramsSection(t *testing.T) {
 	reporter.RenderExecutionMarkdown(&buf, emptyPlan(t), resp, true, true)
 	out := buf.String()
 
-	if !strings.Contains(out, "### Diagrams") {
-		t.Errorf("missing Diagrams section: %q", out)
+	if !strings.Contains(out, "### Views") {
+		t.Errorf("missing Views section: %q", out)
 	}
 	if !strings.Contains(out, "1") || !strings.Contains(out, "System") {
-		t.Errorf("diagram 1 not in output: %q", out)
+		t.Errorf("view 1 not in output: %q", out)
 	}
 	if !strings.Contains(out, "2") || !strings.Contains(out, "Container") {
-		t.Errorf("diagram 2 not in output: %q", out)
+		t.Errorf("view 2 not in output: %q", out)
 	}
 }
 
 func TestRenderExecutionMarkdown_CreatedSectionsAbsentOnFailure(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
-		CreatedDiagrams: []*diagv1.DiagramSummary{{Id: 1, Name: "System"}},
+		CreatedViews: []*diagv1.ViewSummary{{Id: 1, Name: "System"}},
 	}
 	var buf strings.Builder
 	reporter.RenderExecutionMarkdown(&buf, emptyPlan(t), resp, false, true)

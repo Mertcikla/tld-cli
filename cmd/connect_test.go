@@ -41,7 +41,7 @@ func TestConnectCmd_AppendsConnector(t *testing.T) {
 	}
 }
 
-func TestConnectCmd_RootElementsInferRootDiagram(t *testing.T) {
+func TestConnectCmd_RootElementsInferRootView(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 	mustRunCmd(t, dir, "add", "API", "--ref", "api", "--kind", "service")
@@ -90,7 +90,7 @@ func TestConnectCmd_TwoCallsTwoEntries(t *testing.T) {
 	}
 }
 
-func TestConnectCmd_ElementsInDifferentDiagramsSucceeds(t *testing.T) {
+func TestConnectCmd_ElementsInDifferentViewsSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
 	mustRunCmd(t, dir, "add", "Parent1", "--ref", "parent1", "--kind", "workspace")

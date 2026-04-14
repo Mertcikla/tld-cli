@@ -70,7 +70,7 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 	ownerByDiagramID := buildDiagramOwnerIndex(msg, newWS.Elements, objectIDToRef)
 
 	diagramIDToViewRef := make(map[int32]string)
-	for _, d := range msg.Diagrams {
+	for _, d := range msg.Views {
 		if ownerRef, ok := ownerByDiagramID[d.Id]; ok {
 			diagramIDToViewRef[d.Id] = ownerRef
 			element := newWS.Elements[ownerRef]
@@ -142,7 +142,7 @@ func convertExportResponse(baseWS *workspace.Workspace, msg *diagv1.ExportOrgani
 	return newWS
 }
 
-func exportedDiagramLabel(diagram *diagv1.Diagram, elementName string) string {
+func exportedDiagramLabel(diagram *diagv1.View, elementName string) string {
 	if label := strings.TrimSpace(diagram.GetLevelLabel()); label != "" {
 		return label
 	}
@@ -159,14 +159,14 @@ func buildDiagramOwnerIndex(msg *diagv1.ExportOrganizationResponse, elements map
 
 	for _, navigation := range msg.Navigations {
 		ownerRef, ok := objectIDToRef[navigation.ElementId]
-		if !ok || navigation.ToDiagramId == 0 {
+		if !ok || navigation.ToViewId == 0 {
 			continue
 		}
-		owners[navigation.ToDiagramId] = ownerRef
+		owners[navigation.ToViewId] = ownerRef
 		usedRefs[ownerRef] = struct{}{}
 	}
 
-	for _, diagram := range msg.Diagrams {
+	for _, diagram := range msg.Views {
 		if _, ok := owners[diagram.Id]; ok {
 			continue
 		}
@@ -181,7 +181,7 @@ func buildDiagramOwnerIndex(msg *diagv1.ExportOrganizationResponse, elements map
 	return owners
 }
 
-func inferDiagramOwnerRef(diagram *diagv1.Diagram, elements map[string]*workspace.Element, usedRefs map[string]struct{}) (string, bool) {
+func inferDiagramOwnerRef(diagram *diagv1.View, elements map[string]*workspace.Element, usedRefs map[string]struct{}) (string, bool) {
 	strictMatches := make([]string, 0, 1)
 	looseMatches := make([]string, 0, 1)
 
@@ -211,7 +211,7 @@ func inferDiagramOwnerRef(diagram *diagv1.Diagram, elements map[string]*workspac
 	}
 }
 
-func diagramMatchesOwnedElement(diagram *diagv1.Diagram, element *workspace.Element) bool {
+func diagramMatchesOwnedElement(diagram *diagv1.View, element *workspace.Element) bool {
 	if element == nil {
 		return false
 	}

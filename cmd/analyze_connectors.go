@@ -109,6 +109,10 @@ func buildAnalyzeImportConnectors(
 	modulePath string,
 ) []*workspace.Connector {
 	targetDir := analyzeRepoRelativeImportDir(ref.TargetPath, modulePath)
+	if targetDir == "" && strings.HasSuffix(ref.FilePath, ".py") {
+		targetDir = resolvePythonImportDir(ref.FilePath, ref.TargetPath, elementRoot)
+	}
+
 	if targetDir == "" {
 		return nil
 	}
@@ -142,6 +146,47 @@ func buildAnalyzeImportConnectors(
 	}
 
 	return connectors
+}
+
+func resolvePythonImportDir(filePath, targetPath, elementRoot string) string {
+	if strings.HasPrefix(targetPath, ".") {
+		return resolvePythonRelativeImport(filePath, targetPath, elementRoot)
+	}
+	return resolvePythonAbsoluteImport(targetPath, elementRoot)
+}
+
+func resolvePythonRelativeImport(filePath, targetPath, elementRoot string) string {
+	dir := filepath.Dir(filePath)
+	dots := 0
+	for strings.HasPrefix(targetPath[dots:], ".") {
+		dots++
+	}
+	for i := 0; i < dots-1; i++ {
+		dir = filepath.Dir(dir)
+	}
+	importPath := strings.ReplaceAll(targetPath[dots:], ".", "/")
+	fullPath := filepath.Join(dir, importPath)
+	rel, err := filepath.Rel(elementRoot, fullPath)
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(rel)
+}
+
+func resolvePythonAbsoluteImport(targetPath, elementRoot string) string {
+	importPath := strings.ReplaceAll(targetPath, ".", "/")
+	fullPath := filepath.Join(elementRoot, importPath)
+
+	// Check if it's a directory (package)
+	if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+		return importPath
+	}
+	// Check if it's a file (module)
+	if info, err := os.Stat(fullPath + ".py"); err == nil && !info.IsDir() {
+		return filepath.Dir(importPath)
+	}
+
+	return ""
 }
 
 func analyzeFolderRefForFile(filePath string, folderRefs map[string]string, repoRef string) string {

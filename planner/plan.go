@@ -119,7 +119,7 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 			if parentRef == "" {
 				parentRef = syntheticRootViewRef
 			}
-			planPlacement := &diagv1.PlanDiagramPlacement{ParentRef: parentRef}
+			planPlacement := &diagv1.PlanViewPlacement{ParentRef: parentRef}
 			if placement.PositionX != 0 {
 				planPlacement.PositionX = &placement.PositionX
 			}
@@ -138,8 +138,8 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 			if hasView {
 				if meta, ok := ws.Meta.Views[ref]; ok {
 					id := int32(meta.ID)
-					planElement.DiagramId = &id
-					planElement.DiagramUpdatedAt = timestamppb.New(meta.UpdatedAt)
+					planElement.ViewId = &id
+					planElement.ViewUpdatedAt = timestamppb.New(meta.UpdatedAt)
 				}
 			}
 		}
@@ -160,7 +160,7 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 		}
 		planConnector := &diagv1.PlanConnector{
 			Ref:              ref,
-			DiagramRef:       viewRef,
+			ViewRef:          viewRef,
 			SourceElementRef: connector.Source,
 			TargetElementRef: connector.Target,
 		}
