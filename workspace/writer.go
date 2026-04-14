@@ -61,6 +61,27 @@ func AppendConnector(dir string, spec *Connector) error {
 	return Save(ws)
 }
 
+// AppendConnectors adds multiple connectors to connectors.yaml in a single operation.
+func AppendConnectors(dir string, specs []*Connector) error {
+	if len(specs) == 0 {
+		return nil
+	}
+	ws, err := Load(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		ws = &Workspace{Dir: dir, Elements: make(map[string]*Element), Connectors: make(map[string]*Connector)}
+	}
+	if ws.Connectors == nil {
+		ws.Connectors = make(map[string]*Connector)
+	}
+	for _, spec := range specs {
+		ws.Connectors[ConnectorKey(spec)] = spec
+	}
+	return Save(ws)
+}
+
 // Save writes the entire workspace state to YAML files in ws.Dir.
 func Save(ws *Workspace) error {
 	if useElementWorkspaceFiles(ws) {

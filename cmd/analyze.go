@@ -378,6 +378,12 @@ for cross-file call references.`,
 					repoElements++
 				}
 
+				if !dryRun && repoElements > 0 {
+					if err := workspace.Save(ws); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: save elements: %v\n", err)
+					}
+				}
+
 				resolverRoot := scanRoot
 				if repoCtx.Active() {
 					resolverRoot = repoCtx.Root
@@ -430,18 +436,18 @@ for cross-file call references.`,
 				if writeProgress != nil && len(plannedConnectors) > 0 {
 					writeProgress.AddMax(len(plannedConnectors))
 				}
-				for i, connectorSpec := range plannedConnectors {
-					if dryRun {
-						repoConnectors++
-						continue
-					}
 
-					if err := workspace.AppendConnector(*wdir, connectorSpec); err == nil {
-						repoConnectors++
+				if !dryRun {
+					if err := workspace.AppendConnectors(*wdir, plannedConnectors); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: write connectors: %v\n", err)
+					} else {
+						repoConnectors = len(plannedConnectors)
 					}
 					if writeProgress != nil {
-						advanceAnalyzeWriteProgress(writeProgress, "connectors.yaml", i+1, len(plannedConnectors))
+						advanceAnalyzeWriteProgress(writeProgress, "connectors.yaml", len(plannedConnectors), len(plannedConnectors))
 					}
+				} else {
+					repoConnectors = len(plannedConnectors)
 				}
 
 				totalElements += repoElements
@@ -702,11 +708,6 @@ func ensureAnalyzeElement(wdir string, dryRun bool, ws *workspace.Workspace, kno
 		if elementSpec.URL == "" {
 			elementSpec.URL = existing.URL
 		}
-		if err := workspace.UpdateElement(wdir, ref, elementSpec); err != nil {
-			return "", err
-		}
-	} else if err := workspace.UpsertElement(wdir, ref, elementSpec); err != nil {
-		return "", err
 	}
 	if ws.Elements == nil {
 		ws.Elements = make(map[string]*workspace.Element)
@@ -968,18 +969,66 @@ func analyzePathWithinRoot(root, path string) (string, bool) {
 }
 
 func uniqueAnalyzeConnectors(connectors []*workspace.Connector) []*workspace.Connector {
-	seen := make(map[string]struct{}, len(connectors))
+	seen := make(map[string]*workspace.Connector, len(connectors))
 	unique := make([]*workspace.Connector, 0, len(connectors))
 	for _, connector := range connectors {
 		if connector == nil {
 			continue
 		}
-		key := workspace.ConnectorKey(connector)
-		if _, ok := seen[key]; ok {
+		if merged := analyzeMergeDuplicateConnector(seen, connector); merged {
 			continue
 		}
-		seen[key] = struct{}{}
+		key := workspace.ConnectorKey(connector)
+		reverseKey := analyzeReverseConnectorKey(connector)
+		if existing, ok := seen[reverseKey]; ok {
+			existing.Direction = "both"
+			continue
+		}
+		seen[key] = connector
 		unique = append(unique, connector)
 	}
 	return unique
+}
+
+func analyzeMergeDuplicateConnector(seen map[string]*workspace.Connector, connector *workspace.Connector) bool {
+	if connector == nil {
+		return false
+	}
+	key := workspace.ConnectorKey(connector)
+	if existing, ok := seen[key]; ok {
+		if existing.Relationship == "depends_on" && connector.Relationship == "depends_on" {
+			existing.Label = analyzeMergeDependencyLabels(existing.Label, connector.Label)
+			delete(seen, key)
+			seen[workspace.ConnectorKey(existing)] = existing
+		}
+		return true
+	}
+	mergeKey := analyzeDependencyMergeKey(connector)
+	if mergeKey == "" {
+		return false
+	}
+	for existingKey, existing := range seen {
+		if existing == nil || analyzeDependencyMergeKey(existing) != mergeKey {
+			continue
+		}
+		existing.Label = analyzeMergeDependencyLabels(existing.Label, connector.Label)
+		delete(seen, existingKey)
+		seen[workspace.ConnectorKey(existing)] = existing
+		return true
+	}
+	return false
+}
+
+func analyzeDependencyMergeKey(connector *workspace.Connector) string {
+	if connector == nil || connector.Relationship != "depends_on" || connector.Direction != "forward" {
+		return ""
+	}
+	return connector.View + ":" + connector.Source + ":" + connector.Target + ":" + connector.Relationship
+}
+
+func analyzeReverseConnectorKey(connector *workspace.Connector) string {
+	if connector == nil {
+		return ""
+	}
+	return connector.View + ":" + connector.Target + ":" + connector.Source + ":" + connector.Label
 }

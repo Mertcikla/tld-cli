@@ -77,8 +77,8 @@ func buildAnalyzeReferenceConnectors(
 			View:         analyzeCommonConnectorView(ws, sourceFileRef, targetFileRef, repoRef),
 			Source:       sourceFileRef,
 			Target:       targetFileRef,
-			Label:        "references",
-			Relationship: "uses",
+			Label:        analyzeDependencyLabelReference,
+			Relationship: "depends_on",
 			Direction:    "forward",
 		})
 	}
@@ -90,8 +90,8 @@ func buildAnalyzeReferenceConnectors(
 			View:         analyzeCommonConnectorView(ws, sourceFolderRef, targetFolderRef, repoRef),
 			Source:       sourceFolderRef,
 			Target:       targetFolderRef,
-			Label:        "references",
-			Relationship: "uses",
+			Label:        analyzeDependencyLabelReference,
+			Relationship: "depends_on",
 			Direction:    "forward",
 		})
 	}
@@ -124,7 +124,7 @@ func buildAnalyzeImportConnectors(
 		View:         analyzeCommonConnectorView(ws, sourceFileRef, targetFolderRef, repoRef),
 		Source:       sourceFileRef,
 		Target:       targetFolderRef,
-		Label:        "imports",
+		Label:        analyzeDependencyLabelImport,
 		Relationship: "depends_on",
 		Direction:    "forward",
 	}}
@@ -135,7 +135,7 @@ func buildAnalyzeImportConnectors(
 			View:         analyzeCommonConnectorView(ws, sourceFolderRef, targetFolderRef, repoRef),
 			Source:       sourceFolderRef,
 			Target:       targetFolderRef,
-			Label:        "imports",
+			Label:        analyzeDependencyLabelImport,
 			Relationship: "depends_on",
 			Direction:    "forward",
 		})
@@ -198,6 +198,42 @@ func analyzeModulePath(repoRoot string) string {
 		return strings.Trim(fields[1], "\"")
 	}
 	return ""
+}
+
+const (
+	analyzeDependencyLabelImport    = "depends_on:import"
+	analyzeDependencyLabelReference = "depends_on:reference"
+	analyzeDependencyLabelBoth      = "depends_on:both"
+)
+
+func analyzeDependencyKindsForLabel(label string) (hasImport bool, hasReference bool) {
+	switch strings.TrimSpace(label) {
+	case analyzeDependencyLabelImport:
+		return true, false
+	case analyzeDependencyLabelReference:
+		return false, true
+	case analyzeDependencyLabelBoth:
+		return true, true
+	default:
+		return false, false
+	}
+}
+
+func analyzeMergeDependencyLabels(left, right string) string {
+	leftImport, leftReference := analyzeDependencyKindsForLabel(left)
+	rightImport, rightReference := analyzeDependencyKindsForLabel(right)
+	hasImport := leftImport || rightImport
+	hasReference := leftReference || rightReference
+	switch {
+	case hasImport && hasReference:
+		return analyzeDependencyLabelBoth
+	case hasImport:
+		return analyzeDependencyLabelImport
+	case hasReference:
+		return analyzeDependencyLabelReference
+	default:
+		return left
+	}
 }
 
 func analyzeCommonConnectorView(ws *workspace.Workspace, fromRef, toRef, fallback string) string {

@@ -9,6 +9,12 @@ import (
 	"github.com/mertcikla/tld-cli/workspace"
 )
 
+const (
+	testAnalyzeDependencyLabelImport    = "depends_on:import"
+	testAnalyzeDependencyLabelReference = "depends_on:reference"
+	testAnalyzeDependencyLabelBoth      = "depends_on:both"
+)
+
 func TestAnalyzeCmd_DryRun_NoWrite(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
@@ -237,13 +243,40 @@ func TestAnalyzeCmd_AddsCrossFileAndCrossFolderConnectors(t *testing.T) {
 	cmdFolderRef := findAnalyzeElementRefByKindAndPath(t, ws, "folder", filepath.Join("cmd", "app"))
 	serviceFolderRef := findAnalyzeElementRefByKindAndPath(t, ws, "folder", filepath.Join("internal", "service"))
 
-	assertAnalyzeConnectorExists(t, ws, mainFileRef, serviceFileRef, "references")
-	assertAnalyzeConnectorExists(t, ws, cmdFolderRef, serviceFolderRef, "references")
-	assertAnalyzeConnectorExists(t, ws, mainFileRef, serviceFolderRef, "imports")
-	assertAnalyzeConnectorExists(t, ws, cmdFolderRef, serviceFolderRef, "imports")
+	assertAnalyzeConnectorExists(t, ws, mainFileRef, serviceFileRef, testAnalyzeDependencyLabelReference)
+	assertAnalyzeConnectorExists(t, ws, mainFileRef, serviceFolderRef, testAnalyzeDependencyLabelImport)
+	assertAnalyzeConnectorExists(t, ws, cmdFolderRef, serviceFolderRef, testAnalyzeDependencyLabelBoth)
+	assertAnalyzeConnectorCount(t, ws, cmdFolderRef, serviceFolderRef, testAnalyzeDependencyLabelBoth, 1)
 	if len(ws.Connectors) < 4 {
 		t.Fatalf("expected at least 4 connectors, got %d: %+v", len(ws.Connectors), ws.Connectors)
 	}
+}
+
+func TestAnalyzeCmd_MergesReverseConnectorsAsBidirectional(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "foo.go"), []byte("package main\nfunc Foo() { Bar() }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bar.go"), []byte("package main\nfunc Bar() { Foo() }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fooRef := findAnalyzeElementRefBySymbol(t, ws, "Foo")
+	barRef := findAnalyzeElementRefBySymbol(t, ws, "Bar")
+	assertBidirectionalAnalyzeConnector(t, ws, fooRef, barRef, "calls")
+	assertAnalyzeConnectorCountUnordered(t, ws, fooRef, barRef, "calls", 1)
+	assertAnalyzeConnectorCountByLabel(t, ws, "calls", 1)
+	assertAnalyzeConnectorCountByLabel(t, ws, testAnalyzeDependencyLabelReference, 1)
 }
 
 func TestAnalyzeCmd_DeepModeDoesNotDoubleConnectorCounts(t *testing.T) {
@@ -366,6 +399,17 @@ func findAnalyzeElementRefByKindAndPath(t *testing.T, ws *workspace.Workspace, k
 	return ""
 }
 
+func findAnalyzeElementRefBySymbol(t *testing.T, ws *workspace.Workspace, symbol string) string {
+	t.Helper()
+	for ref, element := range ws.Elements {
+		if element.Symbol == symbol {
+			return ref
+		}
+	}
+	t.Fatalf("expected symbol element for %s, got %+v", symbol, ws.Elements)
+	return ""
+}
+
 func assertAnalyzeConnectorExists(t *testing.T, ws *workspace.Workspace, source, target, label string) {
 	t.Helper()
 	for _, connector := range ws.Connectors {
@@ -374,4 +418,62 @@ func assertAnalyzeConnectorExists(t *testing.T, ws *workspace.Workspace, source,
 		}
 	}
 	t.Fatalf("expected connector %s -> %s (%s), got %+v", source, target, label, ws.Connectors)
+}
+
+func assertAnalyzeConnectorCount(t *testing.T, ws *workspace.Workspace, source, target, label string, want int) {
+	t.Helper()
+	got := 0
+	for _, connector := range ws.Connectors {
+		if connector.Source == source && connector.Target == target && connector.Label == label {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("connector count %s -> %s (%s) = %d, want %d: %+v", source, target, label, got, want, ws.Connectors)
+	}
+}
+
+func assertAnalyzeConnectorCountUnordered(t *testing.T, ws *workspace.Workspace, left, right, label string, want int) {
+	t.Helper()
+	got := 0
+	for _, connector := range ws.Connectors {
+		if connector.Label != label {
+			continue
+		}
+		if (connector.Source == left && connector.Target == right) || (connector.Source == right && connector.Target == left) {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("unordered connector count %s <-> %s (%s) = %d, want %d: %+v", left, right, label, got, want, ws.Connectors)
+	}
+}
+
+func assertAnalyzeConnectorCountByLabel(t *testing.T, ws *workspace.Workspace, label string, want int) {
+	t.Helper()
+	got := 0
+	for _, connector := range ws.Connectors {
+		if connector.Label == label {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("connector count for label %s = %d, want %d: %+v", label, got, want, ws.Connectors)
+	}
+}
+
+func assertBidirectionalAnalyzeConnector(t *testing.T, ws *workspace.Workspace, left, right, label string) {
+	t.Helper()
+	for _, connector := range ws.Connectors {
+		if connector.Label != label {
+			continue
+		}
+		if (connector.Source == left && connector.Target == right) || (connector.Source == right && connector.Target == left) {
+			if connector.Direction != "both" {
+				t.Fatalf("connector %s <-> %s (%s) direction = %s, want both: %+v", left, right, label, connector.Direction, connector)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected bidirectional connector %s <-> %s (%s), got %+v", left, right, label, ws.Connectors)
 }
