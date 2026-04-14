@@ -145,10 +145,6 @@ type LockFile struct {
 
 // ResourceCounts holds current model counts plus legacy fields retained for lockfile compatibility.
 type ResourceCounts struct {
-	Diagrams   int `yaml:"diagrams"`
-	Objects    int `yaml:"objects"`
-	Edges      int `yaml:"edges"`
-	Links      int `yaml:"links"`
 	Elements   int `yaml:"elements,omitempty"`
 	Views      int `yaml:"views,omitempty"`
 	Connectors int `yaml:"connectors,omitempty"`
