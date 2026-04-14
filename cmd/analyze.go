@@ -32,7 +32,7 @@ func newAnalyzeCmd(wdir *string) *cobra.Command {
 		Short: "Extract symbols from source files and upsert them as workspace elements",
 		Long: `Walks the given path, extracts code symbols (functions, classes, types) using
 tree-sitter grammar modules, and upserts each symbol as an Element in elements.yaml.
-References found between symbols are upserted as Connectors in connectors.yaml.
+References and imports found between files, folders, and symbols are upserted as Connectors in connectors.yaml.
 
 By default only the given path is scanned.  Use --deep to scan the entire git repo
 for cross-file call references.`,
@@ -383,6 +383,7 @@ for cross-file call references.`,
 					resolverRoot = repoCtx.Root
 				}
 				resolver := newAnalyzeLSPResolver(resolverRoot)
+				modulePath := analyzeModulePath(resolverRoot)
 
 				plannedResolutionSteps := len(scanResult.Refs)
 				if writeProgress != nil && plannedResolutionSteps > 0 {
@@ -396,40 +397,30 @@ for cross-file call references.`,
 					if writeProgress != nil && plannedResolutionSteps > 0 {
 						describeAnalyzeResolutionProgress(writeProgress, repoCtx.DisplayName(), resolvedSteps, plannedResolutionSteps)
 					}
-					if rules.ShouldIgnoreSymbol(ref.Name) {
+					if ref.Kind != "import" && rules.ShouldIgnoreSymbol(ref.Name) {
 						if writeProgress != nil && plannedResolutionSteps > 0 {
 							_ = writeProgress.Add(1)
 						}
 						continue
 					}
-					toRef := resolveAnalyzeTargetRef(ctx, resolver, ref, filtered, symbolRefs, symbolRefsByName)
+					plannedConnectors = append(plannedConnectors, buildAnalyzeConnectorsForRef(
+						ctx,
+						resolver,
+						ref,
+						ws,
+						filtered,
+						symbolRefs,
+						symbolRefsByName,
+						fileRefs,
+						folderRefs,
+						symbolFiles,
+						repoRef,
+						elementRoot,
+						modulePath,
+					)...)
 					if writeProgress != nil && plannedResolutionSteps > 0 {
 						_ = writeProgress.Add(1)
 					}
-					if toRef == "" {
-						continue
-					}
-
-					fromRef := refByFileAndLine(ref.FilePath, ref.Line, symbolRefs, filtered)
-					if fromRef == "" || fromRef == toRef {
-						continue
-					}
-
-					viewRef := repoRef
-					if sourceFile := symbolFiles[fromRef]; sourceFile != "" && sourceFile == symbolFiles[toRef] {
-						if fileRef := fileRefs[sourceFile]; fileRef != "" {
-							viewRef = fileRef
-						}
-					}
-
-					plannedConnectors = append(plannedConnectors, &workspace.Connector{
-						View:         viewRef,
-						Source:       fromRef,
-						Target:       toRef,
-						Label:        "calls",
-						Relationship: "uses",
-						Direction:    "forward",
-					})
 				}
 				_ = resolver.Close()
 

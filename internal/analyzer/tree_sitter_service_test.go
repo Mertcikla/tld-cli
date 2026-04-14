@@ -44,6 +44,33 @@ func TestNewService_ExtractPath_UsesGoTreeSitter(t *testing.T) {
 	if filepath.Base(result.Refs[0].FilePath) != "bar.go" {
 		t.Fatalf("ref file path = %q", result.Refs[0].FilePath)
 	}
+	if got := result.Refs[0].Kind; got != "call" {
+		t.Fatalf("ref kind = %q", got)
+	}
+}
+
+func TestNewService_ExtractPath_CollectsGoImports(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "main.go")
+	writeAnalyzerTestFile(t, filePath, "package main\n\nimport \"github.com/example/demo/internal/service\"\n\nfunc main() {\n    service.Run()\n}\n")
+
+	result, err := NewService().ExtractPath(context.Background(), filePath, nil, nil)
+	if err != nil {
+		t.Fatalf("ExtractPath go imports: %v", err)
+	}
+	for _, ref := range result.Refs {
+		if ref.Kind != "import" {
+			continue
+		}
+		if ref.Name != "service" {
+			t.Fatalf("import ref name = %q, want service", ref.Name)
+		}
+		if ref.TargetPath != "github.com/example/demo/internal/service" {
+			t.Fatalf("import ref target_path = %q", ref.TargetPath)
+		}
+		return
+	}
+	t.Fatalf("expected import ref, got %+v", result.Refs)
 }
 
 func TestNewService_HasSymbol_UsesGoTreeSitter(t *testing.T) {

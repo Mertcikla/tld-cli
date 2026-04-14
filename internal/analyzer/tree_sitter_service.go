@@ -127,6 +127,7 @@ func resultFromLegacy(result *symbol.Result) *Result {
 	for _, ref := range result.Refs {
 		converted.Refs = append(converted.Refs, Ref{
 			Name:     ref.Name,
+			Kind:     "call",
 			FilePath: ref.FilePath,
 			Line:     ref.Line,
 			Column:   0,

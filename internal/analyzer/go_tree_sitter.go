@@ -3,6 +3,8 @@ package analyzer
 import (
 	"context"
 	"fmt"
+	"path"
+	"strconv"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -42,6 +44,8 @@ func (p *goParser) walkNode(node *sitter.Node, source []byte, path string, resul
 		p.appendTypeSpec(node, source, path, result)
 	case "type_alias":
 		p.appendTypeAlias(node, source, path, result)
+	case "import_spec":
+		p.appendImport(node, source, path, result)
 	case "call_expression":
 		p.appendCall(node, source, path, result)
 	}
@@ -117,9 +121,29 @@ func (p *goParser) appendCall(node *sitter.Node, source []byte, path string, res
 	}
 	result.Refs = append(result.Refs, Ref{
 		Name:     name,
+		Kind:     "call",
 		FilePath: path,
 		Line:     int(functionNode.StartPosition().Row) + 1,
 		Column:   int(functionNode.StartPosition().Column) + 1,
+	})
+}
+
+func (p *goParser) appendImport(node *sitter.Node, source []byte, filePath string, result *Result) {
+	pathNode := node.ChildByFieldName("path")
+	if pathNode == nil {
+		return
+	}
+	importPath, err := strconv.Unquote(strings.TrimSpace(pathNode.Utf8Text(source)))
+	if err != nil || importPath == "" {
+		return
+	}
+	result.Refs = append(result.Refs, Ref{
+		Name:       path.Base(importPath),
+		Kind:       "import",
+		TargetPath: importPath,
+		FilePath:   filePath,
+		Line:       int(pathNode.StartPosition().Row) + 1,
+		Column:     int(pathNode.StartPosition().Column) + 1,
 	})
 }
 

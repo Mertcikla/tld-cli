@@ -204,6 +204,48 @@ func TestAnalyzeCmd_WritesConnectors(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCmd_AddsCrossFileAndCrossFolderConnectors(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+
+	repoDir := filepath.Join(dir, "app")
+	initGitRepo(t, repoDir, "go.mod", "module example.com/demo\n\ngo 1.23.0\n")
+	if err := os.MkdirAll(filepath.Join(repoDir, "cmd", "app"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoDir, "internal", "service"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "internal", "service", "service.go"), []byte("package service\n\nfunc Run() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "cmd", "app", "main.go"), []byte("package main\n\nimport \"example.com/demo/internal/service\"\n\nfunc main() {\n\tservice.Run()\n}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", repoDir)
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mainFileRef := findAnalyzeElementRefByKindAndPath(t, ws, "file", filepath.Join("cmd", "app", "main.go"))
+	serviceFileRef := findAnalyzeElementRefByKindAndPath(t, ws, "file", filepath.Join("internal", "service", "service.go"))
+	cmdFolderRef := findAnalyzeElementRefByKindAndPath(t, ws, "folder", filepath.Join("cmd", "app"))
+	serviceFolderRef := findAnalyzeElementRefByKindAndPath(t, ws, "folder", filepath.Join("internal", "service"))
+
+	assertAnalyzeConnectorExists(t, ws, mainFileRef, serviceFileRef, "references")
+	assertAnalyzeConnectorExists(t, ws, cmdFolderRef, serviceFolderRef, "references")
+	assertAnalyzeConnectorExists(t, ws, mainFileRef, serviceFolderRef, "imports")
+	assertAnalyzeConnectorExists(t, ws, cmdFolderRef, serviceFolderRef, "imports")
+	if len(ws.Connectors) < 4 {
+		t.Fatalf("expected at least 4 connectors, got %d: %+v", len(ws.Connectors), ws.Connectors)
+	}
+}
+
 func TestAnalyzeCmd_DeepModeDoesNotDoubleConnectorCounts(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)
@@ -218,7 +260,7 @@ func TestAnalyzeCmd_DeepModeDoesNotDoubleConnectorCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("analyze --deep: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
-	if !strings.Contains(stdout, "[dry-run]   OK  1 connectors written to connectors.yaml") {
+	if !strings.Contains(stdout, "[dry-run]   OK  2 connectors written to connectors.yaml") {
 		t.Fatalf("unexpected connector count in deep mode\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 }
@@ -240,7 +282,7 @@ func TestAnalyzeCmd_WorkspaceRootWithoutConfiguredReposUsesWorkspaceFiles(t *tes
 	if !strings.Contains(stdout, "[dry-run]   OK  5 elements written to elements.yaml") {
 		t.Fatalf("unexpected element count\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
-	if !strings.Contains(stdout, "[dry-run]   OK  1 connectors written to connectors.yaml") {
+	if !strings.Contains(stdout, "[dry-run]   OK  2 connectors written to connectors.yaml") {
 		t.Fatalf("unexpected connector count\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 }
@@ -311,4 +353,25 @@ func TestAnalyzeCmd_PathNotExist(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing path")
 	}
+}
+
+func findAnalyzeElementRefByKindAndPath(t *testing.T, ws *workspace.Workspace, kind, filePath string) string {
+	t.Helper()
+	for ref, element := range ws.Elements {
+		if element.Kind == kind && element.FilePath == filePath {
+			return ref
+		}
+	}
+	t.Fatalf("expected %s element for %s, got %+v", kind, filePath, ws.Elements)
+	return ""
+}
+
+func assertAnalyzeConnectorExists(t *testing.T, ws *workspace.Workspace, source, target, label string) {
+	t.Helper()
+	for _, connector := range ws.Connectors {
+		if connector.Source == source && connector.Target == target && connector.Label == label {
+			return
+		}
+	}
+	t.Fatalf("expected connector %s -> %s (%s), got %+v", source, target, label, ws.Connectors)
 }

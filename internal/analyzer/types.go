@@ -12,10 +12,12 @@ type Symbol struct {
 
 // Ref is a call-site reference to a named symbol found within a source file.
 type Ref struct {
-	Name     string `json:"name"`
-	FilePath string `json:"file_path,omitempty"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column,omitempty"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind,omitempty"`
+	TargetPath string `json:"target_path,omitempty"`
+	FilePath   string `json:"file_path,omitempty"`
+	Line       int    `json:"line"`
+	Column     int    `json:"column,omitempty"`
 }
 
 // Result holds the output of extracting symbols from one or more files.
