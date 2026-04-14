@@ -57,7 +57,11 @@ func newExportCmd(wdir *string) *cobra.Command {
 				lockFile = &workspace.LockFile{Version: "v1"}
 			}
 			versionID := fmt.Sprintf("pull-%s", time.Now().UTC().Format(time.RFC3339))
-			workspace.UpdateLockFile(lockFile, versionID, "pull", 0, 0, 0, 0, hash, nil, newWS.Meta)
+			workspace.UpdateLockFile(lockFile, versionID, "pull", &workspace.ResourceCounts{
+				Elements:   len(newWS.Elements),
+				Views:      countElementDiagrams(newWS),
+				Connectors: len(newWS.Connectors),
+			}, hash, nil, newWS.Meta)
 			lockFile.Resources.Elements = len(newWS.Elements)
 			lockFile.Resources.Views = countElementDiagrams(newWS)
 			lockFile.Resources.Connectors = len(newWS.Connectors)

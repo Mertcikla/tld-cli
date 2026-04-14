@@ -13,7 +13,11 @@ func TestLockFile(t *testing.T) {
 	appliedBy := "tester"
 	parentVersion := "v122"
 
-	lockFile, err := CreateLockFile(versionID, appliedBy, 1, 2, 3, 4, &parentVersion)
+	lockFile, err := CreateLockFile(versionID, appliedBy, &ResourceCounts{
+		Elements:   1,
+		Views:      2,
+		Connectors: 3,
+	}, &parentVersion)
 	if err != nil {
 		t.Errorf("CreateLockFile failed: %v", err)
 	}
@@ -23,8 +27,8 @@ func TestLockFile(t *testing.T) {
 	if lockFile.AppliedBy != appliedBy {
 		t.Errorf("expected applied by %s, got %s", appliedBy, lockFile.AppliedBy)
 	}
-	if lockFile.Resources.Diagrams != 1 {
-		t.Errorf("expected 1 diagram, got %d", lockFile.Resources.Diagrams)
+	if lockFile.Resources == nil || lockFile.Resources.Elements != 1 {
+		t.Errorf("expected 1 element, got %+v", lockFile.Resources)
 	}
 
 	err = WriteLockFile(tmpDir, lockFile)
@@ -42,7 +46,7 @@ func TestLockFile(t *testing.T) {
 
 	// Test Update
 	newVersionID := "v124"
-	UpdateLockFile(loaded, newVersionID, appliedBy, 2, 3, 4, 5, "hash123", &versionID, nil)
+	UpdateLockFile(loaded, newVersionID, appliedBy, &ResourceCounts{Elements: 2, Views: 3, Connectors: 4}, "hash123", &versionID, nil)
 	if loaded.VersionID != newVersionID {
 		t.Errorf("expected new version ID %s, got %s", newVersionID, loaded.VersionID)
 	}

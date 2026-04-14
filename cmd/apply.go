@@ -471,10 +471,11 @@ func updateLockFileFromResponse(wdir string, existingLock *workspace.LockFile, w
 	}
 
 	// Update lock file
-	workspace.UpdateLockFile(lockFile, versionID, "cli", 0, 0, 0, 0, workspaceHash, nil, meta)
-	lockFile.Resources.Elements = len(ws.Elements)
-	lockFile.Resources.Views = diagramCount
-	lockFile.Resources.Connectors = len(ws.Connectors)
+	workspace.UpdateLockFile(lockFile, versionID, "cli", &workspace.ResourceCounts{
+		Elements:   len(ws.Elements),
+		Views:      diagramCount,
+		Connectors: len(ws.Connectors),
+	}, workspaceHash, nil, meta)
 
 	if err := workspace.WriteLockFile(wdir, lockFile); err != nil {
 		return fmt.Errorf("write lock file: %w", err)

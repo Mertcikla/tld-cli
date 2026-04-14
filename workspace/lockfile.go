@@ -117,34 +117,24 @@ func stripPositionFields(value any) any {
 	}
 }
 
-// CreateLockFile creates a new lock file with the given parameters
-func CreateLockFile(versionID, appliedBy string, diagramCount, objectCount, edgeCount, linkCount int, parentVersion *string) (*LockFile, error) {
+// CreateLockFile creates a new lock file with the given parameters.
+func CreateLockFile(versionID, appliedBy string, resources *ResourceCounts, parentVersion *string) (*LockFile, error) {
 	return &LockFile{
-		Version:   "v1",
-		VersionID: versionID,
-		LastApply: time.Now(),
-		AppliedBy: appliedBy,
-		Resources: &ResourceCounts{
-			Diagrams: diagramCount,
-			Objects:  objectCount,
-			Edges:    edgeCount,
-			Links:    linkCount,
-		},
+		Version:       "v1",
+		VersionID:     versionID,
+		LastApply:     time.Now(),
+		AppliedBy:     appliedBy,
+		Resources:     cloneResourceCounts(resources),
 		ParentVersion: parentVersion,
 	}, nil
 }
 
-// UpdateLockFile updates an existing lock file with new resource counts and hash
-func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, diagramCount, objectCount, edgeCount, linkCount int, workspaceHash string, parentVersion *string, metadata *Meta) {
+// UpdateLockFile updates an existing lock file with new resource counts and hash.
+func UpdateLockFile(lockFile *LockFile, versionID, appliedBy string, resources *ResourceCounts, workspaceHash string, parentVersion *string, metadata *Meta) {
 	lockFile.VersionID = versionID
 	lockFile.LastApply = time.Now()
 	lockFile.AppliedBy = appliedBy
-	lockFile.Resources = &ResourceCounts{
-		Diagrams: diagramCount,
-		Objects:  objectCount,
-		Edges:    edgeCount,
-		Links:    linkCount,
-	}
+	lockFile.Resources = cloneResourceCounts(resources)
 	lockFile.WorkspaceHash = workspaceHash
 	lockFile.ParentVersion = parentVersion
 	lockFile.Metadata = cloneMeta(metadata)
@@ -419,6 +409,14 @@ func cloneMeta(meta *Meta) *Meta {
 		Views:      cloneResourceMetadataMap(meta.Views),
 		Connectors: cloneResourceMetadataMap(meta.Connectors),
 	}
+}
+
+func cloneResourceCounts(resources *ResourceCounts) *ResourceCounts {
+	if resources == nil {
+		return nil
+	}
+	clone := *resources
+	return &clone
 }
 
 func cloneResourceMetadataMap(source map[string]*ResourceMetadata) map[string]*ResourceMetadata {
