@@ -26,7 +26,7 @@ type SessionConfig struct {
 	RootDir               string
 	Command               ResolvedCommand
 	ProcessEnv            []string
-	InitializationOptions interface{}
+	InitializationOptions any
 }
 
 type Session struct {
@@ -282,7 +282,7 @@ func formatStderrSuffix(stderr string) string {
 	return ": " + stderr
 }
 
-func capabilityEnabled(value interface{}) bool {
+func capabilityEnabled(value any) bool {
 	switch typed := value.(type) {
 	case nil:
 		return false
@@ -394,7 +394,7 @@ func (c *noopClient) ShowMessageRequest(context.Context, *protocol.ShowMessageRe
 	return nil, nil
 }
 
-func (c *noopClient) Telemetry(context.Context, interface{}) error {
+func (c *noopClient) Telemetry(context.Context, any) error {
 	return nil
 }
 
@@ -410,7 +410,7 @@ func (c *noopClient) ApplyEdit(context.Context, *protocol.ApplyWorkspaceEditPara
 	return false, nil
 }
 
-func (c *noopClient) Configuration(context.Context, *protocol.ConfigurationParams) ([]interface{}, error) {
+func (c *noopClient) Configuration(context.Context, *protocol.ConfigurationParams) ([]any, error) {
 	return nil, nil
 }
 

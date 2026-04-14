@@ -9,6 +9,7 @@ import (
 
 var rootCmd = NewRootCmd()
 var outputFormat string
+var compactJSON bool
 
 // Execute runs the root command and exits on error.
 func Execute() {
@@ -42,6 +43,7 @@ and apply them atomically with 'tld apply'.`,
 	}
 	root.PersistentFlags().StringVarP(&wdir, "workspace", "w", defaultWdir, "workspace directory")
 	root.PersistentFlags().StringVar(&outputFormat, "format", "text", "output format: text or json")
+	root.PersistentFlags().BoolVar(&compactJSON, "compact", false, "compact JSON output (no whitespace)")
 
 	// Define groups
 	resourceGroup := &cobra.Group{

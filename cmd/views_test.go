@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/mertcikla/tld-cli/planner"
@@ -86,12 +87,7 @@ func TestViewsCmd_JSONOutput(t *testing.T) {
 }
 
 func containsLine(output, want string) bool {
-	for _, line := range splitLines(output) {
-		if line == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(splitLines(output), want)
 }
 
 func splitLines(output string) []string {

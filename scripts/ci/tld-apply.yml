@@ -40,7 +40,7 @@ jobs:
       - name: Apply
         env:
           TLD_API_KEY: ${{ secrets.TLD_API_KEY }}
-        run: tld apply --auto-approve --format json | tee tld-apply-result.json
+        run: tld apply --force --format json | tee tld-apply-result.json
 
       - name: Upload apply result
         uses: actions/upload-artifact@v4

@@ -55,9 +55,16 @@ func newCreateElementCmd(wdir *string) *cobra.Command {
 				}},
 			}
 			if err := workspace.UpsertElement(*wdir, r, spec); err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "add", err)
+				}
 				return fmt.Errorf("upsert element: %w", err)
 			}
+			if wantsJSONOutput() {
+				return writeMutationJSONOutput(cmd.OutOrStdout(), "add", "add", r)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated elements.yaml (upserted %s)\n", r)
+			fmt.Fprintln(cmd.OutOrStdout(), "Change recorded locally in elements.yaml. Run 'tld apply' to push to cloud.")
 			return nil
 		},
 	}

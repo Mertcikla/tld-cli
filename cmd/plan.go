@@ -108,9 +108,13 @@ func newPlanCmd(wdir *string) *cobra.Command {
 				levelNames := map[int]string{1: "Minimal", 2: "Standard", 3: "Strict"}
 				fmt.Fprintf(out, "\n  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
 				for _, wg := range warnings {
-					fmt.Fprintf(out, "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)
-					for _, v := range wg.Violations {
-						fmt.Fprintf(out, "  * %s\n", v)
+					if verbose {
+						fmt.Fprintf(out, "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)
+						for _, v := range wg.Violations {
+							fmt.Fprintf(out, "  * %s\n", v)
+						}
+					} else {
+						fmt.Fprintf(out, "[%s] %s (%d violations)\n", wg.RuleCode, wg.RuleName, len(wg.Violations))
 					}
 					fmt.Fprintln(out)
 				}

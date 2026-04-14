@@ -11,7 +11,6 @@ import (
 	"github.com/mertcikla/tld-cli/planner"
 	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/proto"
 )
 
 func newStatusCmd(wdir *string) *cobra.Command {
@@ -56,7 +55,7 @@ any drift from manual changes in the frontend.`,
 					if err != nil {
 						return fmt.Errorf("build plan: %w", err)
 					}
-					plan.Request.DryRun = proto.Bool(true)
+					plan.Request.DryRun = new(true)
 					serverResp, err = c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(plan.Request))
 					if err != nil {
 						return withUnauthorizedHint("server check failed", err)

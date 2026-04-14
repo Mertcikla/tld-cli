@@ -17,7 +17,7 @@ func FilesChangedSince(repoRoot, fromSHA string) ([]string, error) {
 		return nil, nil
 	}
 	var files []string
-	for _, line := range strings.Split(trimmed, "\n") {
+	for line := range strings.SplitSeq(trimmed, "\n") {
 		if line == "" {
 			continue
 		}

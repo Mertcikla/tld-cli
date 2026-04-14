@@ -23,7 +23,9 @@ func wantsJSONOutput() bool {
 
 func writeJSONOutput(w io.Writer, payload planner.JSONOutput) error {
 	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
+	if !compactJSON {
+		enc.SetIndent("", "  ")
+	}
 	return enc.Encode(payload)
 }
 
@@ -32,6 +34,19 @@ func writeCommandJSONError(w io.Writer, command string, err error) error {
 		Command: command,
 		Status:  "error",
 		Errors:  []string{err.Error()},
+	})
+}
+
+func writeMutationJSONOutput(w io.Writer, command, action, ref string) error {
+	return writeJSONOutput(w, planner.JSONOutput{
+		Command: command,
+		Status:  "ok",
+		Items: []planner.JSONItem{
+			{
+				Action: action,
+				Ref:    ref,
+			},
+		},
 	})
 }
 
@@ -99,6 +114,7 @@ func buildStatusJSONOutput(lockFile *workspace.LockFile, localModified, serverDr
 	if lockFile != nil {
 		status = statusLabel(localModified, serverDrift, conflicts)
 	}
+	isMod := localModified || conflicts > 0 || serverDrift
 	output := planner.JSONOutput{
 		Command: "status",
 		Status:  status,
@@ -107,6 +123,7 @@ func buildStatusJSONOutput(lockFile *workspace.LockFile, localModified, serverDr
 			"local_modified": boolToInt(localModified),
 			"server_drift":   boolToInt(serverDrift),
 		},
+		IsModified: &isMod,
 	}
 	if lockFile != nil {
 		output.Extra = map[string]any{
@@ -167,8 +184,8 @@ func collectDiffFiles(wdir, tempDir string) ([]planner.JSONDiffFile, error) {
 		if current == nil {
 			continue
 		}
-		if strings.HasPrefix(line, "+++ ") {
-			current.Path = normalizeDiffPath(strings.TrimPrefix(line, "+++ "), wdir, tempDir)
+		if after, ok := strings.CutPrefix(line, "+++ "); ok {
+			current.Path = normalizeDiffPath(after, wdir, tempDir)
 			continue
 		}
 		if current.Path == "" && strings.HasPrefix(line, "--- ") {

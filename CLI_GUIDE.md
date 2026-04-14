@@ -147,7 +147,7 @@ Analyze the workspace and show what changes would be applied to the diag server.
 #### `tld apply [flags]`
 Apply the generated plan or the current workspace state to the diag server.
 **Flags:**
-- `--auto-approve`: Skip the interactive approval prompt and apply immediately.
+- `--force`: Skip the interactive approval prompt and apply immediately.
 
 If conflicts are detected, the dialog includes a Pull & Merge option that fetches server state, merges locally, and re-applies using the merged workspace.
 
@@ -245,7 +245,7 @@ The `check` command is intended for CI/CD and will report broken symbols, valida
 Use the normal plan/apply flow once the workspace is in sync.
 ```bash
 tld plan -v
-tld apply --auto-approve
+tld apply --force
 ```
 
 ### 7. Keep it current

@@ -197,7 +197,7 @@ func TestApplyCmd_SuccessAutoApprove(t *testing.T) {
 	setupApplyWorkspace(t, dir, serverURL)
 	seedElementWorkspace(t, dir)
 
-	stdout, _, err := runCmd(t, dir, "apply", "--auto-approve")
+	stdout, _, err := runCmd(t, dir, "apply", "--force")
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestApplyCmd_BearerTokenSentToServer(t *testing.T) {
 	seedElementWorkspace(t, dir)
 	writeConfig(t, dir, serverURL, "my-secret-key")
 
-	if _, _, err := runCmd(t, dir, "apply", "--auto-approve"); err != nil {
+	if _, _, err := runCmd(t, dir, "apply", "--force"); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -232,7 +232,7 @@ func TestApplyCmd_OrgIDInRequest(t *testing.T) {
 	setupApplyWorkspace(t, dir, serverURL)
 	seedElementWorkspace(t, dir)
 
-	if _, _, err := runCmd(t, dir, "apply", "--auto-approve"); err != nil {
+	if _, _, err := runCmd(t, dir, "apply", "--force"); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -252,7 +252,7 @@ func TestApplyCmd_ServerError_CodeInternal(t *testing.T) {
 	setupApplyWorkspace(t, dir, serverURL)
 	seedElementWorkspace(t, dir)
 
-	_, stderr, err := runCmd(t, dir, "apply", "--auto-approve")
+	_, stderr, err := runCmd(t, dir, "apply", "--force")
 	if err == nil || !strings.Contains(stderr, "Apply failed") {
 		t.Fatalf("expected apply failure, stderr=%q err=%v", stderr, err)
 	}
@@ -269,7 +269,7 @@ func TestApplyCmd_DriftDetected(t *testing.T) {
 	setupApplyWorkspace(t, dir, serverURL)
 	seedElementWorkspace(t, dir)
 
-	_, stderr, err := runCmd(t, dir, "apply", "--auto-approve")
+	_, stderr, err := runCmd(t, dir, "apply", "--force")
 	if err == nil || !strings.Contains(stderr, "drift item(s) detected") {
 		t.Fatalf("expected drift failure, stderr=%q err=%v", stderr, err)
 	}
@@ -325,7 +325,7 @@ func TestApplyCmd_ForceApplySkipsPreflightDriftPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCmd(t, dir, "apply", "--auto-approve", "--force-apply")
+	stdout, stderr, err := runCmd(t, dir, "apply", "--force", "--force-apply")
 	if err != nil {
 		t.Fatalf("expected apply success, stdout=%q stderr=%q err=%v", stdout, stderr, err)
 	}
@@ -365,7 +365,7 @@ func TestApplyCmd_InteractiveDecline(t *testing.T) {
 
 func TestApplyCmd_MissingConfig(t *testing.T) {
 	dir := t.TempDir()
-	_, _, err := runCmd(t, dir, "apply", "--auto-approve")
+	_, _, err := runCmd(t, dir, "apply", "--force")
 	if err == nil || !strings.Contains(err.Error(), "load workspace") {
 		t.Fatalf("expected missing config error, got %v", err)
 	}
@@ -378,7 +378,7 @@ func TestApplyCmd_CreatedResourcesInOutput(t *testing.T) {
 	setupApplyWorkspace(t, dir, serverURL)
 	seedElementWorkspace(t, dir)
 
-	stdout, _, err := runCmd(t, dir, "apply", "--auto-approve", "--verbose")
+	stdout, _, err := runCmd(t, dir, "apply", "--force", "--verbose")
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestApplyCmd_JSONOutput(t *testing.T) {
 	setupApplyWorkspace(t, dir, serverURL)
 	seedElementWorkspace(t, dir)
 
-	stdout, stderr, err := runCmd(t, dir, "apply", "--auto-approve", "--format", "json")
+	stdout, stderr, err := runCmd(t, dir, "apply", "--force", "--format", "json")
 	if err != nil {
 		t.Fatalf("apply --format json: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
@@ -474,7 +474,7 @@ func TestApplyCmd_JSONOutputIncludesRetryCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCmd(t, dir, "apply", "--auto-approve", "--format", "json")
+	stdout, stderr, err := runCmd(t, dir, "apply", "--force", "--format", "json")
 	if err != nil {
 		t.Fatalf("apply --format json: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}

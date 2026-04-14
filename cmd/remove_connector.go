@@ -21,12 +21,19 @@ func newRemoveConnectorCmd(wdir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			n, err := workspace.RemoveConnector(*wdir, view, from, to)
 			if err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "remove connector", err)
+				}
 				return fmt.Errorf("remove connector: %w", err)
+			}
+			if wantsJSONOutput() {
+				return writeMutationJSONOutput(cmd.OutOrStdout(), "remove connector", "remove", fmt.Sprintf("%s:%s:%s", view, from, to))
 			}
 			if n == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No matching connectors found - nothing removed.")
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "Removed %d connector(s) from connectors.yaml\n", n)
+				fmt.Fprintln(cmd.OutOrStdout(), "Change recorded locally in connectors.yaml. Run 'tld apply' to push to cloud.")
 			}
 			return nil
 		},

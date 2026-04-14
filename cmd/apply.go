@@ -20,7 +20,7 @@ import (
 )
 
 func newApplyCmd(wdir *string) *cobra.Command {
-	var autoApprove bool
+	var force bool
 	var debug bool
 	var verbose bool
 	var recreateIDs bool
@@ -83,7 +83,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 
 			// Check for version conflicts if lock file exists
 			scanner := bufio.NewScanner(cmd.InOrStdin())
-			if lockFile != nil && !autoApprove && !forceApply {
+			if lockFile != nil && !force && !forceApply {
 				currentHash, hashErr := workspace.CalculateWorkspaceHash(*wdir)
 				if hashErr == nil && lockFile.WorkspaceHash != "" && currentHash == lockFile.WorkspaceHash {
 					hasDrift, err := serverHasDrift(cmd.Context(), ws, plan)
@@ -105,7 +105,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 					}
 				}
 			}
-			if lockFile != nil && !autoApprove {
+			if lockFile != nil && !force {
 				newPlan, err := detectAndHandleConflicts(cmd, ws, lockFile, meta, plan, scanner, *wdir, recreateIDs)
 				if err != nil {
 					return err
@@ -115,7 +115,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 					req = plan.Request
 				}
 			}
-			if lockFile != nil && autoApprove {
+			if lockFile != nil && force {
 				newPlan, retryCount, err := autoPullAndRebuild(cmd, ws, lockFile, plan, *wdir, recreateIDs)
 				if err != nil {
 					if wantsJSONOutput() {
@@ -130,7 +130,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 				}
 			}
 
-			if !autoApprove {
+			if !force {
 				fmt.Fprintf(cmd.OutOrStdout(), "Apply %d resources? [yes/no]: ", total)
 				if !scanner.Scan() {
 					return errors.New("aborted")
@@ -209,7 +209,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 		},
 	}
 
-	c.Flags().BoolVar(&autoApprove, "auto-approve", false, "skip interactive approval prompt")
+	c.Flags().BoolVarP(&force, "force", "f", false, "skip interactive approval prompt")
 	c.Flags().BoolVar(&debug, "debug", false, "enable detailed network request logging")
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "print each created resource")
 	c.Flags().BoolVar(&recreateIDs, "recreate-ids", false, "ignore existing resource IDs and let the server generate new ones")
@@ -220,7 +220,7 @@ func newApplyCmd(wdir *string) *cobra.Command {
 func serverHasDrift(ctx context.Context, ws *workspace.Workspace, plan *planner.Plan) (bool, error) {
 	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 	req := proto.Clone(plan.Request).(*diagv1.ApplyPlanRequest)
-	req.DryRun = proto.Bool(true)
+	req.DryRun = new(true)
 	resp, err := c.ApplyWorkspacePlan(ctx, connect.NewRequest(req))
 	if err != nil {
 		return false, err
@@ -231,7 +231,7 @@ func serverHasDrift(ctx context.Context, ws *workspace.Workspace, plan *planner.
 func autoPullAndRebuild(cmd *cobra.Command, ws *workspace.Workspace, lockFile *workspace.LockFile, plan *planner.Plan, wdir string, recreateIDs bool) (*planner.Plan, int, error) {
 	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
 	req := proto.Clone(plan.Request).(*diagv1.ApplyPlanRequest)
-	req.DryRun = proto.Bool(true)
+	req.DryRun = new(true)
 	resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(req))
 	if err != nil {
 		return nil, 0, fmt.Errorf("server plan failed: %w", err)
@@ -240,7 +240,7 @@ func autoPullAndRebuild(cmd *cobra.Command, ws *workspace.Workspace, lockFile *w
 		return nil, 0, nil
 	}
 	if !wantsJSONOutput() {
-		fmt.Fprintln(cmd.ErrOrStderr(), "Version conflict detected during auto-approve. Pulling and retrying once...")
+		fmt.Fprintln(cmd.ErrOrStderr(), "Version conflict detected during force apply. Pulling and retrying once...")
 	}
 	newPlan, err := pullAndRebuildPlan(cmd, ws, lockFile, wdir, recreateIDs)
 	if err != nil {
@@ -263,7 +263,7 @@ func detectAndHandleConflicts(
 ) (*planner.Plan, error) {
 	// Perform dry run on the server
 	c := client.New(ws.Config.ServerURL, ws.Config.APIKey, false)
-	plan.Request.DryRun = proto.Bool(true)
+	plan.Request.DryRun = new(true)
 	resp, err := c.ApplyWorkspacePlan(cmd.Context(), connect.NewRequest(plan.Request))
 	plan.Request.DryRun = nil // reset so the real apply is not also a dry run
 	if err != nil {

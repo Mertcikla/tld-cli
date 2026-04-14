@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/mertcikla/tld-cli/workspace"
 	"github.com/spf13/cobra"
@@ -40,10 +41,8 @@ func inferConnectorView(ws *workspace.Workspace, from, to string) (string, error
 
 	// Check for a shared parent
 	for _, f := range fromParents {
-		for _, t := range toParents {
-			if f == t {
-				return f, nil
-			}
+		if slices.Contains(toParents, f) {
+			return f, nil
 		}
 	}
 
@@ -92,9 +91,16 @@ func newConnectElementsCmd(wdir *string) *cobra.Command {
 				URL:          url,
 			}
 			if err := workspace.AppendConnector(*wdir, spec); err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "connect", err)
+				}
 				return fmt.Errorf("append connector: %w", err)
 			}
+			if wantsJSONOutput() {
+				return writeMutationJSONOutput(cmd.OutOrStdout(), "connect", "connect", fmt.Sprintf("%s:%s", from, to))
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Appended connector %s -> %s in view %s to connectors.yaml\n", from, to, view)
+			fmt.Fprintln(cmd.OutOrStdout(), "Change recorded locally in connectors.yaml. Run 'tld apply' to push to cloud.")
 			return nil
 		},
 	}

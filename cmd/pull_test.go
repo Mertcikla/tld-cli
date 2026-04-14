@@ -47,9 +47,9 @@ _meta_elements:
 					{
 						Id:          22, // This matches 5nKqb4Xa
 						Name:        "API Service Updated",
-						Kind:        protoPtr("service"),
+						Kind:        new("service"),
 						UpdatedAt:   timestamppb.Now(),
-						Description: protoPtr("New description"),
+						Description: new("New description"),
 					},
 				},
 			}

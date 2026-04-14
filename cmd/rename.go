@@ -33,9 +33,16 @@ func newUpdateElementCmd(wdir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref, field, value := args[0], args[1], args[2]
 			if err := workspace.UpdateElementField(*wdir, ref, field, value); err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "update element", err)
+				}
 				return fmt.Errorf("update element: %w", err)
 			}
+			if wantsJSONOutput() {
+				return writeMutationJSONOutput(cmd.OutOrStdout(), "update element", "update", ref)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated element %q: %s=%q\n", ref, field, value)
+			fmt.Fprintln(cmd.OutOrStdout(), "Change recorded locally in elements.yaml. Run 'tld apply' to push to cloud.")
 			return nil
 		},
 	}
@@ -49,9 +56,16 @@ func newUpdateConnectorCmd(wdir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref, field, value := args[0], args[1], args[2]
 			if err := workspace.UpdateConnectorField(*wdir, ref, field, value); err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "update connector", err)
+				}
 				return fmt.Errorf("update connector: %w", err)
 			}
+			if wantsJSONOutput() {
+				return writeMutationJSONOutput(cmd.OutOrStdout(), "update connector", "update", ref)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated connector %q: %s=%q\n", ref, field, value)
+			fmt.Fprintln(cmd.OutOrStdout(), "Change recorded locally in connectors.yaml. Run 'tld apply' to push to cloud.")
 			return nil
 		},
 	}

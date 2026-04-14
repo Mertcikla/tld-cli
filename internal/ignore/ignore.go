@@ -56,8 +56,8 @@ func (r *Rules) ShouldIgnorePath(path string) bool {
 		if matchPattern(normalizedPattern, path) || matchPattern(normalizedPattern, base) {
 			return true
 		}
-		if strings.HasSuffix(normalizedPattern, "/") {
-			trimmed := strings.TrimSuffix(normalizedPattern, "/")
+		if before, ok := strings.CutSuffix(normalizedPattern, "/"); ok {
+			trimmed := before
 			if path == trimmed || strings.HasPrefix(path, trimmed+"/") || base == trimmed {
 				return true
 			}

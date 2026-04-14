@@ -10,6 +10,7 @@ import (
 
 func newValidateCmd(wdir *string) *cobra.Command {
 	var strictness int
+	var verbose bool
 
 	c := &cobra.Command{
 		Use:   "validate",
@@ -66,9 +67,13 @@ func newValidateCmd(wdir *string) *cobra.Command {
 				levelNames := map[int]string{1: "Minimal", 2: "Standard", 3: "Strict"}
 				fmt.Fprintf(cmd.OutOrStdout(), "\n  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
 				for _, wg := range warnings {
-					fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)
-					for _, v := range wg.Violations {
-						fmt.Fprintf(cmd.OutOrStdout(), "  * %s\n", v)
+					if verbose {
+						fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)
+						for _, v := range wg.Violations {
+							fmt.Fprintf(cmd.OutOrStdout(), "  * %s\n", v)
+						}
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s (%d violations)\n", wg.RuleCode, wg.RuleName, len(wg.Violations))
 					}
 					fmt.Fprintln(cmd.OutOrStdout())
 				}
@@ -79,5 +84,6 @@ func newValidateCmd(wdir *string) *cobra.Command {
 	}
 
 	c.Flags().IntVar(&strictness, "strictness", 0, "override validation strictness level [1-3]")
+	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "show full architectural warnings output")
 	return c
 }

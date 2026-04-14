@@ -109,12 +109,13 @@ func TestRenderExecutionMarkdown_CreatedSectionsAbsentOnFailure(t *testing.T) {
 	}
 }
 
-func ptrString(s string) *string { return &s }
+//go:fix inline
+func ptrString(s string) *string { return new(s) }
 
 func TestRenderExecutionMarkdown_CreatedElementsSection(t *testing.T) {
 	resp := &diagv1.ApplyPlanResponse{
 		CreatedElements: []*diagv1.Element{
-			{Id: 10, Name: "API Gateway", Kind: ptrString("service")},
+			{Id: 10, Name: "API Gateway", Kind: new("service")},
 		},
 	}
 	var buf strings.Builder

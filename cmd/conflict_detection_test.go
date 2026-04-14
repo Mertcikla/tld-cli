@@ -44,7 +44,7 @@ func writeLockFile(t *testing.T, dir string) {
 // --- Dry-run sequencing ---
 
 // TestApplyCmd_DryRunFiredBeforeRealApply verifies that when a lock file exists and
-// --auto-approve is NOT set, tld apply always performs a dry-run conflict check
+// --force is NOT set, tld apply always performs a dry-run conflict check
 // before the real apply, regardless of whether tld plan was run first.
 func TestApplyCmd_DryRunFiredBeforeRealApply(t *testing.T) {
 	var callLog []bool // true = dry run, false = real apply
@@ -137,9 +137,9 @@ func TestApplyCmd_DryRunResetAfterConflictCheck(t *testing.T) {
 	}
 }
 
-// --- --auto-approve conflict detection ---
+// --- --force conflict detection ---
 
-// TestApplyCmd_AutoApprovePerformsConflictDetection verifies that --auto-approve
+// TestApplyCmd_AutoApprovePerformsConflictDetection verifies that --force
 // now performs a dry-run conflict check when a lock file is present.
 func TestApplyCmd_AutoApprovePerformsConflictDetection(t *testing.T) {
 	var dryRunCalled bool
@@ -155,14 +155,14 @@ func TestApplyCmd_AutoApprovePerformsConflictDetection(t *testing.T) {
 
 	dir := t.TempDir()
 	setupApplyWorkspace(t, dir, serverURL)
-	writeLockFile(t, dir) // lock file present, but --auto-approve should skip conflict check
+	writeLockFile(t, dir) // lock file present, but --force should skip conflict check
 
-	_, _, err := runCmd(t, dir, "apply", "--auto-approve")
+	_, _, err := runCmd(t, dir, "apply", "--force")
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if !dryRunCalled {
-		t.Error("--auto-approve should perform dry-run conflict detection when a lock file exists")
+		t.Error("--force should perform dry-run conflict detection when a lock file exists")
 	}
 }
 

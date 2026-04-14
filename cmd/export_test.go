@@ -11,8 +11,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+//go:fix inline
 func protoPtr[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 func TestExportCmd(t *testing.T) {
@@ -23,7 +24,7 @@ func TestExportCmd(t *testing.T) {
 					{Id: 1, Name: "D1", UpdatedAt: timestamppb.Now()},
 				},
 				Elements: []*diagv1.Element{
-					{Id: 2, Name: "O1", Kind: protoPtr("service"), UpdatedAt: timestamppb.Now()},
+					{Id: 2, Name: "O1", Kind: new("service"), UpdatedAt: timestamppb.Now()},
 				},
 				Placements: []*diagv1.ElementPlacement{
 					{ViewId: 1, ElementId: 2, PositionX: 10, PositionY: 20},
@@ -65,11 +66,11 @@ func TestExportCmd_MapsOwnedViewsToElements(t *testing.T) {
 			resp := &diagv1.ExportOrganizationResponse{
 				Diagrams: []*diagv1.Diagram{
 					{Id: rootID, Name: "Workspace Root", UpdatedAt: now},
-					{Id: apiViewID, Name: "API Service", LevelLabel: protoPtr("Container"), ParentDiagramId: &rootID, UpdatedAt: now},
+					{Id: apiViewID, Name: "API Service", LevelLabel: new("Container"), ParentDiagramId: &rootID, UpdatedAt: now},
 				},
 				Elements: []*diagv1.Element{
-					{Id: 10, Name: "API Service", Kind: protoPtr("service"), HasView: true, ViewLabel: protoPtr("Container"), UpdatedAt: now},
-					{Id: 11, Name: "Worker", Kind: protoPtr("service"), UpdatedAt: now},
+					{Id: 10, Name: "API Service", Kind: new("service"), HasView: true, ViewLabel: new("Container"), UpdatedAt: now},
+					{Id: 11, Name: "Worker", Kind: new("service"), UpdatedAt: now},
 				},
 				Navigations: []*diagv1.ElementNavigation{
 					{Id: 20, ElementId: 10, FromDiagramId: rootID, ToDiagramId: apiViewID},

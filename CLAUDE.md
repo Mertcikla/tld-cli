@@ -62,7 +62,7 @@ tld
 ├── validate
 ├── views              - summarize derived view structure and per-view counts
 ├── plan [-o file]
-├── apply [--auto-approve]
+├── apply [--force]
 ├── pull               - surgical three-way merge from server state
 ├── diff               - git-style diff between local and server state
 ├── status             - show sync status and merge conflicts

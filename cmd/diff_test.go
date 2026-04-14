@@ -14,7 +14,7 @@ func TestDiffCmd(t *testing.T) {
 		exportFunc: func(_ *diagv1.ExportOrganizationRequest) (*diagv1.ExportOrganizationResponse, error) {
 			resp := &diagv1.ExportOrganizationResponse{
 				Elements: []*diagv1.Element{
-					{Id: 1, Name: "Server API", Kind: protoPtr("service"), UpdatedAt: timestamppb.Now()},
+					{Id: 1, Name: "Server API", Kind: new("service"), UpdatedAt: timestamppb.Now()},
 				},
 			}
 			return resp, nil

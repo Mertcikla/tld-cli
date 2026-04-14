@@ -3,6 +3,7 @@ package planner
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 
 	diagv1 "buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go/diag/v1"
@@ -331,8 +332,6 @@ func uniqueRepositoryRootRef(repoName string, elements map[string]*workspace.Ele
 
 func cloneElements(source map[string]*workspace.Element) map[string]*workspace.Element {
 	cloned := make(map[string]*workspace.Element, len(source))
-	for ref, element := range source {
-		cloned[ref] = element
-	}
+	maps.Copy(cloned, source)
 	return cloned
 }

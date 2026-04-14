@@ -15,9 +15,16 @@ func newRemoveElementCmd(wdir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref := args[0]
 			if err := workspace.RemoveElement(*wdir, ref); err != nil {
+				if wantsJSONOutput() {
+					return writeCommandJSONError(cmd.OutOrStdout(), "remove element", err)
+				}
 				return fmt.Errorf("remove element: %w", err)
 			}
+			if wantsJSONOutput() {
+				return writeMutationJSONOutput(cmd.OutOrStdout(), "remove element", "remove", ref)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Removed %s from elements.yaml\n", ref)
+			fmt.Fprintln(cmd.OutOrStdout(), "Change recorded locally in elements.yaml. Run 'tld apply' to push to cloud.")
 			return nil
 		},
 	}
