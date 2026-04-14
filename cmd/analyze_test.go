@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	testAnalyzeDependencyLabelImport    = "depends_on:import"
-	testAnalyzeDependencyLabelReference = "depends_on:reference"
-	testAnalyzeDependencyLabelBoth      = "depends_on:both"
+	testAnalyzeDependencyLabelImport    = "imports"
+	testAnalyzeDependencyLabelReference = "references"
+	testAnalyzeDependencyLabelBoth      = "depends_on"
 )
 
 func TestAnalyzeCmd_DryRun_NoWrite(t *testing.T) {

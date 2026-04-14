@@ -245,7 +245,6 @@ That is a current pipeline constraint new languages should know about.
 `uniqueAnalyzeConnectors` performs three cleanup passes:
 
 - Exact duplicate connectors collapse by connector key.
-- Repeated `depends_on` connectors with different origins merge into one edge with label `depends_on:import`, `depends_on:reference`, or `depends_on:both`.
 - Reverse connectors with the same label collapse into a single connector with direction `both`.
 
 This keeps dependency views compact even when multiple call sites or multiple import statements point at the same target.

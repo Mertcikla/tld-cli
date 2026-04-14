@@ -246,9 +246,9 @@ func analyzeModulePath(repoRoot string) string {
 }
 
 const (
-	analyzeDependencyLabelImport    = "depends_on:import"
-	analyzeDependencyLabelReference = "depends_on:reference"
-	analyzeDependencyLabelBoth      = "depends_on:both"
+	analyzeDependencyLabelImport    = "imports"
+	analyzeDependencyLabelReference = "references"
+	analyzeDependencyLabelBoth      = "depends_on"
 )
 
 func analyzeDependencyKindsForLabel(label string) (hasImport bool, hasReference bool) {

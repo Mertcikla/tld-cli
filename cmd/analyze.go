@@ -224,14 +224,15 @@ for cross-file call references.`,
 
 				repoName := filepath.Base(repoCtx.Root)
 				repoRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
-					Name:      repoName,
-					Kind:      "repository",
-					Owner:     repoCtx.Name,
-					Repo:      repoURL,
-					Branch:    branch,
-					HasView:   len(filtered) > 0,
-					ViewLabel: repoName,
-					ParentRef: "root",
+					Name:       repoName,
+					Kind:       "repository",
+					Owner:      repoCtx.Name,
+					Repo:       repoURL,
+					Branch:     branch,
+					HasView:    len(filtered) > 0,
+					Technology: "Git Repository",
+					ViewLabel:  repoName,
+					ParentRef:  "root",
 					Identity: analyzeElementIdentity{
 						Repo:     repoURL,
 						Branch:   branch,
@@ -359,14 +360,14 @@ for cross-file call references.`,
 					}
 
 					ref, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
-						Name:       sym.Name,
-						Kind:       sym.Kind,
-						Owner:      repoCtx.Name,
-						Repo:       repoURL,
-						Branch:     branch,
-						FilePath:   relPath,
-						Symbol:     sym.Name,
-						ParentName: sym.Parent,
+						Name:        sym.Name,
+						Kind:        sym.Kind,
+						Owner:       repoCtx.Name,
+						Repo:        repoURL,
+						Branch:      branch,
+						FilePath:    relPath,
+						Symbol:      sym.Name,
+						ParentName:  sym.Parent,
 						Technology:  sym.Technology,
 						Description: sym.Description,
 						ParentRef:   parentRef,
@@ -622,16 +623,16 @@ type analyzeElementLookupKey struct {
 }
 
 type analyzeElementSpec struct {
-	Name       string
-	Kind       string
-	Owner      string
-	Repo       string
-	Branch     string
-	FilePath   string
-	Symbol     string
-	ParentName string
-	HasView    bool
-	ViewLabel  string
+	Name        string
+	Kind        string
+	Owner       string
+	Repo        string
+	Branch      string
+	FilePath    string
+	Symbol      string
+	ParentName  string
+	HasView     bool
+	ViewLabel   string
 	ParentRef   string
 	Technology  string
 	Description string
@@ -743,16 +744,16 @@ func analyzeSymbolLookupKey(symbol analyzer.Symbol) analyzeElementLookupKey {
 
 func analyzeElementToWorkspaceElement(spec analyzeElementSpec) *workspace.Element {
 	return &workspace.Element{
-		Name:      spec.Name,
-		Kind:      spec.Kind,
-		Owner:     spec.Owner,
-		Repo:      spec.Repo,
-		Branch:    spec.Branch,
-		FilePath:  spec.FilePath,
-		Symbol:    spec.Symbol,
-		HasView:   spec.HasView,
-		ViewLabel:  spec.ViewLabel,
-		Technology: spec.Technology,
+		Name:        spec.Name,
+		Kind:        spec.Kind,
+		Owner:       spec.Owner,
+		Repo:        spec.Repo,
+		Branch:      spec.Branch,
+		FilePath:    spec.FilePath,
+		Symbol:      spec.Symbol,
+		HasView:     spec.HasView,
+		ViewLabel:   spec.ViewLabel,
+		Technology:  spec.Technology,
 		Description: spec.Description,
 		Placements: []workspace.ViewPlacement{{
 			ParentRef: spec.ParentRef,
