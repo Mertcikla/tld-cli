@@ -48,6 +48,8 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 		elements[rootRef] = syntheticRoot
 	}
 
+	canonicalViews := canonicalViewRefs(elements, ws.Connectors)
+
 	includedElements := make(map[string]bool)
 	elementRefs := make([]string, 0, len(elements))
 	for ref := range elements {
@@ -72,10 +74,14 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 			continue
 		}
 		includedElements[ref] = true
+		hasView := element.HasView
+		if _, ok := canonicalViews[ref]; ok {
+			hasView = true
+		}
 		planElement := &diagv1.PlanElement{
 			Ref:     ref,
 			Name:    element.Name,
-			HasView: element.HasView,
+			HasView: hasView,
 		}
 		if element.Kind != "" {
 			planElement.Kind = &element.Kind
@@ -128,7 +134,7 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 				planElement.Id = &id
 				planElement.UpdatedAt = timestamppb.New(meta.UpdatedAt)
 			}
-			if element.HasView {
+			if hasView {
 				if meta, ok := ws.Meta.Views[ref]; ok {
 					id := int32(meta.ID)
 					planElement.DiagramId = &id
@@ -194,6 +200,34 @@ func buildFromElements(ws *workspace.Workspace, recreateIDs bool) (*Plan, error)
 	}
 
 	return &Plan{Request: req, Model: "workspace"}, nil
+}
+
+func canonicalViewRefs(elements map[string]*workspace.Element, connectors map[string]*workspace.Connector) map[string]struct{} {
+	refs := make(map[string]struct{})
+	for ref, element := range elements {
+		if element == nil || !element.HasView {
+			continue
+		}
+		refs[ref] = struct{}{}
+	}
+	for _, element := range elements {
+		if element == nil {
+			continue
+		}
+		for _, placement := range element.Placements {
+			if placement.ParentRef == "" || placement.ParentRef == syntheticRootViewRef {
+				continue
+			}
+			refs[placement.ParentRef] = struct{}{}
+		}
+	}
+	for _, connector := range connectors {
+		if connector == nil || connector.View == "" || connector.View == syntheticRootViewRef {
+			continue
+		}
+		refs[connector.View] = struct{}{}
+	}
+	return refs
 }
 
 func usesElementWorkspace(ws *workspace.Workspace) bool {

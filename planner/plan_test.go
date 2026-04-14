@@ -115,6 +115,42 @@ func TestBuild_MapsElementsAndConnectors(t *testing.T) {
 	}
 }
 
+func TestBuild_PromotesPlacementParentsToViews(t *testing.T) {
+	ws := &workspace.Workspace{
+		Config: workspace.Config{OrgID: "test-org-id"},
+		Elements: map[string]*workspace.Element{
+			"cmd": {
+				Name: "cmd",
+				Kind: "folder",
+			},
+			"analyze-go": {
+				Name:       "analyze-go",
+				Kind:       "service",
+				Placements: []workspace.ViewPlacement{{ParentRef: "cmd"}},
+			},
+		},
+	}
+
+	plan, err := planner.Build(ws, false)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	var cmd *diagv1.PlanElement
+	for _, element := range plan.Request.Elements {
+		if element.Ref == "cmd" {
+			cmd = element
+			break
+		}
+	}
+	if cmd == nil {
+		t.Fatal("cmd element missing")
+	}
+	if !cmd.HasView {
+		t.Fatal("expected placement parent to be promoted to a canonical view")
+	}
+}
+
 func TestBuild_ReusesMetadataIDs(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	ws := elementWorkspace()
