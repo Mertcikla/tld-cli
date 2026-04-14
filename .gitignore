@@ -3,3 +3,4 @@ workdir/
 coverage.out
 .DS_Store
 .tld.yaml
+.tld/*
