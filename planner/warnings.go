@@ -95,7 +95,7 @@ var warningRules = []warningRule{
 		Code:        warningCodeMissingTech,
 		Name:        "Missing Tech",
 		Description: "No `technology` field",
-		Mediation:   "Add a 'technology' field (e.g. Go, React) to clarify the stack.",
+		Mediation:   "Add a 'technology' field to the following elements. (e.g. Go, React)",
 	},
 	{
 		Code:        warningCodeUnknownTechnology,
@@ -391,7 +391,7 @@ func (ctx *warningContext) checkLowInsightRatioRule() {
 			continue
 		}
 		connectorCount := ctx.viewConnectors[viewRef]
-		if connectorCount < len(elements) {
+		if connectorCount*2 < len(elements) {
 			ctx.addWarning(warningCodeLowInsightRatio, fmt.Sprintf("View %q (Elements: %d, Connectors: %d)", viewRef, len(elements), connectorCount))
 		}
 	}
@@ -460,7 +460,7 @@ func (ctx *warningContext) checkAbstractionLeakRule() {
 func (ctx *warningContext) checkMissingTechRule() {
 	for elementRef, element := range ctx.ws.Elements {
 		if element != nil && element.Technology == "" {
-			ctx.addWarning(warningCodeMissingTech, fmt.Sprintf("Element %q", elementRef))
+			ctx.addWarning(warningCodeMissingTech, fmt.Sprintf("%q", elementRef))
 		}
 	}
 }

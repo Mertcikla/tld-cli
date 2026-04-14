@@ -418,6 +418,64 @@ func TestAnalyzeCmd_PathNotExist(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCmd_SetsTechnology(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+	file := filepath.Join(dir, "service.go")
+	if err := os.WriteFile(file, []byte("package main\nfunc Foo() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := runCmd(t, dir, "analyze", file); err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fileRef := findAnalyzeElementRefByKindAndPath(t, ws, "file", "service.go")
+	fileElement := ws.Elements[fileRef]
+	if fileElement.Technology != "go" {
+		t.Fatalf("file technology = %q, want go", fileElement.Technology)
+	}
+
+	fooRef := findAnalyzeElementRefBySymbol(t, ws, "Foo")
+	fooElement := ws.Elements[fooRef]
+	if fooElement.Technology != "go" {
+		t.Fatalf("symbol technology = %q, want go", fooElement.Technology)
+	}
+}
+
+func TestAnalyzeCmd_SetsTechnologyPython(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+	file := filepath.Join(dir, "app.py")
+	if err := os.WriteFile(file, []byte("def hello():\n    pass\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := runCmd(t, dir, "analyze", file); err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fileRef := findAnalyzeElementRefByKindAndPath(t, ws, "file", "app.py")
+	fileElement := ws.Elements[fileRef]
+	if fileElement.Technology != "python" {
+		t.Fatalf("file technology = %q, want python", fileElement.Technology)
+	}
+
+	helloRef := findAnalyzeElementRefBySymbol(t, ws, "hello")
+	helloElement := ws.Elements[helloRef]
+	if helloElement.Technology != "python" {
+		t.Fatalf("symbol technology = %q, want python", helloElement.Technology)
+	}
+}
+
 func findAnalyzeElementRefByKindAndPath(t *testing.T, ws *workspace.Workspace, kind, filePath string) string {
 	t.Helper()
 	for ref, element := range ws.Elements {

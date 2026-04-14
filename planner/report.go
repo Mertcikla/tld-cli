@@ -21,10 +21,19 @@ func renderElementPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace,
 	fmt.Fprintln(w, "# Element Plan")
 	fmt.Fprintln(w)
 
-	fmt.Fprintln(w, "## View Structure")
-	fmt.Fprintln(w)
-	renderElementTree(w, ws)
-	fmt.Fprintln(w)
+	if verbose {
+		fmt.Fprintln(w, "## View Structure")
+		fmt.Fprintln(w)
+		renderElementTree(w, ws)
+		fmt.Fprintln(w)
+
+		fmt.Fprintln(w, "## Actions")
+		fmt.Fprintln(w)
+		for _, line := range detailedPlanLines(w, ws) {
+			fmt.Fprintln(w, line)
+		}
+		fmt.Fprintln(w)
+	}
 
 	viewCount := 0
 	for _, element := range ws.Elements {
@@ -35,24 +44,13 @@ func renderElementPlanMarkdown(w io.Writer, plan *Plan, ws *workspace.Workspace,
 
 	fmt.Fprintln(w, "## Summary")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "| Resource | Count |")
-	fmt.Fprintln(w, "|----------|-------|")
-	fmt.Fprintf(w, "| Elements | %d |\n", len(ws.Elements))
-	fmt.Fprintf(w, "| Views    | %d |\n", viewCount)
-	fmt.Fprintf(w, "| Connectors | %d |\n", len(ws.Connectors))
+	fmt.Fprintln(w, "| Resource   | Count |")
+	fmt.Fprintln(w, "|------------|-------|")
+	fmt.Fprintf(w, "| Elements   | %5d |\n", len(ws.Elements))
+	fmt.Fprintf(w, "| Views      | %5d |\n", viewCount)
+	fmt.Fprintf(w, "| Connectors | %5d |\n", len(ws.Connectors))
 	fmt.Fprintln(w)
 
-	if !verbose {
-		fmt.Fprintln(w, "Use '-v' or '--verbose' for detailed element placement and connector reporting.")
-		return
-	}
-
-	fmt.Fprintln(w, "## Actions")
-	fmt.Fprintln(w)
-	for _, line := range detailedPlanLines(w, ws) {
-		fmt.Fprintln(w, line)
-	}
-	fmt.Fprintln(w)
 }
 
 type planActionSummary struct {

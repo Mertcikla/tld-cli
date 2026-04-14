@@ -300,16 +300,21 @@ for cross-file call references.`,
 							parentRef = folderRef
 						}
 					}
+					fileTech := ""
+					if lang, ok := analyzer.DetectLanguage(relPath); ok {
+						fileTech = string(lang)
+					}
 					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
-						Name:      fileName,
-						Kind:      "file",
-						Owner:     repoCtx.Name,
-						Repo:      repoURL,
-						Branch:    branch,
-						FilePath:  relPath,
-						HasView:   true,
-						ViewLabel: fileName,
-						ParentRef: parentRef,
+						Name:       fileName,
+						Kind:       "file",
+						Owner:      repoCtx.Name,
+						Repo:       repoURL,
+						Branch:     branch,
+						FilePath:   relPath,
+						HasView:    true,
+						ViewLabel:  fileName,
+						Technology: fileTech,
+						ParentRef:  parentRef,
 						Identity: analyzeElementIdentity{
 							Repo:     repoURL,
 							Branch:   branch,
@@ -354,6 +359,7 @@ for cross-file call references.`,
 						FilePath:   relPath,
 						Symbol:     sym.Name,
 						ParentName: sym.Parent,
+						Technology: sym.Technology,
 						ParentRef:  parentRef,
 						Identity: analyzeElementIdentity{
 							Repo:     repoURL,
@@ -618,6 +624,7 @@ type analyzeElementSpec struct {
 	HasView    bool
 	ViewLabel  string
 	ParentRef  string
+	Technology string
 	Identity   analyzeElementIdentity
 }
 
@@ -735,6 +742,7 @@ func analyzeElementToWorkspaceElement(spec analyzeElementSpec) *workspace.Elemen
 		Symbol:    spec.Symbol,
 		HasView:   spec.HasView,
 		ViewLabel: spec.ViewLabel,
+		Technology: spec.Technology,
 		Placements: []workspace.ViewPlacement{{
 			ParentRef: spec.ParentRef,
 		}},

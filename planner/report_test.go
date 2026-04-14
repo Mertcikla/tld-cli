@@ -51,8 +51,11 @@ func TestRenderPlanMarkdown_Header(t *testing.T) {
 	if !strings.Contains(out, "# Element Plan") {
 		t.Fatalf("missing header: %q", out)
 	}
-	if !strings.Contains(out, "## View Structure") || !strings.Contains(out, "## Summary") {
-		t.Fatalf("missing sections: %q", out)
+	if strings.Contains(out, "## View Structure") {
+		t.Fatalf("view structure should be hidden when not verbose: %q", out)
+	}
+	if !strings.Contains(out, "## Summary") {
+		t.Fatalf("missing summary section: %q", out)
 	}
 }
 
@@ -62,13 +65,13 @@ func TestRenderPlanMarkdown_SummaryTableCounts(t *testing.T) {
 	var buf strings.Builder
 	planner.RenderPlanMarkdown(&buf, plan, w, false)
 	out := buf.String()
-	if !strings.Contains(out, "| Elements | 3 |") {
+	if !strings.Contains(out, "| Elements   |     3 |") {
 		t.Fatalf("wrong element count: %q", out)
 	}
-	if !strings.Contains(out, "| Views    | 2 |") {
+	if !strings.Contains(out, "| Views      |     2 |") {
 		t.Fatalf("wrong view count: %q", out)
 	}
-	if !strings.Contains(out, "| Connectors | 1 |") {
+	if !strings.Contains(out, "| Connectors |     1 |") {
 		t.Fatalf("wrong connector count: %q", out)
 	}
 }
@@ -76,15 +79,30 @@ func TestRenderPlanMarkdown_SummaryTableCounts(t *testing.T) {
 func TestRenderPlanMarkdown_ViewStructure(t *testing.T) {
 	w := reportWorkspace()
 	plan := buildPlan(t, w)
-	var buf strings.Builder
-	planner.RenderPlanMarkdown(&buf, plan, w, false)
-	out := buf.String()
-	if !strings.Contains(out, "platform") || !strings.Contains(out, "api") || !strings.Contains(out, "db") {
-		t.Fatalf("missing element tree entries: %q", out)
-	}
-	if !strings.Contains(out, "[view]") {
-		t.Fatalf("missing view marker: %q", out)
-	}
+	
+	t.Run("hidden when not verbose", func(t *testing.T) {
+		var buf strings.Builder
+		planner.RenderPlanMarkdown(&buf, plan, w, false)
+		out := buf.String()
+		if strings.Contains(out, "## View Structure") {
+			t.Fatalf("View Structure should be hidden: %q", out)
+		}
+	})
+
+	t.Run("visible when verbose", func(t *testing.T) {
+		var buf strings.Builder
+		planner.RenderPlanMarkdown(&buf, plan, w, true)
+		out := buf.String()
+		if !strings.Contains(out, "## View Structure") {
+			t.Fatalf("View Structure should be visible: %q", out)
+		}
+		if !strings.Contains(out, "platform") || !strings.Contains(out, "api") || !strings.Contains(out, "db") {
+			t.Fatalf("missing element tree entries: %q", out)
+		}
+		if !strings.Contains(out, "[view]") {
+			t.Fatalf("missing view marker: %q", out)
+		}
+	})
 }
 
 func TestRenderPlanMarkdown_VerboseSections(t *testing.T) {
@@ -109,9 +127,6 @@ func TestRenderPlanMarkdown_VerboseHint(t *testing.T) {
 	out := buf.String()
 	if strings.Contains(out, "## Elements") {
 		t.Fatalf("verbose elements section should be hidden: %q", out)
-	}
-	if !strings.Contains(out, "Use '-v' or '--verbose' for detailed element placement and connector reporting.") {
-		t.Fatalf("missing verbose hint: %q", out)
 	}
 }
 

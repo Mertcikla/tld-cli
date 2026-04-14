@@ -106,7 +106,7 @@ func newPlanCmd(wdir *string) *cobra.Command {
 					level = ws.Config.Validation.Level
 				}
 				levelNames := map[int]string{1: "Minimal", 2: "Standard", 3: "Strict"}
-				fmt.Fprintf(out, "\n  Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
+				fmt.Fprintf(out, "\n## Architectural Warnings (Level %d: %s)\n\n", level, levelNames[level])
 				for _, wg := range warnings {
 					if verbose {
 						fmt.Fprintf(out, "[%s] %s\n%s\n", wg.RuleCode, wg.RuleName, wg.Mediation)

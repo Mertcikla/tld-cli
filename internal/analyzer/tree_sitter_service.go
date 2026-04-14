@@ -103,7 +103,14 @@ func (s *TreeSitterService) extractFile(ctx context.Context, path string) (*Resu
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	return parser.ParseFile(ctx, path, source)
+	result, err := parser.ParseFile(ctx, path, source)
+	if err != nil {
+		return nil, err
+	}
+	for i := range result.Symbols {
+		result.Symbols[i].Technology = string(language)
+	}
+	return result, nil
 }
 
 func resultFromLegacy(result *symbol.Result) *Result {
@@ -115,13 +122,18 @@ func resultFromLegacy(result *symbol.Result) *Result {
 		Refs:    make([]Ref, 0, len(result.Refs)),
 	}
 	for _, sym := range result.Symbols {
+		tech := ""
+		if lang, ok := DetectLanguage(sym.FilePath); ok {
+			tech = string(lang)
+		}
 		converted.Symbols = append(converted.Symbols, Symbol{
-			Name:     sym.Name,
-			Kind:     sym.Kind,
-			FilePath: sym.FilePath,
-			Line:     sym.Line,
-			EndLine:  sym.EndLine,
-			Parent:   sym.Parent,
+			Name:       sym.Name,
+			Kind:       sym.Kind,
+			FilePath:   sym.FilePath,
+			Line:       sym.Line,
+			EndLine:    sym.EndLine,
+			Parent:     sym.Parent,
+			Technology: tech,
 		})
 	}
 	for _, ref := range result.Refs {
