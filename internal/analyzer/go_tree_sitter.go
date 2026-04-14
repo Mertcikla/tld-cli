@@ -64,11 +64,12 @@ func (p *goParser) appendFunction(node *sitter.Node, source []byte, path, kind s
 		return
 	}
 	result.Symbols = append(result.Symbols, Symbol{
-		Name:     nameNode.Utf8Text(source),
-		Kind:     kind,
-		FilePath: path,
-		Line:     int(nameNode.StartPosition().Row) + 1,
-		EndLine:  int(node.EndPosition().Row) + 1,
+		Name:        nameNode.Utf8Text(source),
+		Kind:        kind,
+		FilePath:    path,
+		Line:        int(nameNode.StartPosition().Row) + 1,
+		EndLine:     int(node.EndPosition().Row) + 1,
+		Description: p.findComment(node, source),
 	})
 }
 
@@ -88,11 +89,12 @@ func (p *goParser) appendTypeSpec(node *sitter.Node, source []byte, path string,
 		}
 	}
 	result.Symbols = append(result.Symbols, Symbol{
-		Name:     nameNode.Utf8Text(source),
-		Kind:     kind,
-		FilePath: path,
-		Line:     int(nameNode.StartPosition().Row) + 1,
-		EndLine:  int(node.EndPosition().Row) + 1,
+		Name:        nameNode.Utf8Text(source),
+		Kind:        kind,
+		FilePath:    path,
+		Line:        int(nameNode.StartPosition().Row) + 1,
+		EndLine:     int(node.EndPosition().Row) + 1,
+		Description: p.findComment(node, source),
 	})
 }
 
@@ -145,6 +147,25 @@ func (p *goParser) appendImport(node *sitter.Node, source []byte, filePath strin
 		Line:       int(pathNode.StartPosition().Row) + 1,
 		Column:     int(pathNode.StartPosition().Column) + 1,
 	})
+}
+
+func (p *goParser) findComment(node *sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	prev := node.PrevNamedSibling()
+	if prev == nil || prev.Kind() != "comment" {
+		return ""
+	}
+	// Check if it's immediately above
+	if node.StartPosition().Row-prev.EndPosition().Row > 1 {
+		return ""
+	}
+	text := strings.TrimSpace(prev.Utf8Text(source))
+	text = strings.TrimPrefix(text, "//")
+	text = strings.TrimPrefix(text, "/*")
+	text = strings.TrimSuffix(text, "*/")
+	return strings.TrimSpace(text)
 }
 
 func goCallName(node *sitter.Node, source []byte) string {

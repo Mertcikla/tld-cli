@@ -390,6 +390,22 @@ func (ctx *warningContext) checkLowInsightRatioRule() {
 		if len(elements) == 0 {
 			continue
 		}
+
+		// Information-heavy views (types, structs, interfaces) often have low connectivity.
+		// If more than 80% of elements are structural, we exempt the view.
+		structuralCount := 0
+		for _, ref := range elements {
+			if el := ctx.ws.Elements[ref]; el != nil {
+				kind := strings.ToLower(el.Kind)
+				if kind == "struct" || kind == "interface" || kind == "type" || kind == "file" || kind == "folder" {
+					structuralCount++
+				}
+			}
+		}
+		if structuralCount > len(elements)*8/10 {
+			continue
+		}
+
 		connectorCount := ctx.viewConnectors[viewRef]
 		if connectorCount*2 < len(elements) {
 			ctx.addWarning(warningCodeLowInsightRatio, fmt.Sprintf("View %q (Elements: %d, Connectors: %d)", viewRef, len(elements), connectorCount))
@@ -460,6 +476,10 @@ func (ctx *warningContext) checkAbstractionLeakRule() {
 func (ctx *warningContext) checkMissingTechRule() {
 	for elementRef, element := range ctx.ws.Elements {
 		if element != nil && element.Technology == "" {
+			// Repositories are structural and don't require a specific technology tag.
+			if strings.ToLower(element.Kind) == "repository" {
+				continue
+			}
 			ctx.addWarning(warningCodeMissingTech, fmt.Sprintf("%q", elementRef))
 		}
 	}

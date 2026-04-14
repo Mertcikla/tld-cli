@@ -229,7 +229,7 @@ for cross-file call references.`,
 					Owner:     repoCtx.Name,
 					Repo:      repoURL,
 					Branch:    branch,
-					HasView:   true,
+					HasView:   len(filtered) > 0,
 					ViewLabel: repoName,
 					ParentRef: "root",
 					Identity: analyzeElementIdentity{
@@ -266,13 +266,14 @@ for cross-file call references.`,
 					}
 
 					folderRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
-						Name:      folderName,
-						Kind:      "folder",
-						Owner:     repoCtx.Name,
-						Repo:      repoURL,
-						Branch:    branch,
-						FilePath:  relPath,
-						ParentRef: parentRef,
+						Name:       folderName,
+						Kind:       "folder",
+						Owner:      repoCtx.Name,
+						Repo:       repoURL,
+						Branch:     branch,
+						FilePath:   relPath,
+						Technology: "Folder",
+						ParentRef:  parentRef,
 						Identity: analyzeElementIdentity{
 							Repo:     repoURL,
 							Branch:   branch,
@@ -304,6 +305,13 @@ for cross-file call references.`,
 					if lang, ok := analyzer.DetectLanguage(relPath); ok {
 						fileTech = string(lang)
 					}
+					hasFileSymbols := false
+					for _, sym := range filtered {
+						if filepath.Clean(sym.FilePath) == filepath.Clean(relPath) {
+							hasFileSymbols = true
+							break
+						}
+					}
 					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
 						Name:       fileName,
 						Kind:       "file",
@@ -311,7 +319,7 @@ for cross-file call references.`,
 						Repo:       repoURL,
 						Branch:     branch,
 						FilePath:   relPath,
-						HasView:    true,
+						HasView:    hasFileSymbols,
 						ViewLabel:  fileName,
 						Technology: fileTech,
 						ParentRef:  parentRef,
@@ -359,8 +367,9 @@ for cross-file call references.`,
 						FilePath:   relPath,
 						Symbol:     sym.Name,
 						ParentName: sym.Parent,
-						Technology: sym.Technology,
-						ParentRef:  parentRef,
+						Technology:  sym.Technology,
+						Description: sym.Description,
+						ParentRef:   parentRef,
 						Identity: analyzeElementIdentity{
 							Repo:     repoURL,
 							Branch:   branch,
@@ -623,9 +632,10 @@ type analyzeElementSpec struct {
 	ParentName string
 	HasView    bool
 	ViewLabel  string
-	ParentRef  string
-	Technology string
-	Identity   analyzeElementIdentity
+	ParentRef   string
+	Technology  string
+	Description string
+	Identity    analyzeElementIdentity
 }
 
 func buildAnalyzeElementIndex(ws *workspace.Workspace) map[analyzeElementLookupKey]string {
@@ -741,8 +751,9 @@ func analyzeElementToWorkspaceElement(spec analyzeElementSpec) *workspace.Elemen
 		FilePath:  spec.FilePath,
 		Symbol:    spec.Symbol,
 		HasView:   spec.HasView,
-		ViewLabel: spec.ViewLabel,
+		ViewLabel:  spec.ViewLabel,
 		Technology: spec.Technology,
+		Description: spec.Description,
 		Placements: []workspace.ViewPlacement{{
 			ParentRef: spec.ParentRef,
 		}},
