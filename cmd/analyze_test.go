@@ -69,6 +69,55 @@ func TestAnalyzeCmd_WritesElements(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCmd_CreatesFolderHierarchy(t *testing.T) {
+	dir := t.TempDir()
+	mustInitWorkspace(t, dir)
+	repoDir := filepath.Join(dir, "app")
+	if err := os.MkdirAll(filepath.Join(repoDir, "internal", "service"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, repoDir, filepath.Join("internal", "service", "service.go"), "package service\nfunc Run() {}\n")
+
+	stdout, stderr, err := runCmd(t, dir, "analyze", repoDir)
+	if err != nil {
+		t.Fatalf("analyze: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var folderRefs []string
+	var fileRef string
+	for ref, element := range ws.Elements {
+		if element.Kind == "folder" {
+			folderRefs = append(folderRefs, ref)
+		}
+		if element.Kind == "file" && element.FilePath == filepath.Join("internal", "service", "service.go") {
+			fileRef = ref
+		}
+	}
+	if len(folderRefs) != 2 {
+		t.Fatalf("folder elements = %d, want 2: %+v", len(folderRefs), ws.Elements)
+	}
+	if fileRef == "" {
+		t.Fatalf("expected nested file element, got %+v", ws.Elements)
+	}
+	fileElement := ws.Elements[fileRef]
+	if len(fileElement.Placements) == 0 {
+		t.Fatalf("file element has no placements: %+v", fileElement)
+	}
+	parentRef := fileElement.Placements[0].ParentRef
+	parent := ws.Elements[parentRef]
+	if parent == nil || parent.Kind != "folder" || parent.FilePath != filepath.Join("internal", "service") {
+		t.Fatalf("file parent = %q (%+v), want folder internal/service", parentRef, parent)
+	}
+	grandparent := ws.Elements[parent.Placements[0].ParentRef]
+	if grandparent == nil || grandparent.Kind != "folder" || grandparent.FilePath != "internal" {
+		t.Fatalf("folder parent = %+v, want folder internal", grandparent)
+	}
+}
+
 func TestAnalyzeCmd_ReusesExistingElements(t *testing.T) {
 	dir := t.TempDir()
 	mustInitWorkspace(t, dir)

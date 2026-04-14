@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -76,6 +77,22 @@ for cross-file call references.`,
 			workspaceRoot, _ := filepath.Abs(ws.Dir)
 			workspaceScan := samePath(absPath, workspaceRoot)
 			scanConfiguredRepositories := workspaceScan && ws.WorkspaceConfig != nil && len(ws.WorkspaceConfig.Repositories) > 0
+			countTasks := 0
+			for _, repoCtx := range repoScopes {
+				countTasks++
+				if deep && repoCtx.Active() && !samePath(absPath, workspaceRoot) {
+					countTasks++
+				}
+			}
+			countProgress := newAnalyzeProgressBar(cmd.ErrOrStderr(), countTasks)
+			if countProgress != nil {
+				defer func() {
+					if !countProgress.IsFinished() {
+						_ = countProgress.Clear()
+					}
+				}()
+				countProgress.Describe(fmt.Sprintf("%s Counting scan plan", analyzeSpinnerFrames[0]))
+			}
 			for _, repoCtx := range repoScopes {
 				rules := ws.IgnoreRulesForRepository(repoCtx.Name)
 				scanRoot := absPath
@@ -87,13 +104,24 @@ for cross-file call references.`,
 					return fmt.Errorf("count entries: %w", err)
 				}
 				totalEntries += entries
+				if countProgress != nil {
+					countProgress.Describe(fmt.Sprintf("%s Counting scan plan for %s", analyzeSpinnerFrames[entries%len(analyzeSpinnerFrames)], repoCtx.Name))
+					_ = countProgress.Add(1)
+				}
 				if deep && repoCtx.Active() && !samePath(absPath, workspaceRoot) {
 					deepEntries, err := countAnalyzeEntries(repoCtx.Root, rules)
 					if err != nil {
 						return fmt.Errorf("count deep entries: %w", err)
 					}
 					totalEntries += deepEntries
+					if countProgress != nil {
+						countProgress.Describe(fmt.Sprintf("%s Counting deep scan for %s", analyzeSpinnerFrames[deepEntries%len(analyzeSpinnerFrames)], repoCtx.Name))
+						_ = countProgress.Add(1)
+					}
 				}
+			}
+			if countProgress != nil {
+				_ = countProgress.Finish()
 			}
 
 			progress := newAnalyzeProgressBar(cmd.ErrOrStderr(), totalEntries)
@@ -178,11 +206,15 @@ for cross-file call references.`,
 					continue
 				}
 
-				filePaths := uniqueFilePaths(filtered, repoCtx.Root, repoCtx.Active())
-				plannedElementWrites := 1 + len(filePaths) + len(filtered)
 				if progress != nil && !dryRun {
-					progress.AddMax(plannedElementWrites)
+					_ = progress.Finish()
 				}
+
+				elementRoot := analyzeElementRoot(scanRoot, repoCtx.Root, repoCtx.Active())
+				filePaths := uniqueFilePaths(filtered, elementRoot)
+				folderPaths := uniqueFolderPaths(filePaths)
+				plannedElementWrites := 1 + len(folderPaths) + len(filePaths) + len(filtered)
+				writeProgress := newAnalyzeProgressBar(cmd.ErrOrStderr(), plannedElementWrites)
 				elementWriteAttempts := 0
 
 				usedRefs := make(map[string]struct{}, len(ws.Elements))
@@ -212,19 +244,62 @@ for cross-file call references.`,
 				if err != nil {
 					return fmt.Errorf("ensure repository element: %w", err)
 				}
-				if progress != nil && !dryRun {
+				if writeProgress != nil {
 					elementWriteAttempts++
-					advanceAnalyzeWriteProgress(progress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
+					advanceAnalyzeWriteProgress(writeProgress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
 				}
 
+				folderRefs := make(map[string]string)
 				fileRefs := make(map[string]string)
 				symbolRefs := make(map[analyzeElementLookupKey]string)
 				symbolRefsByName := make(map[string][]string)
 				symbolFiles := make(map[string]string)
 				repoElements := 1
 
+				for _, relPath := range folderPaths {
+					folderName := filepath.Base(relPath)
+					parentRef := repoRef
+					if parentPath := filepath.Dir(relPath); parentPath != "." {
+						if existingParentRef := folderRefs[parentPath]; existingParentRef != "" {
+							parentRef = existingParentRef
+						}
+					}
+
+					folderRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
+						Name:      folderName,
+						Kind:      "folder",
+						Owner:     repoCtx.Name,
+						Repo:      repoURL,
+						Branch:    branch,
+						FilePath:  relPath,
+						ParentRef: parentRef,
+						Identity: analyzeElementIdentity{
+							Repo:     repoURL,
+							Branch:   branch,
+							FilePath: relPath,
+							Kind:     "folder",
+							Name:     folderName,
+						},
+					})
+					if err != nil {
+						return fmt.Errorf("ensure folder element %q: %w", relPath, err)
+					}
+					if writeProgress != nil {
+						elementWriteAttempts++
+						advanceAnalyzeWriteProgress(writeProgress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
+					}
+					folderRefs[relPath] = folderRef
+					repoElements++
+				}
+
 				for _, relPath := range filePaths {
 					fileName := filepath.Base(relPath)
+					parentRef := repoRef
+					if parentPath := filepath.Dir(relPath); parentPath != "." {
+						if folderRef := folderRefs[parentPath]; folderRef != "" {
+							parentRef = folderRef
+						}
+					}
 					fileRef, err := ensureAnalyzeElement(*wdir, dryRun, ws, knownElements, usedRefs, usedNames, analyzeElementSpec{
 						Name:      fileName,
 						Kind:      "file",
@@ -234,7 +309,7 @@ for cross-file call references.`,
 						FilePath:  relPath,
 						HasView:   true,
 						ViewLabel: fileName,
-						ParentRef: repoRef,
+						ParentRef: parentRef,
 						Identity: analyzeElementIdentity{
 							Repo:     repoURL,
 							Branch:   branch,
@@ -247,16 +322,16 @@ for cross-file call references.`,
 					if err != nil {
 						return fmt.Errorf("ensure file element %q: %w", relPath, err)
 					}
-					if progress != nil && !dryRun {
+					if writeProgress != nil {
 						elementWriteAttempts++
-						advanceAnalyzeWriteProgress(progress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
+						advanceAnalyzeWriteProgress(writeProgress, "elements.yaml", elementWriteAttempts, plannedElementWrites)
 					}
 					fileRefs[relPath] = fileRef
 					repoElements++
 				}
 
 				for _, sym := range filtered {
-					relPath := analyzeRelativeFilePath(sym.FilePath, repoCtx.Root, repoCtx.Active())
+					relPath := analyzeRelativeFilePath(sym.FilePath, elementRoot)
 					fileRef := fileRefs[relPath]
 					if fileRef == "" {
 						continue
@@ -309,12 +384,28 @@ for cross-file call references.`,
 				}
 				resolver := newAnalyzeLSPResolver(resolverRoot)
 
+				plannedResolutionSteps := len(scanResult.Refs)
+				if writeProgress != nil && plannedResolutionSteps > 0 {
+					writeProgress.AddMax(plannedResolutionSteps)
+					describeAnalyzeResolutionProgress(writeProgress, repoCtx.DisplayName(), 0, plannedResolutionSteps)
+				}
+				resolvedSteps := 0
 				plannedConnectors := make([]*workspace.Connector, 0, len(scanResult.Refs))
 				for _, ref := range scanResult.Refs {
+					resolvedSteps++
+					if writeProgress != nil && plannedResolutionSteps > 0 {
+						describeAnalyzeResolutionProgress(writeProgress, repoCtx.DisplayName(), resolvedSteps, plannedResolutionSteps)
+					}
 					if rules.ShouldIgnoreSymbol(ref.Name) {
+						if writeProgress != nil && plannedResolutionSteps > 0 {
+							_ = writeProgress.Add(1)
+						}
 						continue
 					}
 					toRef := resolveAnalyzeTargetRef(ctx, resolver, ref, filtered, symbolRefs, symbolRefsByName)
+					if writeProgress != nil && plannedResolutionSteps > 0 {
+						_ = writeProgress.Add(1)
+					}
 					if toRef == "" {
 						continue
 					}
@@ -345,8 +436,8 @@ for cross-file call references.`,
 				plannedConnectors = uniqueAnalyzeConnectors(plannedConnectors)
 
 				repoConnectors := 0
-				if progress != nil && !dryRun && len(plannedConnectors) > 0 {
-					progress.AddMax(len(plannedConnectors))
+				if writeProgress != nil && len(plannedConnectors) > 0 {
+					writeProgress.AddMax(len(plannedConnectors))
 				}
 				for i, connectorSpec := range plannedConnectors {
 					if dryRun {
@@ -357,8 +448,8 @@ for cross-file call references.`,
 					if err := workspace.AppendConnector(*wdir, connectorSpec); err == nil {
 						repoConnectors++
 					}
-					if progress != nil {
-						advanceAnalyzeWriteProgress(progress, "connectors.yaml", i+1, len(plannedConnectors))
+					if writeProgress != nil {
+						advanceAnalyzeWriteProgress(writeProgress, "connectors.yaml", i+1, len(plannedConnectors))
 					}
 				}
 
@@ -415,6 +506,14 @@ func advanceAnalyzeWriteProgress(progress *progressbar.ProgressBar, fileName str
 	spinner := analyzeSpinnerFrames[completed%len(analyzeSpinnerFrames)]
 	progress.Describe(fmt.Sprintf("%s Writing %s (%d/%d)", spinner, fileName, completed, total))
 	_ = progress.Add(1)
+}
+
+func describeAnalyzeResolutionProgress(progress *progressbar.ProgressBar, repoName string, completed, total int) {
+	if progress == nil || total <= 0 {
+		return
+	}
+	spinner := analyzeSpinnerFrames[completed%len(analyzeSpinnerFrames)]
+	progress.Describe(fmt.Sprintf("%s Resolving symbols via LSP in %s (%d/%d)", spinner, repoName, completed, total))
 }
 
 func countAnalyzeEntries(path string, rules *ignore.Rules) (int, error) {
@@ -791,11 +890,11 @@ func uniqueAnalyzeRef(name, filePath string, used map[string]struct{}) string {
 	}
 }
 
-func uniqueFilePaths(symbols []analyzer.Symbol, repoRoot string, activeRepo bool) []string {
+func uniqueFilePaths(symbols []analyzer.Symbol, root string) []string {
 	seen := make(map[string]struct{})
 	paths := make([]string, 0, len(symbols))
 	for _, sym := range symbols {
-		relPath := analyzeRelativeFilePath(sym.FilePath, repoRoot, activeRepo)
+		relPath := analyzeRelativeFilePath(sym.FilePath, root)
 		if _, ok := seen[relPath]; ok {
 			continue
 		}
@@ -805,15 +904,54 @@ func uniqueFilePaths(symbols []analyzer.Symbol, repoRoot string, activeRepo bool
 	return paths
 }
 
-func analyzeRelativeFilePath(path, repoRoot string, activeRepo bool) string {
+func uniqueFolderPaths(filePaths []string) []string {
+	seen := make(map[string]struct{})
+	folders := make([]string, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		for dir := filepath.Dir(filePath); dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
+			dir = filepath.Clean(dir)
+			if _, ok := seen[dir]; ok {
+				if next := filepath.Dir(dir); next == dir {
+					break
+				}
+				continue
+			}
+			seen[dir] = struct{}{}
+			folders = append(folders, dir)
+		}
+	}
+	sort.Slice(folders, func(i, j int) bool {
+		leftDepth := strings.Count(filepath.ToSlash(folders[i]), "/")
+		rightDepth := strings.Count(filepath.ToSlash(folders[j]), "/")
+		if leftDepth != rightDepth {
+			return leftDepth < rightDepth
+		}
+		return folders[i] < folders[j]
+	})
+	return folders
+}
+
+func analyzeElementRoot(scanRoot, repoRoot string, activeRepo bool) string {
+	cleanScanRoot := filepath.Clean(scanRoot)
+	if activeRepo && pathWithin(cleanScanRoot, filepath.Clean(repoRoot)) {
+		return filepath.Clean(repoRoot)
+	}
+	info, err := os.Stat(cleanScanRoot)
+	if err == nil && !info.IsDir() {
+		return filepath.Dir(cleanScanRoot)
+	}
+	return cleanScanRoot
+}
+
+func analyzeRelativeFilePath(path, root string) string {
 	cleanPath := filepath.Clean(path)
-	if !activeRepo || cleanPath == "" || !filepath.IsAbs(cleanPath) {
+	if root == "" || cleanPath == "" || !filepath.IsAbs(cleanPath) {
 		return cleanPath
 	}
-	if relPath, ok := analyzePathWithinRoot(repoRoot, cleanPath); ok {
+	if relPath, ok := analyzePathWithinRoot(root, cleanPath); ok {
 		return relPath
 	}
-	resolvedRoot, rootErr := filepath.EvalSymlinks(repoRoot)
+	resolvedRoot, rootErr := filepath.EvalSymlinks(root)
 	resolvedPath, pathErr := filepath.EvalSymlinks(cleanPath)
 	if rootErr == nil && pathErr == nil {
 		if relPath, ok := analyzePathWithinRoot(resolvedRoot, resolvedPath); ok {
