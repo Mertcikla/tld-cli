@@ -22,9 +22,6 @@ pub struct AddArgs {
     /// Parent element ref to nest this element under
     #[arg(long)]
     pub parent: Option<String>,
-    /// Owner identifier (team or person)
-    #[arg(long)]
-    pub owner: Option<String>,
 }
 
 pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
@@ -51,9 +48,6 @@ pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
     }
     if let Some(url) = args.url {
         element.url = url;
-    }
-    if let Some(owner) = args.owner {
-        element.owner = owner;
     }
 
     if let Some(parent) = args.parent {

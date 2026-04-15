@@ -155,7 +155,6 @@ impl Workspace {
         match field {
             "name" => el.name = value.to_string(),
             "kind" => el.kind = value.to_string(),
-            "owner" => el.owner = value.to_string(),
             "description" => el.description = value.to_string(),
             "technology" => el.technology = value.to_string(),
             "url" => el.url = value.to_string(),

@@ -63,7 +63,6 @@ pub fn from_export_response(
                 has_view: e.has_view,
                 view_label: e.view_label.unwrap_or_default(),
                 placements: Vec::new(),
-                owner: String::new(),
             },
         );
 

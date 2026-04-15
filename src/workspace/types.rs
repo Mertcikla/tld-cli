@@ -82,8 +82,6 @@ pub struct Element {
     pub name: String,
     pub kind: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub owner: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub technology: String,

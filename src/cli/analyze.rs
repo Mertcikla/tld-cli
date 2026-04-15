@@ -54,12 +54,28 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     output::print_info(&format!("Analyzing {}...", scan_path));
 
-    let rules = Rules::new(
-        ws.workspace_config
-            .as_ref()
-            .map(|c| c.exclude.clone())
-            .unwrap_or_default(),
-    );
+    let mut exclude = ws.workspace_config
+        .as_ref()
+        .map(|c| c.exclude.clone())
+        .unwrap_or_default();
+
+    // Default sensible excludes
+    for default_exclude in &[
+        "target/",
+        ".git/",
+        "node_modules/",
+        "build/",
+        ".tld/",
+        ".claude/",
+        "workdir/",
+    ] {
+        let de = default_exclude.to_string();
+        if !exclude.contains(&de) {
+            exclude.push(de);
+        }
+    }
+
+    let rules = Rules::new(exclude);
     let analyzer_service = TreeSitterService::new();
 
     let spinner = output::new_spinner("Scanning files...");
