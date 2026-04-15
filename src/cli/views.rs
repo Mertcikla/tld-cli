@@ -21,7 +21,8 @@ struct ViewRow {
     label: String,
 }
 
-pub async fn exec(args: ViewsArgs, wdir: String) -> Result<(), TldError> {
+#[expect(clippy::needless_pass_by_value)]
+pub fn exec(args: ViewsArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
 
     let mut rows = Vec::new();

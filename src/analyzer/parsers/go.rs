@@ -1,3 +1,4 @@
+#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::map_unwrap_or)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -19,7 +20,7 @@ fn parse_declarations(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let query_src = r#"
+    let query_src = r"
 (function_declaration
   name: (identifier) @fn_name) @fn
 
@@ -45,12 +46,9 @@ fn parse_declarations(
 
 (type_alias
   name: (type_identifier) @alias_name) @alias_decl
-"#;
+";
 
-    let query = match Query::new(language, query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, query_src) else { return };
 
     let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
     let method_idx = query
@@ -183,15 +181,12 @@ fn parse_refs(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let query_src = r#"
+    let query_src = r"
 (import_spec path: (interpreted_string_literal) @import_path)
 (call_expression function: _ @callee)
-"#;
+";
 
-    let query = match Query::new(language, query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, query_src) else { return };
 
     let import_idx = query
         .capture_index_for_name("import_path")

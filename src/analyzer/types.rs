@@ -18,6 +18,7 @@ pub struct Symbol {
     pub description: String,
 }
 
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn is_zero(v: &i32) -> bool {
     *v == 0
 }

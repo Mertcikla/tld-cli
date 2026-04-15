@@ -1,5 +1,5 @@
 use crate::analyzer::TreeSitterService;
-use crate::workspace::types::*;
+use crate::workspace::types::Workspace;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ impl Workspace {
         let mut names = std::collections::HashMap::new();
 
         for (ref_name, element) in &self.elements {
-            let loc = format!("elements.yaml[{}]", ref_name);
+            let loc = format!("elements.yaml[{ref_name}]");
 
             if element.name.is_empty() {
                 errs.push(ValidationError {
@@ -39,8 +39,8 @@ impl Workspace {
                     errs.push(ValidationError {
                         location: loc.clone(),
                         message: format!(
-                            "duplicate element name \"{}\" (also used by \"{}\")",
-                            element.name, existing_ref
+                            "duplicate element name \"{}\" (also used by \"{existing_ref}\")",
+                            element.name
                         ),
                     });
                 }
@@ -55,7 +55,7 @@ impl Workspace {
             }
 
             for (index, placement) in element.placements.iter().enumerate() {
-                let ploc = format!("{}[placements][{}]", loc, index);
+                let ploc = format!("{loc}[placements][{index}]");
                 if placement.parent_ref.is_empty() {
                     errs.push(ValidationError {
                         location: ploc,
@@ -66,14 +66,14 @@ impl Workspace {
                 {
                     errs.push(ValidationError {
                         location: ploc,
-                        message: format!("parent ref \"{}\" not found", placement.parent_ref),
+                        message: format!("parent ref \"{parent_ref}\" not found", parent_ref = placement.parent_ref),
                     });
                 }
             }
         }
 
         for (ref_name, connector) in &self.connectors {
-            let loc = format!("connectors.yaml[{}]", ref_name);
+            let loc = format!("connectors.yaml[{ref_name}]");
 
             if connector.view.is_empty() {
                 errs.push(ValidationError {
@@ -83,7 +83,7 @@ impl Workspace {
             } else if connector.view != "root" && !self.elements.contains_key(&connector.view) {
                 errs.push(ValidationError {
                     location: loc.clone(),
-                    message: format!("view ref \"{}\" not found", connector.view),
+                    message: format!("view ref \"{view}\" not found", view = connector.view),
                 });
             }
 
@@ -95,7 +95,7 @@ impl Workspace {
             } else if !self.elements.contains_key(&connector.source) {
                 errs.push(ValidationError {
                     location: loc.clone(),
-                    message: format!("source ref \"{}\" not found", connector.source),
+                    message: format!("source ref \"{source}\" not found", source = connector.source),
                 });
             }
 
@@ -107,7 +107,7 @@ impl Workspace {
             } else if !self.elements.contains_key(&connector.target) {
                 errs.push(ValidationError {
                     location: loc.clone(),
-                    message: format!("target ref \"{}\" not found", connector.target),
+                    message: format!("target ref \"{target}\" not found", target = connector.target),
                 });
             }
         }
@@ -126,7 +126,7 @@ impl Workspace {
         let markers = ["<<< LOCAL", ">>> SERVER"];
 
         for (ref_name, element) in &self.elements {
-            let loc = format!("elements.yaml[{}]", ref_name);
+            let loc = format!("elements.yaml[{ref_name}]");
             for marker in markers {
                 if element.name.contains(marker)
                     || element.description.contains(marker)
@@ -142,7 +142,7 @@ impl Workspace {
         }
 
         for (ref_name, connector) in &self.connectors {
-            let loc = format!("connectors.yaml[{}]", ref_name);
+            let loc = format!("connectors.yaml[{ref_name}]");
             for marker in markers {
                 if connector.label.contains(marker)
                     || connector.description.contains(marker)
@@ -162,7 +162,7 @@ impl Workspace {
 
     fn validate_symbols(&self) -> Vec<ValidationError> {
         let mut errs = Vec::new();
-        let service = TreeSitterService::new();
+        // let service = TreeSitterService::new(); (removed)
 
         for (ref_name, element) in &self.elements {
             if element.file_path.is_empty() || element.symbol.is_empty() {
@@ -174,27 +174,28 @@ impl Workspace {
                 continue;
             }
 
-            match service.extract_file(abs_path.to_str().unwrap_or("")) {
+            match TreeSitterService::extract_file(abs_path.to_str().unwrap_or("")) {
                 Ok(result) => {
                     let found = result.symbols.iter().any(|s| s.name == element.symbol);
                     if !found {
                         errs.push(ValidationError {
-                            location: format!("elements.yaml[{}]", ref_name),
+                            location: format!("elements.yaml[{ref_name}]"),
                             message: format!(
-                                "symbol \"{}\" not found in {}",
+                                "symbol \"{0}\" not found in {1}",
                                 element.symbol, element.file_path
                             ),
                         });
                     }
                 }
                 Err(e) => {
+                    let err_msg = e.to_string();
                     // Ignore unsupported languages or other parsing errors for now to match Go behavior
-                    if !e.to_string().contains("Unsupported language")
-                        && !e.to_string().contains("Parser logic not yet implemented")
+                    if !err_msg.contains("Unsupported language")
+                        && !err_msg.contains("Parser logic not yet implemented")
                     {
                         errs.push(ValidationError {
-                            location: format!("elements.yaml[{}]", ref_name),
-                            message: format!("symbol verification failed: {}", e),
+                            location: format!("elements.yaml[{ref_name}]"),
+                            message: format!("symbol verification failed: {err_msg}"),
                         });
                     }
                 }
@@ -206,9 +207,8 @@ impl Workspace {
 
     pub fn check_outdated(&self) -> Vec<String> {
         let mut outdated = Vec::new();
-        let meta = match &self.meta {
-            Some(m) => m,
-            None => return Vec::new(),
+        let Some(meta) = &self.meta else {
+            return Vec::new();
         };
 
         for (ref_name, element) in &self.elements {
@@ -216,9 +216,8 @@ impl Workspace {
                 continue;
             }
 
-            let m = match meta.elements.get(ref_name) {
-                Some(m) => m,
-                None => continue,
+            let Some(m) = meta.elements.get(ref_name) else {
+                continue;
             };
 
             if let Ok(commit_time) =

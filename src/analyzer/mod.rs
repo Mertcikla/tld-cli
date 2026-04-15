@@ -30,24 +30,23 @@ impl TreeSitterService {
         Self {}
     }
 
-    pub fn extract_file(&self, path: &str) -> Result<AnalysisResult, TldError> {
-        let lang_name = match detect_language_from_path(path) {
-            Some(l) => l,
-            None => {
-                let ext = Path::new(path)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("<none>");
-                match ext {
-                    "py" => "python",
-                    "java" => "java",
-                    "cpp" | "cc" | "hpp" | "h" | "cxx" => "cpp",
-                    "ts" | "tsx" => "typescript",
-                    "js" | "jsx" => "javascript",
-                    "go" => "go",
-                    "rs" => "rust",
-                    _ => return Err(TldError::UnsupportedLanguage(ext.to_string())),
-                }
+    pub fn extract_file(path: &str) -> Result<AnalysisResult, TldError> {
+        let lang_name = if let Some(l) = detect_language_from_path(path) {
+            l
+        } else {
+            let ext = Path::new(path)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("<none>");
+            match ext {
+                "py" => "python",
+                "java" => "java",
+                "cpp" | "cc" | "hpp" | "h" | "cxx" => "cpp",
+                "ts" | "tsx" => "typescript",
+                "js" | "jsx" => "javascript",
+                "go" => "go",
+                "rs" => "rust",
+                _ => return Err(TldError::UnsupportedLanguage(ext.to_string())),
             }
         };
 
@@ -78,7 +77,7 @@ impl TreeSitterService {
 
         let tree = parser
             .parse(&source, None)
-            .ok_or_else(|| TldError::Generic(format!("Failed to parse {}", path)))?;
+            .ok_or_else(|| TldError::Generic(format!("Failed to parse {path}")))?;
 
         let mut result = AnalysisResult::default();
         let technology = lang_name.to_string();
@@ -145,7 +144,7 @@ impl TreeSitterService {
         }
 
         for sym in &mut result.symbols {
-            sym.technology = technology.clone();
+            sym.technology.clone_from(&technology);
         }
 
         Ok(result)
@@ -174,7 +173,7 @@ impl Service for TreeSitterService {
     ) -> Result<AnalysisResult, TldError> {
         let metadata = fs::metadata(path)?;
         if metadata.is_dir() {
-            self.extract_dir(path, rules, on_entry)
+            Self::extract_dir(path, rules, on_entry)
         } else {
             if rules.should_ignore_path(path) {
                 return Ok(AnalysisResult::default());
@@ -182,7 +181,7 @@ impl Service for TreeSitterService {
             if let Some(cb) = on_entry {
                 cb(path, false);
             }
-            let mut result = self.extract_file(path)?;
+            let mut result = Self::extract_file(path)?;
             result.files_scanned.push(path.to_string());
             Ok(result)
         }
@@ -191,18 +190,18 @@ impl Service for TreeSitterService {
 
 impl TreeSitterService {
     fn extract_dir(
-        &self,
         root: &str,
         rules: &Rules,
         on_entry: OnEntry<'_>,
     ) -> Result<AnalysisResult, TldError> {
         let mut merged = AnalysisResult::default();
-        self.walk_dir(Path::new(root), root, rules, on_entry, &mut merged)?;
+        Self::walk_dir(Path::new(root), root, rules, on_entry, &mut merged)?;
         Ok(merged)
     }
 
+
+    
     fn walk_dir(
-        &self,
         dir: &Path,
         root: &str,
         rules: &Rules,
@@ -225,7 +224,7 @@ impl TreeSitterService {
                 if let Some(cb) = on_entry {
                     cb(path.to_str().unwrap_or(""), true);
                 }
-                self.walk_dir(&path, root, rules, on_entry, merged)?;
+                Self::walk_dir(&path, root, rules, on_entry, merged)?;
             } else {
                 if rules.should_ignore_path(rel_path) {
                     continue;
@@ -236,7 +235,7 @@ impl TreeSitterService {
                 let abs_path = path.to_str().unwrap_or("").to_string();
                 // Always record the file as scanned, regardless of parse outcome.
                 merged.files_scanned.push(abs_path.clone());
-                match self.extract_file(&abs_path) {
+                match Self::extract_file(&abs_path) {
                     Ok(result) => merged.merge(result),
                     Err(TldError::UnsupportedLanguage(_)) => {
                         // Silently skip files in languages tld doesn't support.

@@ -10,7 +10,8 @@ pub struct ValidateArgs {
     pub skip_symbols: bool,
 }
 
-pub async fn exec(args: ValidateArgs, wdir: String) -> Result<(), TldError> {
+#[expect(clippy::needless_pass_by_value, clippy::print_stdout)]
+pub fn exec(args: ValidateArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
 
     let opts = ValidationOptions {
@@ -24,7 +25,7 @@ pub async fn exec(args: ValidateArgs, wdir: String) -> Result<(), TldError> {
     } else {
         output::print_err(&format!("Workspace has {} validation errors:", errs.len()));
         for err in errs {
-            println!("  - {}", err);
+            println!("  - {err}");
         }
         return Err(TldError::Generic("Validation failed".to_string()));
     }

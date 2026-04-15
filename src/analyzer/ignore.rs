@@ -10,7 +10,7 @@ impl Rules {
     }
 
     pub fn should_ignore_path(&self, path: &str) -> bool {
-        let normalized_path = self.normalize_path(path);
+        let normalized_path = Self::normalize_path(path);
         let path_segments: Vec<&str> = normalized_path.split('/').collect();
         let base_name = path_segments.last().copied().unwrap_or("");
 
@@ -18,14 +18,14 @@ impl Rules {
             if pattern.is_empty() {
                 continue;
             }
-            let normalized_pattern = self.normalize_pattern(pattern);
+            let normalized_pattern = Self::normalize_pattern(pattern);
             let trimmed_pattern = normalized_pattern
                 .strip_suffix('/')
                 .unwrap_or(&normalized_pattern);
             let is_dir_pattern = normalized_pattern.ends_with('/');
 
             // 1. Direct match or glob match on the full normalized path
-            if self.match_pattern(&normalized_pattern, &normalized_path) {
+            if Self::match_pattern(&normalized_pattern, &normalized_path) {
                 return true;
             }
 
@@ -35,27 +35,27 @@ impl Rules {
                     if *segment == trimmed_pattern {
                         return true;
                     }
-                } else if self.match_pattern(&normalized_pattern, segment) {
+                } else if Self::match_pattern(&normalized_pattern, segment) {
                     return true;
                 }
             }
 
             // 3. Fallback for the base name itself
-            if self.match_pattern(&normalized_pattern, base_name) {
+            if Self::match_pattern(&normalized_pattern, base_name) {
                 return true;
             }
         }
         false
     }
 
-    fn match_pattern(&self, pattern: &str, value: &str) -> bool {
+    fn match_pattern(pattern: &str, value: &str) -> bool {
         match Pattern::new(pattern) {
             Ok(p) => p.matches(value),
             Err(_) => pattern == value,
         }
     }
 
-    fn normalize_path(&self, path: &str) -> String {
+    fn normalize_path(path: &str) -> String {
         path.trim()
             .replace('\\', "/")
             .trim_start_matches("./")
@@ -63,7 +63,7 @@ impl Rules {
             .to_string()
     }
 
-    fn normalize_pattern(&self, pattern: &str) -> String {
+    fn normalize_pattern(pattern: &str) -> String {
         pattern
             .trim()
             .replace('\\', "/")

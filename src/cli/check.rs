@@ -10,7 +10,8 @@ pub struct CheckArgs {
     pub strict: bool,
 }
 
-pub async fn exec(args: CheckArgs, wdir: String) -> Result<(), TldError> {
+#[expect(clippy::needless_pass_by_value, clippy::print_stdout)]
+pub fn exec(args: CheckArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
     let mut all_passed = true;
 
@@ -23,7 +24,7 @@ pub async fn exec(args: CheckArgs, wdir: String) -> Result<(), TldError> {
     } else {
         output::print_err("FAIL  Validation");
         for err in errs {
-            println!("      - {}", err);
+            println!("      - {err}");
         }
         all_passed = false;
     }
@@ -41,7 +42,7 @@ pub async fn exec(args: CheckArgs, wdir: String) -> Result<(), TldError> {
             output::print_warn("WARN  Outdated Diagrams");
         }
         for msg in outdated {
-            println!("      - {}", msg);
+            println!("      - {msg}");
         }
     }
 

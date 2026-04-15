@@ -1,5 +1,5 @@
 use crate::error::TldError;
-use crate::workspace::types::*;
+use crate::workspace::types::{Connector, Element, Workspace};
 use std::collections::HashMap;
 
 impl Workspace {
@@ -8,18 +8,17 @@ impl Workspace {
         &mut self,
         ref_name: String,
         mut element: Element,
-    ) -> Result<(), TldError> {
+    ) {
         // Enforce some defaults if missing
         if element.kind.is_empty() {
             element.kind = "service".to_string();
         }
 
         self.elements.insert(ref_name, element);
-        Ok(())
     }
 
     /// Removes an element and Cascades deletion to connectors and placements.
-    pub fn remove_element(&mut self, ref_name: &str) -> Result<(), TldError> {
+    pub fn remove_element(&mut self, ref_name: &str) {
         if self.elements.remove(ref_name).is_some() {
             // 1. Remove connectors where this element is source or target
             self.connectors
@@ -36,13 +35,12 @@ impl Workspace {
                 meta.views.remove(ref_name);
             }
         }
-        Ok(())
     }
 
     /// Renames an element ref and cascades to all references.
-    pub fn rename_element(&mut self, old_ref: &str, new_ref: &str) -> Result<(), TldError> {
+    pub fn rename_element(&mut self, old_ref: &str, new_ref: &str) {
         if old_ref == new_ref {
-            return Ok(());
+            return;
         }
 
         if let Some(element) = self.elements.remove(old_ref) {
@@ -92,8 +90,6 @@ impl Workspace {
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Upserts a connector, handling Rule 3 & 4 of the PRD.
@@ -112,8 +108,7 @@ impl Workspace {
             let check = |field: &str, new: &str, old: &str| -> Result<(), TldError> {
                 if !new.is_empty() && !old.is_empty() && new != old {
                     return Err(TldError::Generic(format!(
-                        "Conflict: connector '{}' property '{}' is already set to '{}'. Use 'tld update' to change it.",
-                        ref_name, field, old
+                        "Conflict: connector '{ref_name}' property '{field}' is already set to '{old}'. Use 'tld update' to change it."
                     )));
                 }
                 Ok(())
@@ -151,13 +146,12 @@ impl Workspace {
                 modified = true;
             }
 
-            if !modified {
-                crate::output::print_info(&format!(
-                    "Connector '{}' already exists with identical or matching properties.",
-                    ref_name
-                ));
-            } else {
+            if modified {
                 self.connectors.insert(ref_name.clone(), new_conn);
+            } else {
+                crate::output::print_info(&format!(
+                    "Connector '{ref_name}' already exists with identical or matching properties."
+                ));
             }
         } else {
             self.connectors.insert(ref_name.clone(), connector);
@@ -169,10 +163,10 @@ impl Workspace {
     /// Infers the shared parent view for two elements.
     fn infer_connector_view(&self, source_ref: &str, target_ref: &str) -> Result<String, TldError> {
         let source = self.elements.get(source_ref).ok_or_else(|| {
-            TldError::Generic(format!("Source element '{}' not found", source_ref))
+            TldError::Generic(format!("Source element '{source_ref}' not found"))
         })?;
         let target = self.elements.get(target_ref).ok_or_else(|| {
-            TldError::Generic(format!("Target element '{}' not found", target_ref))
+            TldError::Generic(format!("Target element '{target_ref}' not found"))
         })?;
 
         let source_parents: Vec<_> = source
@@ -203,13 +197,14 @@ impl Workspace {
         value: &str,
     ) -> Result<(), TldError> {
         if field == "ref" {
-            return self.rename_element(ref_name, value);
+            self.rename_element(ref_name, value);
+            return Ok(());
         }
 
         let el = self
             .elements
             .get_mut(ref_name)
-            .ok_or_else(|| TldError::Generic(format!("Element '{}' not found", ref_name)))?;
+            .ok_or_else(|| TldError::Generic(format!("Element '{ref_name}' not found")))?;
 
         match field {
             "name" => el.name = value.to_string(),
@@ -227,8 +222,7 @@ impl Workspace {
             "view_label" => el.view_label = value.to_string(),
             _ => {
                 return Err(TldError::Generic(format!(
-                    "Unknown element field '{}'",
-                    field
+                    "Unknown element field '{field}'"
                 )));
             }
         }
@@ -246,7 +240,7 @@ impl Workspace {
         let mut conn = self
             .connectors
             .remove(ref_name)
-            .ok_or_else(|| TldError::Generic(format!("Connector '{}' not found", ref_name)))?;
+            .ok_or_else(|| TldError::Generic(format!("Connector '{ref_name}' not found")))?;
 
         match field {
             "view" => conn.view = value.to_string(),
@@ -261,8 +255,7 @@ impl Workspace {
             _ => {
                 self.connectors.insert(ref_name.to_string(), conn);
                 return Err(TldError::Generic(format!(
-                    "Unknown connector field '{}'",
-                    field
+                    "Unknown connector field '{field}'"
                 )));
             }
         }
@@ -286,7 +279,7 @@ impl Workspace {
         view: &str,
         source: &str,
         target: &str,
-    ) -> Result<usize, TldError> {
+    ) -> usize {
         let before = self.connectors.len();
         let mut removed_refs = Vec::new();
 
@@ -309,6 +302,6 @@ impl Workspace {
             }
         }
 
-        Ok(count)
+        count
     }
 }

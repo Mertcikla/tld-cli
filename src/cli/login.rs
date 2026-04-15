@@ -17,6 +17,7 @@ pub struct LoginArgs {
     pub no_browser: bool,
 }
 
+#[expect(clippy::print_stdout, clippy::disallowed_methods)]
 pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
     let server_url = args
         .server
@@ -31,13 +32,10 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
 
     let auth = device_client.authorize(req).await?.into_inner();
 
+    println!("\nOpen the following URL to log in:\n\n  {uri}\n\n", uri = auth.verification_uri_complete);
     println!(
-        "\nOpen the following URL to log in:\n\n  {}\n\n",
-        auth.verification_uri_complete
-    );
-    println!(
-        "Or navigate to {} and enter the code:\n\n  {}\n\n",
-        auth.verification_uri, auth.user_code
+        "Or navigate to {uri} and enter the code:\n\n  {code}\n\n",
+        uri = auth.verification_uri, code = auth.user_code
     );
     println!("Waiting for authorisation… (press Ctrl+C to cancel)");
 
@@ -46,7 +44,7 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
     }
 
     let interval = if auth.interval > 0 {
-        Duration::from_secs(auth.interval as u64)
+        Duration::from_secs(auth.interval.cast_unsigned().into())
     } else {
         Duration::from_secs(5)
     };

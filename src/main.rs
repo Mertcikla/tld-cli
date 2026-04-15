@@ -11,13 +11,14 @@ use crate::error::TldError;
 use clap::Parser;
 
 #[tokio::main]
+#[expect(clippy::print_stdout)]
 async fn main() -> Result<(), TldError> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Init(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::init::exec(args.clone(), wdir).await?;
+            cli::init::exec(args.clone(), wdir)?;
         }
         Commands::Login(ref args) => {
             let wdir = cli.workspace_dir();
@@ -33,23 +34,23 @@ async fn main() -> Result<(), TldError> {
         }
         Commands::Add(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::add::exec(args.clone(), wdir).await?;
+            cli::add::exec(args.clone(), wdir)?;
         }
         Commands::Connect(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::connect::exec(args.clone(), wdir).await?;
+            cli::connect::exec(args.clone(), wdir)?;
         }
         Commands::Remove(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::remove::exec(args.clone(), wdir).await?;
+            cli::remove::exec(args.clone(), wdir)?;
         }
         Commands::Update(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::update::exec(args.clone(), wdir).await?;
+            cli::update::exec(args.clone(), wdir)?;
         }
         Commands::Validate(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::validate::exec(args.clone(), wdir).await?;
+            cli::validate::exec(args.clone(), wdir)?;
         }
         Commands::Export(ref args) => {
             let wdir = cli.workspace_dir();
@@ -61,11 +62,11 @@ async fn main() -> Result<(), TldError> {
         }
         Commands::Status(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::status::exec(args.clone(), wdir).await?;
+            cli::status::exec(args.clone(), wdir)?;
         }
         Commands::Views(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::views::exec(args.clone(), wdir).await?;
+            cli::views::exec(args.clone(), wdir)?;
         }
         Commands::Diff(ref args) => {
             let wdir = cli.workspace_dir();
@@ -73,14 +74,14 @@ async fn main() -> Result<(), TldError> {
         }
         Commands::Check(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::check::exec(args.clone(), wdir).await?;
+            cli::check::exec(args.clone(), wdir)?;
         }
         Commands::Analyze(ref args) => {
             let wdir = cli.workspace_dir();
             cli::analyze::exec(args.clone(), wdir).await?;
         }
-        _ => {
-            output::print_warn(&format!("Command {:?} is not yet implemented", cli.command));
+        Commands::Version => {
+            println!("tld {}", env!("CARGO_PKG_VERSION"));
         }
     }
 

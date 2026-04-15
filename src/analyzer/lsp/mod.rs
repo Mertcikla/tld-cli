@@ -95,15 +95,9 @@ pub async fn resolve_calls_with_lsp(
     let root_uri = format!("file://{}", root_dir.trim_end_matches('/'));
 
     for lang in unique_langs {
-        let cmd = match resolve_command(lang) {
-            Some(c) => c,
-            None => continue,
-        };
+        let Some(cmd) = resolve_command(lang) else { continue };
 
-        let session = match Session::start(&cmd.path, &cmd.args, root_dir).await {
-            Ok(s) => s,
-            Err(_) => continue, // LSP not available
-        };
+        let Ok(session) = Session::start(&cmd.path, &cmd.args, root_dir) else { continue };
 
         if session.initialize(root_uri.clone()).await.is_err() {
             continue;

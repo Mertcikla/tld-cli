@@ -37,7 +37,7 @@ impl LockFile {
     }
 
     pub fn from_workspace(ws: &crate::workspace::types::Workspace) -> Self {
-        let meta = ws.meta.as_ref().cloned().unwrap_or_default();
+        let meta = ws.meta.clone().unwrap_or_default();
         Self {
             version: "v1".to_string(),
             current_elements: meta.elements,

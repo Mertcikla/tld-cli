@@ -1,5 +1,5 @@
 use crate::analyzer::types::AnalysisResult;
-use crate::workspace::{slugify, types::*};
+use crate::workspace::{slugify, types::{Connector, Element, ViewPlacement}};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
@@ -31,8 +31,7 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
     //       rel       = go/internal/service/order_service.go
     let scan_parent = Path::new(&ctx.scan_root)
         .parent()
-        .map(|p| p.to_str().unwrap_or(""))
-        .unwrap_or("")
+        .map_or("", |p| p.to_str().unwrap_or(""))
         .to_string();
 
     // Deduplicated relative file paths (only source-code files we might analyze).
@@ -82,7 +81,7 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
                 // Collision: find a unique suffix.
                 let mut n = 2;
                 loop {
-                    let candidate = format!("{}-{}", base_slug, n);
+                    let candidate = format!("{base_slug}-{n}");
                     if !used_folder_slugs.contains_key(&candidate) {
                         break candidate;
                     }
@@ -142,7 +141,7 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
                 technology: "Folder".to_string(),
                 owner: ctx.owner.clone(),
                 branch: ctx.branch.clone(),
-                file_path: folder_path.to_string(),
+                file_path: (*folder_path).clone(),
                 placements: vec![ViewPlacement {
                     parent_ref: parent_slug,
                     ..Default::default()
@@ -177,7 +176,7 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
             } else {
                 let mut n = 2;
                 loop {
-                    let candidate = format!("{}-{}", base_slug, n);
+                    let candidate = format!("{base_slug}-{n}");
                     if !used_file_slugs.contains_key(&candidate) {
                         break candidate;
                     }
@@ -250,9 +249,8 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
             let file_base = Path::new(&rel)
                 .file_stem()
                 .and_then(|s| s.to_str())
-                .map(slugify)
-                .unwrap_or_else(|| file_slug.clone());
-            let compound_slug = format!("{}-{}", file_base, base_sym_slug);
+                .map_or_else(|| file_slug.clone(), slugify);
+            let compound_slug = format!("{file_base}-{base_sym_slug}");
             // When using compound slug, use ClassName.methodName as the display name
             // if we have a parent class name available (but not for destructors).
             let cname = if !sym.parent.is_empty() && !sym.name.starts_with('~') {
@@ -264,7 +262,7 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
             let final_slug = if elements.contains_key(&compound_slug) {
                 let mut n = 2;
                 loop {
-                    let candidate = format!("{}-{}", compound_slug, n);
+                    let candidate = format!("{compound_slug}-{n}");
                     if !elements.contains_key(&candidate) {
                         break candidate;
                     }
@@ -316,10 +314,12 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
         let target_slug = resolve_import_target(
             &r.target_path,
             &r.file_path,
-            &scan_parent,
-            &file_slug_by_rel,
-            &folder_slug_by_path,
-            &elements,
+            &ResolveContext {
+                scan_parent: &scan_parent,
+                file_slug_by_rel: &file_slug_by_rel,
+                folder_slug_by_path: &folder_slug_by_path,
+                elements: &elements,
+            },
         );
 
         let target_slug = match target_slug {
@@ -423,8 +423,7 @@ fn rel_from_base(abs: &str, base: &str) -> String {
     let base_path = Path::new(base);
     Path::new(abs)
         .strip_prefix(base_path)
-        .map(|p| p.to_str().unwrap_or(abs).to_string())
-        .unwrap_or_else(|_| abs.to_string())
+        .map_or_else(|_| abs.to_string(), |p| p.to_str().unwrap_or(abs).to_string())
 }
 
 fn should_skip_file(rel: &str) -> bool {
@@ -499,8 +498,7 @@ fn detect_file_technology(rel_path: &str) -> String {
         "ts" | "tsx" => "typescript",
         "js" | "jsx" => "javascript",
         "java" => "java",
-        "cpp" | "cc" | "cxx" => "cpp",
-        "h" | "hpp" => "cpp",
+        "cpp" | "cc" | "cxx" | "h" | "hpp" => "cpp",
         _ => "File",
     }
     .to_string()
@@ -553,14 +551,18 @@ fn find_containing_symbol<'a>(
         })
 }
 
+struct ResolveContext<'a> {
+    scan_parent: &'a str,
+    file_slug_by_rel: &'a HashMap<String, String>,
+    folder_slug_by_path: &'a HashMap<String, String>,
+    elements: &'a HashMap<String, Element>,
+}
+
 /// Attempt to resolve an import target_path to a known file or folder slug.
 fn resolve_import_target(
     target_path: &str,
     source_file_abs: &str,
-    scan_parent: &str,
-    file_slug_by_rel: &HashMap<String, String>,
-    folder_slug_by_path: &HashMap<String, String>,
-    elements: &HashMap<String, Element>,
+    ctx: &ResolveContext,
 ) -> Option<String> {
     if target_path.is_empty() {
         return None;
@@ -576,11 +578,11 @@ fn resolve_import_target(
             target_path.strip_prefix("./").unwrap_or(target_path)
         );
         let normalized = normalize_path(&joined);
-        let rel = rel_from_base(&normalized, scan_parent);
+        let rel = rel_from_base(&normalized, ctx.scan_parent);
 
         // Try with common extensions if no extension given
         for candidate in candidate_paths(&rel) {
-            if let Some(slug) = file_slug_by_rel.get(&candidate) {
+            if let Some(slug) = ctx.file_slug_by_rel.get(&candidate) {
                 return Some(slug.clone());
             }
         }
@@ -594,28 +596,28 @@ fn resolve_import_target(
 
     // Try as file slug (e.g., Python "models" -> "models-py" file)
     let file_slug = slugify(last_component);
-    if elements.contains_key(&file_slug) {
-        let el = &elements[&file_slug];
+    if ctx.elements.contains_key(&file_slug) {
+        let el = &ctx.elements[&file_slug];
         if el.kind == "file" {
             return Some(file_slug);
         }
     }
 
     // Try folder slug
-    if folder_slug_by_path.values().any(|s| *s == file_slug) {
+    if ctx.folder_slug_by_path.values().any(|s| *s == file_slug) {
         return Some(file_slug);
     }
 
     // Try matching target_path against any folder rel path by suffix
     let target_norm = target_path.replace('.', "/");
-    for (folder_path, folder_slug) in folder_slug_by_path {
+    for (folder_path, folder_slug) in ctx.folder_slug_by_path {
         if folder_path.ends_with(&target_norm) || folder_path.ends_with(last_component) {
             return Some(folder_slug.clone());
         }
     }
 
     // Try matching against file rel paths by stem
-    for (file_rel, file_slug) in file_slug_by_rel {
+    for (file_rel, file_slug) in ctx.file_slug_by_rel {
         let stem = Path::new(file_rel)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -631,7 +633,7 @@ fn resolve_import_target(
 fn candidate_paths(rel_without_ext: &str) -> Vec<String> {
     let exts = ["", ".go", ".ts", ".py", ".java", ".cpp", ".rs", ".js"];
     exts.iter()
-        .map(|e| format!("{}{}", rel_without_ext, e))
+        .map(|e| format!("{rel_without_ext}{e}"))
         .collect()
 }
 

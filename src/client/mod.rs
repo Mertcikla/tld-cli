@@ -22,7 +22,7 @@ pub fn normalize_url(server_url: &str) -> String {
     if base.ends_with("/api") {
         base.to_string()
     } else {
-        format!("{}/api", base)
+        format!("{base}/api")
     }
 }
 
@@ -56,7 +56,7 @@ pub async fn new_workspace_client(
     api_key: &str,
 ) -> Result<WorkspaceServiceClient<InterceptedService<Channel, AuthInterceptor>>, TldError> {
     let channel = connect_channel(&normalize_url(server_url)).await?;
-    let token = MetadataValue::from_str(&format!("Bearer {}", api_key))
+    let token = MetadataValue::from_str(&format!("Bearer {api_key}"))
         .map_err(|e| TldError::Generic(e.to_string()))?;
 
     let interceptor = AuthInterceptor { token };

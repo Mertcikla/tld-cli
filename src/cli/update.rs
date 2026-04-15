@@ -33,7 +33,8 @@ pub enum UpdateResource {
     },
 }
 
-pub async fn exec(args: UpdateArgs, wdir: String) -> Result<(), TldError> {
+#[expect(clippy::needless_pass_by_value)]
+pub fn exec(args: UpdateArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
 
     match args.resource {
@@ -45,16 +46,13 @@ pub async fn exec(args: UpdateArgs, wdir: String) -> Result<(), TldError> {
             if let (Some(f), Some(v)) = (field, value) {
                 ws.update_element_field(&r#ref, &f, &v)?;
                 workspace::save(&ws)?;
-                output::print_ok(&format!(
-                    "Updated element '{}' field '{}' to '{}'",
-                    r#ref, f, v
-                ));
+                output::print_ok(&format!("Updated element '{ref}' field '{f}' to '{v}'"));
             } else {
                 let el = ws
                     .elements
                     .get(&r#ref)
-                    .ok_or_else(|| TldError::Generic(format!("Element '{}' not found", r#ref)))?;
-                output::print_info(&format!("Available fields for element '{}':", r#ref));
+                    .ok_or_else(|| TldError::Generic(format!("Element '{ref}' not found")))?;
+                output::print_info(&format!("Available fields for element '{ref}':"));
                 output::print_kv_table(vec![
                     ("name", el.name.clone()),
                     ("kind", el.kind.clone()),
@@ -79,16 +77,13 @@ pub async fn exec(args: UpdateArgs, wdir: String) -> Result<(), TldError> {
             if let (Some(f), Some(v)) = (field, value) {
                 ws.update_connector_field(&r#ref, &f, &v)?;
                 workspace::save(&ws)?;
-                output::print_ok(&format!(
-                    "Updated connector '{}' field '{}' to '{}'",
-                    r#ref, f, v
-                ));
+                output::print_ok(&format!("Updated connector '{ref}' field '{f}' to '{v}'"));
             } else {
                 let conn = ws
                     .connectors
                     .get(&r#ref)
-                    .ok_or_else(|| TldError::Generic(format!("Connector '{}' not found", r#ref)))?;
-                output::print_info(&format!("Available fields for connector '{}':", r#ref));
+                    .ok_or_else(|| TldError::Generic(format!("Connector '{ref}' not found")))?;
+                output::print_info(&format!("Available fields for connector '{ref}':"));
                 output::print_kv_table(vec![
                     ("view", conn.view.clone()),
                     ("source", conn.source.clone()),

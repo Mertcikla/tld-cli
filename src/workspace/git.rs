@@ -10,7 +10,7 @@ pub fn get_file_last_commit_at(
         .args(["log", "-1", "--format=%cI", file_path])
         .current_dir(repo_root)
         .output()
-        .map_err(|e| TldError::Generic(format!("Failed to execute git: {}", e)))?;
+        .map_err(|e| TldError::Generic(format!("Failed to execute git: {e}")))?;
 
     if !output.status.success() {
         return Err(TldError::Generic("Git command failed".to_string()));
@@ -25,5 +25,5 @@ pub fn get_file_last_commit_at(
 
     DateTime::parse_from_rfc3339(&s)
         .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|e| TldError::Generic(format!("Failed to parse git date {}: {}", s, e)))
+        .map_err(|e| TldError::Generic(format!("Failed to parse git date {s}: {e}")))
 }

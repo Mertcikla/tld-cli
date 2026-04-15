@@ -51,8 +51,7 @@ pub fn merge_workspace(
 
     if total_conflicts > 0 {
         return Err(TldError::Generic(format!(
-            "Merge complete with {} conflict(s). Please resolve them in elements.yaml/connectors.yaml and run 'tld apply' again.",
-            total_conflicts
+            "Merge complete with {total_conflicts} conflict(s). Please resolve them in elements.yaml/connectors.yaml and run 'tld apply' again."
         )));
     }
 
@@ -107,11 +106,9 @@ fn merge_file<T: serde::Serialize>(
                     // CONFLICT
                     conflicts += 1;
                     let server_yaml_str = serde_yaml::to_string(server_item).unwrap_or_default();
-                    let local_yaml_str = format!("{:?}", val); // Simplified local capture
+                    let local_yaml_str = format!("{val:?}"); // Simplified local capture
                     let conflict_val = format!(
-                        "<<< LOCAL\n{}\n===\n{}>>> SERVER",
-                        local_yaml_str.trim(),
-                        server_yaml_str.trim()
+                        "<<< LOCAL\n{local_yaml_str}\n===\n{server_yaml_str}>>> SERVER"
                     );
                     *val = Yaml::String(conflict_val);
                 } else if server_changed {

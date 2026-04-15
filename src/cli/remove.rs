@@ -30,23 +30,21 @@ pub enum RemoveResource {
     },
 }
 
-pub async fn exec(args: RemoveArgs, wdir: String) -> Result<(), TldError> {
+#[expect(clippy::needless_pass_by_value)]
+pub fn exec(args: RemoveArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
 
     match args.resource {
         RemoveResource::Element { r#ref } => {
-            ws.remove_element(&r#ref)?;
+            ws.remove_element(&r#ref);
             workspace::save(&ws)?;
-            output::print_ok(&format!("Removed element '{}' and its associations", r#ref));
+            output::print_ok(&format!("Removed element '{ref}' and its associations"));
         }
         RemoveResource::Connector { view, from, to } => {
-            let count = ws.remove_connector(&view, &from, &to)?;
+            let count = ws.remove_connector(&view, &from, &to);
             if count > 0 {
                 workspace::save(&ws)?;
-                output::print_ok(&format!(
-                    "Removed {} connector(s) matching coordinates",
-                    count
-                ));
+                output::print_ok(&format!("Removed {count} connector(s) matching coordinates"));
             } else {
                 output::print_warn("No matching connectors found - nothing removed.");
             }

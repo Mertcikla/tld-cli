@@ -1,5 +1,7 @@
 use crate::client::diagv1;
-use crate::workspace::types::*;
+use crate::workspace::types::{
+    Config, Connector, Element, Meta, ResourceMetadata, ViewPlacement, Workspace, WorkspaceConfig,
+};
 use chrono::{TimeZone, Utc};
 use std::collections::HashMap;
 
@@ -15,7 +17,7 @@ pub fn from_export_response(
         config: global_cfg,
         elements: HashMap::new(),
         connectors: HashMap::new(),
-        workspace_config,
+        ws_config: workspace_config,
         meta: Some(Meta {
             elements: HashMap::new(),
             views: HashMap::new(),
@@ -74,7 +76,7 @@ pub fn from_export_response(
                 ref_name,
                 ResourceMetadata {
                     id: e.id,
-                    updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
+                    updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos.cast_unsigned()).unwrap(),
                     conflict: false,
                 },
             );
@@ -86,7 +88,7 @@ pub fn from_export_response(
         let mut owner_ref = "root".to_string();
         for (r, el) in &new_ws.elements {
             if el.name.to_lowercase() == d.name.to_lowercase() {
-                owner_ref = r.clone();
+                owner_ref.clone_from(r);
                 break;
             }
         }
@@ -97,7 +99,7 @@ pub fn from_export_response(
             if let Some(el) = new_ws.elements.get_mut(&owner_ref) {
                 el.has_view = true;
                 if el.view_label.is_empty() {
-                    el.view_label = d.name.clone();
+                    el.view_label.clone_from(&d.name);
                 }
             }
             if let Some(meta) = &mut new_ws.meta
@@ -107,7 +109,7 @@ pub fn from_export_response(
                     owner_ref,
                     ResourceMetadata {
                         id: d.id,
-                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
+                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos.cast_unsigned()).unwrap(),
                         conflict: false,
                     },
                 );
@@ -141,7 +143,7 @@ pub fn from_export_response(
 
         if let (Some(s), Some(t)) = (src_ref, tgt_ref) {
             let label = c.label.unwrap_or_default();
-            let key = format!("{}:{}:{}:{}", view_ref, s, t, label);
+            let key = format!("{view_ref}:{s}:{t}:{label}");
 
             new_ws.connectors.insert(
                 key.clone(),
@@ -165,7 +167,7 @@ pub fn from_export_response(
                     key,
                     ResourceMetadata {
                         id: c.id,
-                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
+                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos.cast_unsigned()).unwrap(),
                         conflict: false,
                     },
                 );

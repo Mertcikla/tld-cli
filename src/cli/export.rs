@@ -54,7 +54,7 @@ pub async fn exec(args: ExportArgs, wdir: String) -> Result<(), TldError> {
     let new_ws = workspace::conversion::from_export_response(
         &wdir,
         ws.config.clone(),
-        ws.workspace_config.clone(),
+        ws.ws_config.clone(),
         ws.meta.as_ref(),
         resp,
     );

@@ -15,6 +15,7 @@ pub struct DiffArgs {
     pub skip_symbols: bool,
 }
 
+#[expect(clippy::expect_used)]
 pub async fn exec(_args: DiffArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
 
@@ -39,11 +40,11 @@ pub async fn exec(_args: DiffArgs, wdir: String) -> Result<(), TldError> {
 
     let resp = client.export_workspace(req).await?.into_inner();
 
-    let server_ws_dir = temp_dir.to_str().unwrap().to_string();
+    let server_ws_dir = temp_dir.to_str().expect("temp path should be valid utf8").to_string();
     let server_ws = workspace::conversion::from_export_response(
         &server_ws_dir,
         ws.config.clone(),
-        ws.workspace_config.clone(),
+        ws.ws_config.clone(),
         ws.meta.as_ref(),
         resp,
     );

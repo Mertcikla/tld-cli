@@ -1,3 +1,4 @@
+#![expect(clippy::expect_used)]
 use crate::error::TldError;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -12,7 +13,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn start(
+    pub fn start(
         executable: &str,
         args: &[String],
         root_dir: &str,
@@ -24,7 +25,7 @@ impl Session {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| TldError::Generic(format!("Failed to start LSP {}: {}", executable, e)))?;
+            .map_err(|e| TldError::Generic(format!("Failed to start LSP {executable}: {e}")))?;
 
         let stdin = child
             .stdin
@@ -52,7 +53,8 @@ impl Session {
                         method_params["id"] = json!(id);
                         method_params["jsonrpc"] = json!("2.0");
 
-                        let body = serde_json::to_string(&method_params).unwrap();
+                        let body = serde_json::to_string(&method_params)
+                            .expect("LSP params must be serializable");
                         let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
                         if stdin.write_all(msg.as_bytes()).await.is_err() {
                             break;
@@ -63,7 +65,7 @@ impl Session {
                         match line {
                             Ok(Some(content)) => {
                                 if let Ok(msg) = serde_json::from_str::<Value>(&content)
-                                    && let Some(id) = msg.get("id").and_then(|v| v.as_i64())
+                                    && let Some(id) = msg.get("id").and_then(Value::as_i64)
                                     && let Some(tx) = pending_requests.remove(&id)
                                 {
                                     let _ = tx.send(msg);

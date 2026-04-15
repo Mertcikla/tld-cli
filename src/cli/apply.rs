@@ -16,6 +16,7 @@ pub struct ApplyArgs {
     pub recreate_ids: bool,
 }
 
+#[expect(clippy::print_stdout)]
 pub async fn exec(args: ApplyArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
 
@@ -45,7 +46,7 @@ pub async fn exec(args: ApplyArgs, wdir: String) -> Result<(), TldError> {
 
     if let Some(summary) = &resp.summary {
         output::print_ok(&format!(
-            "Applied successfully! {} elements, {} views, {} connectors updated.",
+            "Applied successfully! {0} elements, {1} views, {2} connectors updated.",
             summary.elements_planned, summary.views_planned, summary.connectors_planned
         ));
     } else {
@@ -53,7 +54,7 @@ pub async fn exec(args: ApplyArgs, wdir: String) -> Result<(), TldError> {
     }
 
     if let Some(version) = &resp.version {
-        println!("New workspace version: {}", version.version_id);
+        println!("New workspace version: {0}", version.version_id);
     }
 
     // Conflicts notification

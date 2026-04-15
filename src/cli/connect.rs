@@ -26,7 +26,8 @@ pub struct ConnectArgs {
     pub style: String,
 }
 
-pub async fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
+#[expect(clippy::needless_pass_by_value)]
+pub fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
 
     // 1. Check existence and suggest
@@ -43,9 +44,9 @@ pub async fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
             }
 
             let msg = if let Some(m) = best_match {
-                format!("Element '{}' not found. Did you mean '{}'?", name, m)
+                format!("Element '{name}' not found. Did you mean '{m}'?")
             } else {
-                format!("Element '{}' not found", name)
+                format!("Element '{name}' not found")
             };
             return Err(TldError::Generic(msg));
         }
@@ -88,10 +89,7 @@ pub async fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
     let ref_name = ws.upsert_connector(connector)?;
     workspace::save(&ws)?;
 
-    output::print_ok(&format!(
-        "Processed connector '{}' in connectors.yaml",
-        ref_name
-    ));
+    output::print_ok(&format!("Processed connector '{ref_name}' in connectors.yaml"));
     output::print_info("Run 'tld apply' to push changes to the server.");
 
     Ok(())

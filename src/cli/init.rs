@@ -14,7 +14,7 @@ pub struct InitArgs {
     pub wizard: bool,
 }
 
-pub async fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
+pub fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
     let dir = args.dir.unwrap_or_else(|| ".tld".to_string());
     let path = Path::new(&dir);
 
@@ -47,13 +47,10 @@ pub async fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
         }
         let default_global = "server_url: https://tldiagram.com\napi_key: \"\"\norg_id: \"\"\n";
         fs::write(&global_cfg_path, default_global)?;
-        output::print_ok(&format!(
-            "Global configuration created at {:?}",
-            global_cfg_path
-        ));
+        output::print_ok(&format!("Global configuration created at {path}", path = global_cfg_path.display()));
     }
 
-    output::print_ok(&format!("Initialized workspace at {}", dir));
+    output::print_ok(&format!("Initialized workspace at {dir}"));
     if !args.wizard {
         output::print_info("Run `tld login` to authenticate with tldiagram.com");
     }

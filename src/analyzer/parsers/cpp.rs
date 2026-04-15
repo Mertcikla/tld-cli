@@ -1,3 +1,4 @@
+#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::too_many_arguments)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -19,7 +20,7 @@ fn parse_declarations(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let decl_query_src = r#"
+    let decl_query_src = r"
 (class_specifier
   name: (type_identifier) @class_name
   body: (field_declaration_list) @class_body) @class_decl
@@ -33,12 +34,9 @@ fn parse_declarations(
 
 (function_definition
   declarator: _ @fn_declarator) @fn_def
-"#;
+";
 
-    let query = match Query::new(language, decl_query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, decl_query_src) else { return };
 
     let class_name_idx = query
         .capture_index_for_name("class_name")
@@ -173,7 +171,7 @@ fn parse_type_members(
     // - function_definition (inline method with body)
     // - field_declaration with function_declarator (declarations: virtual/pure-virtual/default)
     // - declaration with function_declarator (constructor/destructor declarations)
-    let method_query_src = r#"
+    let method_query_src = r"
 (function_definition
   declarator: _ @method_declarator) @method_def
 
@@ -184,12 +182,9 @@ fn parse_type_members(
 (declaration
   declarator: (function_declarator
     declarator: _ @ctor_decl_member))
-"#;
+";
 
-    let query = match Query::new(language, method_query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, method_query_src) else { return };
 
     let decl_idx = query
         .capture_index_for_name("method_declarator")
@@ -327,15 +322,12 @@ fn parse_refs(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let ref_query_src = r#"
+    let ref_query_src = r"
 (preproc_include path: _ @include_path)
 (call_expression function: _ @callee)
-"#;
+";
 
-    let query = match Query::new(language, ref_query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, ref_query_src) else { return };
 
     let include_idx = query
         .capture_index_for_name("include_path")

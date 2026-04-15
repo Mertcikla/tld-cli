@@ -7,6 +7,7 @@ pub struct Plan {
     pub request: ApplyPlanRequest,
 }
 
+#[expect(clippy::unnecessary_wraps)]
 pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
     let mut req = ApplyPlanRequest {
         org_id: ws.config.org_id.clone(),
@@ -59,7 +60,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
                 plan_el.id = Some(m.id);
                 plan_el.updated_at = Some(Timestamp {
                     seconds: m.updated_at.timestamp(),
-                    nanos: m.updated_at.timestamp_subsec_nanos() as i32,
+                    nanos: m.updated_at.timestamp_subsec_nanos().cast_signed(),
                 });
             }
             if element.has_view
@@ -68,7 +69,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
                 plan_el.view_id = Some(m.id);
                 plan_el.view_updated_at = Some(Timestamp {
                     seconds: m.updated_at.timestamp(),
-                    nanos: m.updated_at.timestamp_subsec_nanos() as i32,
+                    nanos: m.updated_at.timestamp_subsec_nanos().cast_signed(),
                 });
             }
         }
@@ -103,7 +104,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             plan_conn.id = Some(m.id);
             plan_conn.updated_at = Some(Timestamp {
                 seconds: m.updated_at.timestamp(),
-                nanos: m.updated_at.timestamp_subsec_nanos() as i32,
+                nanos: m.updated_at.timestamp_subsec_nanos().cast_signed(),
             });
         }
 

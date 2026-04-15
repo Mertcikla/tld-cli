@@ -1,3 +1,4 @@
+#![expect(clippy::print_stdout, clippy::print_stderr, clippy::expect_used)]
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
@@ -35,7 +36,7 @@ pub fn new_spinner(msg: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.set_style(
         ProgressStyle::with_template("{spinner:.cyan} {msg}")
-            .unwrap()
+            .expect("should have valid progress template")
             .tick_chars(SPINNER_CHARS),
     );
     pb.set_message(msg.to_string());
@@ -55,7 +56,7 @@ pub fn print_table<T: Tabled>(rows: Vec<T>) {
     table
         .with(TStyle::modern())
         .modify(Rows::first(), Color::BOLD);
-    println!("{}", table);
+    println!("{table}");
 }
 
 /// Key-value summary table (two-column layout).

@@ -72,6 +72,7 @@ pub struct ViewPlacement {
     pub position_y: f64,
 }
 
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn is_zero_f64(v: &f64) -> bool {
     *v == 0.0
 }
@@ -163,7 +164,7 @@ pub struct Meta {
 pub struct Workspace {
     pub dir: String,
     pub config: Config,
-    pub workspace_config: Option<WorkspaceConfig>,
+    pub ws_config: Option<WorkspaceConfig>,
     pub elements: HashMap<String, Element>,
     pub connectors: HashMap<String, Connector>,
     pub meta: Option<Meta>,

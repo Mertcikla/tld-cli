@@ -19,6 +19,7 @@ pub struct PlanArgs {
     pub verbose: bool,
 }
 
+#[expect(clippy::print_stdout, clippy::items_after_statements)]
 pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
 
@@ -85,7 +86,7 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
 
         if !rows.is_empty() {
             let table = Table::new(rows).to_string();
-            println!("{}", table);
+            println!("{table}");
         }
     }
 

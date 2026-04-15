@@ -24,7 +24,8 @@ pub struct AddArgs {
     pub parent: Option<String>,
 }
 
-pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
+#[expect(clippy::needless_pass_by_value)]
+pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
     let ref_name = workspace::slugify(&args.name);
 
@@ -44,8 +45,7 @@ pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
             && old_val != new
         {
             return Err(TldError::Generic(format!(
-                "Conflict: field '{}' for element '{}' is already set to '{}'. Use 'tld update' to change it.",
-                field_name, ref_name, old_val
+                "Conflict: field '{field_name}' for element '{ref_name}' is already set to '{old_val}'. Use 'tld update' to change it."
             )));
         }
         Ok(())
@@ -79,8 +79,7 @@ pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
             .any(|p| !p.parent_ref.is_empty() && p.parent_ref != parent);
         if has_different_parent && existing.is_some() {
             return Err(TldError::Generic(format!(
-                "Conflict: element '{}' already has a different parent. Use 'tld update' to change it.",
-                ref_name
+                "Conflict: element '{ref_name}' already has a different parent. Use 'tld update' to change it."
             )));
         }
 
@@ -97,13 +96,10 @@ pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
         ));
     }
 
-    ws.upsert_element(ref_name.clone(), element)?;
+    ws.upsert_element(ref_name.clone(), element);
     workspace::save(&ws)?;
 
-    output::print_ok(&format!(
-        "Added/updated element '{}' in elements.yaml",
-        ref_name
-    ));
+    output::print_ok(&format!("Added/updated element '{ref_name}' in elements.yaml"));
     output::print_info("Run 'tld apply' to push changes to the server.");
 
     Ok(())

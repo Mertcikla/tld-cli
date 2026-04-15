@@ -1,3 +1,4 @@
+#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::too_many_arguments, clippy::map_unwrap_or)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -19,7 +20,7 @@ fn parse_declarations(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let decl_query_src = r#"
+    let decl_query_src = r"
 (class_declaration
   name: (identifier) @class_name
   body: (class_body) @class_body) @class_decl
@@ -27,12 +28,9 @@ fn parse_declarations(
 (interface_declaration
   name: (identifier) @iface_name
   body: (interface_body) @iface_body) @iface_decl
-"#;
+";
 
-    let query = match Query::new(language, decl_query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, decl_query_src) else { return };
 
     let class_name_idx = query
         .capture_index_for_name("class_name")
@@ -112,18 +110,15 @@ fn parse_class_members(
     class_name: &str,
     result: &mut AnalysisResult,
 ) {
-    let member_query_src = r#"
+    let member_query_src = r"
 (method_declaration
   name: (identifier) @method_name) @method_decl
 
 (constructor_declaration
   name: (identifier) @ctor_name) @ctor_decl
-"#;
+";
 
-    let query = match Query::new(language, member_query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, member_query_src) else { return };
 
     let method_idx = query
         .capture_index_for_name("method_name")
@@ -192,15 +187,12 @@ fn parse_interface_members(
     iface_name: &str,
     result: &mut AnalysisResult,
 ) {
-    let method_query_src = r#"
+    let method_query_src = r"
 (method_declaration
   name: (identifier) @method_name) @method_decl
-"#;
+";
 
-    let query = match Query::new(language, method_query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, method_query_src) else { return };
 
     let method_idx = query
         .capture_index_for_name("method_name")
@@ -236,17 +228,14 @@ fn parse_refs(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let ref_query_src = r#"
+    let ref_query_src = r"
 (import_declaration) @import
 
 (method_invocation
   name: (identifier) @call_name)
-"#;
+";
 
-    let query = match Query::new(language, ref_query_src) {
-        Ok(q) => q,
-        Err(_) => return,
-    };
+    let Ok(query) = Query::new(language, ref_query_src) else { return };
 
     let import_idx = query.capture_index_for_name("import").unwrap_or(u32::MAX);
     let call_idx = query

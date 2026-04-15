@@ -23,10 +23,10 @@ use crate::error::TldError;
 /// Returns the path to the global config directory.
 /// Respects `TLD_CONFIG_DIR` and `XDG_CONFIG_HOME`.
 pub fn config_dir() -> Result<PathBuf, TldError> {
-    if let Ok(v) = std::env::var("TLD_CONFIG_DIR") {
+    if let Some(v) = std::env::var_os("TLD_CONFIG_DIR") {
         return Ok(PathBuf::from(v));
     }
-    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
         return Ok(PathBuf::from(xdg).join("tldiagram"));
     }
     let home = dirs::home_dir().ok_or_else(|| {
@@ -58,7 +58,9 @@ pub fn load_config() -> Result<Config, TldError> {
 /// Write the global config, merging auth fields.
 pub fn write_config(server_url: &str, api_key: &str, org_id: &str) -> Result<PathBuf, TldError> {
     let path = config_path()?;
-    fs::create_dir_all(path.parent().unwrap())?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
 
     let mut cfg = load_config().unwrap_or_default();
     cfg.server_url = server_url.to_string();
@@ -127,7 +129,7 @@ pub fn load(wdir: &str) -> Result<Workspace, TldError> {
     Ok(Workspace {
         dir: wdir.to_string(),
         config: global_cfg,
-        workspace_config,
+        ws_config: workspace_config,
         elements,
         connectors,
         meta,
@@ -153,9 +155,9 @@ pub fn save(ws: &Workspace) -> Result<(), TldError> {
             ..Default::default()
         });
         let mut new_lock = lock_file;
-        new_lock.current_elements = meta.elements.clone();
-        new_lock.current_views = meta.views.clone();
-        new_lock.current_connectors = meta.connectors.clone();
+        new_lock.current_elements.clone_from(&meta.elements);
+        new_lock.current_views.clone_from(&meta.views);
+        new_lock.current_connectors.clone_from(&meta.connectors);
         lockfile::save_lock_file(&ws.dir, &new_lock)?;
     }
 

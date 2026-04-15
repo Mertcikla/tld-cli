@@ -25,31 +25,28 @@ pub enum TldError {
 impl fmt::Display for TldError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TldError::Io(e) => write!(f, "IO error: {}", e),
-            TldError::Yaml(s) => write!(f, "YAML error: {}", s),
+            TldError::Io(e) => write!(f, "IO error: {e}"),
+            TldError::Yaml(s) => write!(f, "YAML error: {s}"),
             TldError::Grpc(s) => write!(f, "gRPC error: {} ({})", s.message(), s.code()),
-            TldError::Transport(e) => write!(f, "Transport error: {}", e),
+            TldError::Transport(e) => write!(f, "Transport error: {e}"),
             TldError::Auth(s) => write!(
                 f,
-                "Authentication error: {}\n\nRun `tld login` to authenticate.",
-                s
+                "Authentication error: {s}\n\nRun `tld login` to authenticate."
             ),
-            TldError::Generic(s) => write!(f, "{}", s),
+            TldError::Generic(s) => write!(f, "{s}"),
             TldError::UnsupportedLanguage(ext) => {
-                write!(f, "Unsupported file type: .{}", ext)
+                write!(f, "Unsupported file type: .{ext}")
             }
             TldError::ParserDownloadRequired { lang, reason } => write!(
                 f,
-                "The tree-sitter parser for '{}' is not available locally.\n\
-                 Reason: {}\n\n\
-                 To download it, run:\n  tld analyze --download {}",
-                lang, reason, lang
+                "The tree-sitter parser for '{lang}' is not available locally.\n\
+                 Reason: {reason}\n\n\
+                 To download it, run:\n  tld analyze --download {lang}"
             ),
             TldError::ParserNotImplemented(lang) => write!(
                 f,
-                "tld does not yet have an analyzer for '{}'. \
-                 See adding-new-languages.md to add support.",
-                lang
+                "tld does not yet have an analyzer for '{lang}'. \
+                 See adding-new-languages.md to add support."
             ),
         }
     }

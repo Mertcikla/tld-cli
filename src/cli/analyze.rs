@@ -28,23 +28,24 @@ pub struct AnalyzeArgs {
     pub lsp: bool,
 }
 
+#[expect(clippy::print_stdout, clippy::print_stderr)]
 pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     // Pre-download requested parsers before doing any analysis.
     if let Some(ref langs_csv) = args.download {
         let langs: Vec<&str> = langs_csv.split(',').map(str::trim).collect();
-        let spinner = output::new_spinner(&format!("Downloading parsers: {}...", langs_csv));
+        let spinner = output::new_spinner(&format!("Downloading parsers: {langs_csv}..."));
         match ts_pack_core::download(&langs) {
             Ok(count) => {
                 spinner.finish_and_clear();
                 if count > 0 {
-                    output::print_ok(&format!("Downloaded {} parser(s).", count));
+                    output::print_ok(&format!("Downloaded {count} parser(s)."));
                 } else {
                     output::print_info("All requested parsers already cached.");
                 }
             }
             Err(e) => {
                 spinner.finish_and_clear();
-                return Err(TldError::Generic(format!("Parser download failed: {}", e)));
+                return Err(TldError::Generic(format!("Parser download failed: {e}")));
             }
         }
     }
@@ -54,12 +55,12 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     let abs_scan_path = Path::new(&scan_path)
         .canonicalize()
-        .map_err(|e| TldError::Generic(format!("Failed to resolve path {}: {}", scan_path, e)))?;
+        .map_err(|e| TldError::Generic(format!("Failed to resolve path {scan_path}: {e}")))?;
 
-    output::print_info(&format!("Analyzing {}...", scan_path));
+    output::print_info(&format!("Analyzing {scan_path}..."));
 
     let mut exclude = ws
-        .workspace_config
+        .ws_config
         .as_ref()
         .map(|c| c.exclude.clone())
         .unwrap_or_default();
@@ -88,7 +89,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         abs_scan_path.to_str().unwrap_or(""),
         &rules,
         Some(&|path, _is_dir| {
-            spinner.set_message(format!("Scanning {}", path));
+            spinner.set_message(format!("Scanning {path}"));
         }),
     ) {
         Ok(r) => r,
@@ -102,13 +103,13 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 }
             );
             eprintln!();
-            eprint!("Download the '{}' parser now? [y/N]: ", lang);
+            eprint!("Download the '{lang}' parser now? [y/N]: ");
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).ok();
             if input.trim().eq_ignore_ascii_case("y") {
                 let lang_clone = lang.clone();
                 let dl_spinner =
-                    output::new_spinner(&format!("Downloading '{}' parser...", lang_clone));
+                    output::new_spinner(&format!("Downloading '{lang_clone}' parser..."));
                 match ts_pack_core::download(&[lang_clone.as_str()]) {
                     Ok(_) => {
                         dl_spinner.finish_and_clear();
@@ -121,7 +122,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                     }
                     Err(e) => {
                         dl_spinner.finish_and_clear();
-                        return Err(TldError::Generic(format!("Download failed: {}", e)));
+                        return Err(TldError::Generic(format!("Download failed: {e}")));
                     }
                 }
             } else {
@@ -189,7 +190,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             .await
             {
                 lsp_spinner.finish_and_clear();
-                output::print_info(&format!("LSP enrichment skipped: {}", e));
+                output::print_info(&format!("LSP enrichment skipped: {e}"));
             } else {
                 lsp_spinner.finish_and_clear();
                 output::print_info("LSP enrichment complete.");
@@ -224,18 +225,17 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     workspace::save(&ws)?;
     output::print_ok(&format!(
-        "Analysis complete. {} elements written, {} connectors created.",
-        element_count, connector_count
+        "Analysis complete. {element_count} elements written, {connector_count} connectors created."
     ));
 
     Ok(())
 }
 
 fn derive_repo_name(ws: &workspace::Workspace, scan_path: &Path) -> String {
-    ws.workspace_config
+    ws.ws_config
         .as_ref()
         .map(|c| c.project_name.clone())
-        .filter(|s| !s.is_empty())
+        .filter(|s: &String| !s.is_empty())
         .unwrap_or_else(|| {
             // Use the grandparent of scan_path if possible, otherwise the basename.
             scan_path
