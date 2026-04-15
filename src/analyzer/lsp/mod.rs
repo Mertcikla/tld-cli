@@ -85,7 +85,7 @@ pub fn resolve_command(language: &str) -> Option<ResolvedCommand> {
 /// `textDocument/definition` request to the appropriate language server.
 /// Silently skips languages where no LSP server is found.
 pub async fn resolve_calls_with_lsp(
-    refs: &mut Vec<crate::analyzer::types::Ref>,
+    refs: &mut [crate::analyzer::types::Ref],
     root_dir: &str,
     unique_langs: &[&str],
 ) -> Result<(), crate::error::TldError> {

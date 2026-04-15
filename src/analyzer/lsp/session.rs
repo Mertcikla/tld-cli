@@ -7,7 +7,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot};
 
 pub struct Session {
-    child: Child,
+    _child: Child,
     request_tx: mpsc::Sender<(Value, oneshot::Sender<Value>)>,
 }
 
@@ -60,23 +60,26 @@ impl Session {
                         pending_requests.insert(id, response_tx);
                     }
                     line = read_lsp_message(&mut stdout_reader) => {
-                        if let Ok(Some(content)) = line {
-                            if let Ok(msg) = serde_json::from_str::<Value>(&content) {
-                                if let Some(id) = msg.get("id").and_then(|v| v.as_i64()) {
-                                    if let Some(tx) = pending_requests.remove(&id) {
-                                        let _ = tx.send(msg);
-                                    }
+                        match line {
+                            Ok(Some(content)) => {
+                                if let Ok(msg) = serde_json::from_str::<Value>(&content)
+                                    && let Some(id) = msg.get("id").and_then(|v| v.as_i64())
+                                    && let Some(tx) = pending_requests.remove(&id)
+                                {
+                                    let _ = tx.send(msg);
                                 }
                             }
-                        } else {
-                            break;
+                            _ => break,
                         }
                     }
                 }
             }
         });
 
-        Ok(Session { child, request_tx })
+        Ok(Session {
+            _child: child,
+            request_tx,
+        })
     }
 
     pub async fn initialize(&self, root_uri: String) -> Result<(), TldError> {
@@ -126,11 +129,8 @@ async fn read_lsp_message(
         if line == "\r\n" {
             break;
         }
-        if line.starts_with("Content-Length: ") {
-            content_length = line["Content-Length: ".len()..]
-                .trim()
-                .parse::<usize>()
-                .unwrap_or(0);
+        if let Some(rest) = line.strip_prefix("Content-Length: ") {
+            content_length = rest.trim().parse::<usize>().unwrap_or(0);
         }
     }
 

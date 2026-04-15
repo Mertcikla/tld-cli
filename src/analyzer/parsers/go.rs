@@ -253,20 +253,19 @@ fn find_ancestor_of_kind<'a>(node: &Node<'a>, kind: &str) -> Option<Node<'a>> {
 }
 
 fn find_comment(node: &Node, source: &[u8]) -> String {
-    if let Some(prev) = node.prev_named_sibling() {
-        if prev.kind() == "comment"
-            && node
-                .start_position()
-                .row
-                .saturating_sub(prev.end_position().row)
-                <= 1
-        {
-            let text = prev.utf8_text(source).unwrap_or_default().trim();
-            let text = text.strip_prefix("//").unwrap_or(text);
-            let text = text.strip_prefix("/*").unwrap_or(text);
-            let text = text.strip_suffix("*/").unwrap_or(text);
-            return text.trim().to_string();
-        }
+    if let Some(prev) = node.prev_named_sibling()
+        && prev.kind() == "comment"
+        && node
+            .start_position()
+            .row
+            .saturating_sub(prev.end_position().row)
+            <= 1
+    {
+        let text = prev.utf8_text(source).unwrap_or_default().trim();
+        let text = text.strip_prefix("//").unwrap_or(text).trim();
+        let text = text.strip_prefix("/*").unwrap_or(text);
+        let text = text.strip_suffix("*/").unwrap_or(text);
+        return text.trim().to_string();
     }
     String::new()
 }

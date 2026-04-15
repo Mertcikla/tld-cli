@@ -570,11 +570,11 @@ fn resolve_import_target(
     if target_path.starts_with("./") || target_path.starts_with("../") {
         let source_dir = Path::new(source_file_abs).parent()?.to_str()?.to_string();
         // Join source dir with the relative target
-        let joined = if target_path.starts_with("./") {
-            format!("{}/{}", source_dir, &target_path[2..])
-        } else {
-            format!("{}/{}", source_dir, target_path)
-        };
+        let joined = format!(
+            "{}/{}",
+            source_dir,
+            target_path.strip_prefix("./").unwrap_or(target_path)
+        );
         let normalized = normalize_path(&joined);
         let rel = rel_from_base(&normalized, scan_parent);
 

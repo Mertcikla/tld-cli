@@ -186,21 +186,21 @@ fn parse_class_methods(
 }
 
 fn extract_docstring(body_node: &Node, source: &[u8]) -> String {
+    // Only check the first statement in the body.
     let mut cursor = body_node.walk();
-    for child in body_node.named_children(&mut cursor) {
-        if child.kind() == "expression_statement" {
-            let mut c2 = child.walk();
-            for inner in child.named_children(&mut c2) {
-                if inner.kind() == "string" {
-                    let text = inner.utf8_text(source).unwrap_or_default();
-                    let text = text.trim_start_matches("\"\"\"").trim_end_matches("\"\"\"");
-                    let text = text.trim_start_matches("'''").trim_end_matches("'''");
-                    let text = text.trim_matches('"').trim_matches('\'');
-                    return text.trim().to_string();
-                }
+    if let Some(child) = body_node.named_children(&mut cursor).next()
+        && child.kind() == "expression_statement"
+    {
+        let mut c2 = child.walk();
+        for inner in child.named_children(&mut c2) {
+            if inner.kind() == "string" {
+                let text = inner.utf8_text(source).unwrap_or_default();
+                let text = text.trim_start_matches("\"\"\"").trim_end_matches("\"\"\"");
+                let text = text.trim_start_matches("'''").trim_end_matches("'''");
+                let text = text.trim_matches('"').trim_matches('\'');
+                return text.trim().to_string();
             }
         }
-        break; // Only check first statement
     }
     String::new()
 }
