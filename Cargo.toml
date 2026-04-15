@@ -1,0 +1,37 @@
+[package]
+name = "tld"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4.44", features = ["serde"] }
+clap = { version = "4.6.0", features = ["derive"] }
+console = "0.16.3"
+dirs = "6.0.0"
+glob = "0.3.3"
+harsh = "0.2.2"
+indicatif = "0.18.4"
+lsp-types = "0.97.0"
+opener = "0.8.4"
+prost = "0.14.3"
+prost-types = "0.14.3"
+serde = "1.0.228"
+serde_json = "1.0.149"
+serde_yaml = "0.9.34"
+tabled = "0.20.0"
+tokio = { version = "1.52.0", features = ["full"] }
+tokio-util = { version = "0.7.18", features = ["codec"] }
+tonic = "0.14.5"
+tonic-prost = "0.14.5"
+tower-lsp = "0.20.0"
+tree-sitter = "0.26.8"
+which = "8.0.2"
+yaml-edit = "0.2.1"
+yaml-rust2 = "0.11.0"
+
+[build-dependencies]
+tonic-build = "0.14.5"
+tonic-prost-build = "0.14.5"
+
+[dependencies.tree-sitter-language-pack]
+git = "https://github.com/kreuzberg-dev/tree-sitter-language-pack"

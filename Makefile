@@ -1,54 +1,29 @@
-.PHONY: build run test test-unit test-cmd test-cover test-cover-html lint fmt release grammars symbol-wasm
+.PHONY: build dev test fmt lint clean release install
 
-grammars:
-	cd internal/symbol/grammars/src/go        && GOOS=wasip1 GOARCH=wasm go build -o ../../go.wasm .
-	cd internal/symbol/grammars/src/typescript && GOOS=wasip1 GOARCH=wasm go build -o ../../typescript.wasm .
-	cp internal/symbol/grammars/typescript.wasm internal/symbol/grammars/javascript.wasm
-	cd internal/symbol/grammars/src/python     && GOOS=wasip1 GOARCH=wasm go build -o ../../python.wasm .
-	@echo "Grammars rebuilt."
-
-symbol-wasm:
-	GOOS=wasip1 GOARCH=wasm go build -o internal/symbol/wasm/symbol.wasm ./internal/symbol/wasm/
-	@echo "symbol.wasm built."
-
-proto:
-	go get buf.build/gen/go/tldiagramcom/diagram/protocolbuffers/go@$(shell buf registry sdk version --module=buf.build/tldiagramcom/diagram --plugin=buf.build/protocolbuffers/go)
-	go get buf.build/gen/go/tldiagramcom/diagram/connectrpc/go@$(shell buf registry sdk version --module=buf.build/tldiagramcom/diagram --plugin=buf.build/connectrpc/go)
-	go mod tidy
+# Default protoc path for macOS Homebrew, can be overridden
+PROTOC ?= protoc
 
 build:
-	go build -o $(shell go env GOPATH)/bin/tld .
+	PROTOC=$(PROTOC) cargo build
 
-run:
-	go run .
+dev:
+	PROTOC=$(PROTOC) cargo run -- $(filter-out $@,$(MAKECMDGOALS))
 
 test:
-	go test ./... -race -shuffle=on -count=1 -timeout 60s
+	PROTOC=$(PROTOC) cargo test
 
-test-cover:
-	go test ./... -race -coverprofile=coverage.out -count=1 -timeout 60s
-	go tool cover -func=coverage.out
+fmt:
+	cargo fmt
 
-test-cover-html:
-	go test ./... -race -coverprofile=coverage.out -count=1 -timeout 60s
-	go tool cover -html=coverage.out
+lint:
+	PROTOC=$(PROTOC) cargo clippy -- -D warnings
 
-test-unit:
-	go test ./... -count=1
+clean:
+	cargo clean
 
-test-cmd:
-	go test ./cmd/... -count=1
-
-lint: ## Run linters
-	@echo "Running linters..."
-	@golangci-lint run --timeout=5m
-
-fmt: ## Format code
-	@echo "Formatting code..."
-	@go fmt ./...
-	@golangci-lint run --fix
-
-release: ## Create and push a new patch release
+release:
+	@echo "Building release binary..."
+	PROTOC=$(PROTOC) cargo build --release
 	@echo "Fetching latest tags..."
 	@git fetch --tags --quiet
 	@LATEST_TAG=$$(git tag --sort=-v:refname | head -n 1); \
@@ -61,7 +36,7 @@ release: ## Create and push a new patch release
 	NEW_TAG="v$$MAJOR.$$MINOR.$$NEW_PATCH"; \
 	echo "Current tag: $$LATEST_TAG"; \
 	echo "New tag:     $$NEW_TAG"; \
-	printf "Confirm release? [y/N] "; \
+	printf "Confirm release tag and push? [y/N] "; \
 	read confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
 		echo "Creating tag $$NEW_TAG..."; \
@@ -69,5 +44,12 @@ release: ## Create and push a new patch release
 		echo "Pushing tag $$NEW_TAG to origin..."; \
 		git push origin $$NEW_TAG; \
 	else \
-		echo "Release cancelled."; \
+		echo "Tagging cancelled. Release binary is ready in target/release/tld"; \
 	fi
+
+install:
+	PROTOC=$(PROTOC) cargo install --path .
+
+# Allow passing arguments to cargo run
+%:
+	@:
