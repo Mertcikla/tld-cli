@@ -19,7 +19,9 @@ impl Rules {
                 continue;
             }
             let normalized_pattern = self.normalize_pattern(pattern);
-            let trimmed_pattern = normalized_pattern.strip_suffix('/').unwrap_or(&normalized_pattern);
+            let trimmed_pattern = normalized_pattern
+                .strip_suffix('/')
+                .unwrap_or(&normalized_pattern);
             let is_dir_pattern = normalized_pattern.ends_with('/');
 
             // 1. Direct match or glob match on the full normalized path

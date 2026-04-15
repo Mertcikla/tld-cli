@@ -54,7 +54,8 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     output::print_info(&format!("Analyzing {}...", scan_path));
 
-    let mut exclude = ws.workspace_config
+    let mut exclude = ws
+        .workspace_config
         .as_ref()
         .map(|c| c.exclude.clone())
         .unwrap_or_default();
@@ -137,6 +138,13 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         for sym in &result.symbols {
             println!("  {} ({}) in {}", sym.name, sym.kind, sym.file_path);
         }
+        return Ok(());
+    }
+
+    if result.symbols.is_empty() {
+        output::print_info(
+            "No symbols or architectural elements were found at the specified path.",
+        );
         return Ok(());
     }
 

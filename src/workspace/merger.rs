@@ -15,9 +15,11 @@ pub fn merge_workspace(
     let elements_path = Path::new(wdir).join("elements.yaml");
     let connectors_path = Path::new(wdir).join("connectors.yaml");
 
+    let mut total_conflicts = 0;
+
     // Merge Elements
     if elements_path.exists() {
-        merge_file(
+        total_conflicts += merge_file(
             &elements_path,
             &server_ws.elements,
             &server_ws
@@ -34,7 +36,7 @@ pub fn merge_workspace(
 
     // Merge Connectors
     if connectors_path.exists() {
-        merge_file(
+        total_conflicts += merge_file(
             &connectors_path,
             &server_ws.connectors,
             &server_ws
@@ -47,6 +49,13 @@ pub fn merge_workspace(
         )?;
     }
 
+    if total_conflicts > 0 {
+        return Err(TldError::Generic(format!(
+            "Merge complete with {} conflict(s). Please resolve them in elements.yaml/connectors.yaml and run 'tld apply' again.",
+            total_conflicts
+        )));
+    }
+
     Ok(())
 }
 
@@ -56,15 +65,16 @@ fn merge_file<T: serde::Serialize>(
     server_meta: &HashMap<String, ResourceMetadata>,
     last_sync_meta: &HashMap<String, ResourceMetadata>,
     current_local_meta: &HashMap<String, ResourceMetadata>,
-) -> Result<(), TldError> {
+) -> Result<usize, TldError> {
     let content = fs::read_to_string(path).map_err(|e| TldError::Generic(e.to_string()))?;
     let docs = YamlLoader::load_from_str(&content).map_err(|e| TldError::Generic(e.to_string()))?;
     if docs.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
 
     // We treat the first document as the mapping.
     let mut doc = docs[0].clone();
+    let mut conflicts = 0;
 
     if let Yaml::Hash(ref mut h) = doc {
         let mut keys_to_remove = Vec::new();
@@ -95,6 +105,7 @@ fn merge_file<T: serde::Serialize>(
 
                 if local_changed && server_changed {
                     // CONFLICT
+                    conflicts += 1;
                     let server_yaml_str = serde_yaml::to_string(server_item).unwrap_or_default();
                     let local_yaml_str = format!("{:?}", val); // Simplified local capture
                     let conflict_val = format!(
@@ -141,5 +152,5 @@ fn merge_file<T: serde::Serialize>(
         .dump(&doc)
         .map_err(|e| TldError::Generic(e.to_string()))?;
     fs::write(path, out_str).map_err(|e| TldError::Generic(e.to_string()))?;
-    Ok(())
+    Ok(conflicts)
 }

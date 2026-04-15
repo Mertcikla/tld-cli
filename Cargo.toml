@@ -45,3 +45,10 @@ which = "8.0.2"
 yaml-edit = "0.2.1"
 yaml-rust2 = "0.11.0"
 ts_pack_core = { package = "tree-sitter-language-pack", version = "1.6.0" }
+strsim = "0.11.1"
+
+[dev-dependencies]
+assert_cmd = "2.2.0"
+predicates = "3.1.4"
+strsim = "0.11.1"
+tempfile = "3.27.0"

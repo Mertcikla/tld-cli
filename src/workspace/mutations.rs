@@ -96,14 +96,73 @@ impl Workspace {
         Ok(())
     }
 
-    /// Appends a connector after resolving the view if not provided.
-    pub fn append_connector(&mut self, mut connector: Connector) -> Result<String, TldError> {
+    /// Upserts a connector, handling Rule 3 & 4 of the PRD.
+    pub fn upsert_connector(&mut self, mut connector: Connector) -> Result<String, TldError> {
         if connector.view.is_empty() {
             connector.view = self.infer_connector_view(&connector.source, &connector.target)?;
         }
 
         let ref_name = connector.resource_ref();
-        self.connectors.insert(ref_name.clone(), connector);
+
+        if let Some(existing) = self.connectors.get(&ref_name) {
+            // Check for property conflicts (non-empty overrides)
+            let mut modified = false;
+            let mut new_conn = existing.clone();
+
+            let check = |field: &str, new: &str, old: &str| -> Result<(), TldError> {
+                if !new.is_empty() && !old.is_empty() && new != old {
+                    return Err(TldError::Generic(format!(
+                        "Conflict: connector '{}' property '{}' is already set to '{}'. Use 'tld update' to change it.",
+                        ref_name, field, old
+                    )));
+                }
+                Ok(())
+            };
+
+            check("description", &connector.description, &existing.description)?;
+            check(
+                "relationship",
+                &connector.relationship,
+                &existing.relationship,
+            )?;
+            check("direction", &connector.direction, &existing.direction)?;
+            check("style", &connector.style, &existing.style)?;
+            check("url", &connector.url, &existing.url)?;
+
+            // If we reach here, no conflicts. Update empty fields.
+            if new_conn.description.is_empty() && !connector.description.is_empty() {
+                new_conn.description = connector.description;
+                modified = true;
+            }
+            if new_conn.relationship.is_empty() && !connector.relationship.is_empty() {
+                new_conn.relationship = connector.relationship;
+                modified = true;
+            }
+            if new_conn.direction.is_empty() && !connector.direction.is_empty() {
+                new_conn.direction = connector.direction;
+                modified = true;
+            }
+            if new_conn.style.is_empty() && !connector.style.is_empty() {
+                new_conn.style = connector.style;
+                modified = true;
+            }
+            if new_conn.url.is_empty() && !connector.url.is_empty() {
+                new_conn.url = connector.url;
+                modified = true;
+            }
+
+            if !modified {
+                crate::output::print_info(&format!(
+                    "Connector '{}' already exists with identical or matching properties.",
+                    ref_name
+                ));
+            } else {
+                self.connectors.insert(ref_name.clone(), new_conn);
+            }
+        } else {
+            self.connectors.insert(ref_name.clone(), connector);
+        }
+
         Ok(ref_name)
     }
 

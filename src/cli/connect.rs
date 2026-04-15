@@ -29,6 +29,50 @@ pub struct ConnectArgs {
 pub async fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
 
+    // 1. Check existence and suggest
+    let check_exists = |name: &str, ws: &workspace::Workspace| -> Result<(), TldError> {
+        if !ws.elements.contains_key(name) {
+            let mut best_match = None;
+            let mut best_score = 0.0;
+            for key in ws.elements.keys() {
+                let score = strsim::jaro_winkler(name, key);
+                if score > 0.8 && score > best_score {
+                    best_score = score;
+                    best_match = Some(key);
+                }
+            }
+
+            let msg = if let Some(m) = best_match {
+                format!("Element '{}' not found. Did you mean '{}'?", name, m)
+            } else {
+                format!("Element '{}' not found", name)
+            };
+            return Err(TldError::Generic(msg));
+        }
+        Ok(())
+    };
+
+    check_exists(&args.source, &ws)?;
+    check_exists(&args.target, &ws)?;
+
+    // 2. Warn if > 20 connections
+    let conn_count = ws
+        .connectors
+        .values()
+        .filter(|c| {
+            c.source == args.source
+                || c.target == args.source
+                || c.source == args.target
+                || c.target == args.target
+        })
+        .count();
+    if conn_count >= 20 {
+        output::print_warn(&format!(
+            "Element '{}' or '{}' has {} connections. This might affect diagram readability.",
+            args.source, args.target, conn_count
+        ));
+    }
+
     let connector = Connector {
         source: args.source,
         target: args.target,
@@ -40,11 +84,12 @@ pub async fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
         ..Default::default()
     };
 
-    let ref_name = ws.append_connector(connector)?;
+    // 3 & 4. Duplicate/Update check
+    let ref_name = ws.upsert_connector(connector)?;
     workspace::save(&ws)?;
 
     output::print_ok(&format!(
-        "Appended connector '{}' to connectors.yaml",
+        "Processed connector '{}' in connectors.yaml",
         ref_name
     ));
     output::print_info("Run 'tld apply' to push changes to the server.");

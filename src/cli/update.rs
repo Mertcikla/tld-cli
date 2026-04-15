@@ -11,23 +11,25 @@ pub struct UpdateArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum UpdateResource {
-    /// Update an element field
+    /// Update an element field.
+    /// Valid fields: name, kind, technology, description, url, repo, branch, language, file_path, symbol, has_view, view_label
     Element {
         /// Element ref to update
         r#ref: String,
-        /// Field name (e.g. name, kind, technology, ref)
-        field: String,
+        /// Field name to update
+        field: Option<String>,
         /// New value
-        value: String,
+        value: Option<String>,
     },
-    /// Update a connector field
+    /// Update a connector field.
+    /// Valid fields: view, source, target, label, description, relationship, direction, style, url
     Connector {
         /// Connector canonical ref (view:source:target:label)
         r#ref: String,
-        /// Field name (e.g. label, description, relationship)
-        field: String,
+        /// Field name to update
+        field: Option<String>,
         /// New value
-        value: String,
+        value: Option<String>,
     },
 }
 
@@ -40,24 +42,65 @@ pub async fn exec(args: UpdateArgs, wdir: String) -> Result<(), TldError> {
             field,
             value,
         } => {
-            ws.update_element_field(&r#ref, &field, &value)?;
-            workspace::save(&ws)?;
-            output::print_ok(&format!(
-                "Updated element '{}' field '{}' to '{}'",
-                r#ref, field, value
-            ));
+            if let (Some(f), Some(v)) = (field, value) {
+                ws.update_element_field(&r#ref, &f, &v)?;
+                workspace::save(&ws)?;
+                output::print_ok(&format!(
+                    "Updated element '{}' field '{}' to '{}'",
+                    r#ref, f, v
+                ));
+            } else {
+                let el = ws
+                    .elements
+                    .get(&r#ref)
+                    .ok_or_else(|| TldError::Generic(format!("Element '{}' not found", r#ref)))?;
+                output::print_info(&format!("Available fields for element '{}':", r#ref));
+                output::print_kv_table(vec![
+                    ("name", el.name.clone()),
+                    ("kind", el.kind.clone()),
+                    ("technology", el.technology.clone()),
+                    ("description", el.description.clone()),
+                    ("url", el.url.clone()),
+                    ("repo", el.repo.clone()),
+                    ("branch", el.branch.clone()),
+                    ("language", el.language.clone()),
+                    ("file_path", el.file_path.clone()),
+                    ("symbol", el.symbol.clone()),
+                    ("has_view", el.has_view.to_string()),
+                    ("view_label", el.view_label.clone()),
+                ]);
+            }
         }
         UpdateResource::Connector {
             r#ref,
             field,
             value,
         } => {
-            ws.update_connector_field(&r#ref, &field, &value)?;
-            workspace::save(&ws)?;
-            output::print_ok(&format!(
-                "Updated connector '{}' field '{}' to '{}'",
-                r#ref, field, value
-            ));
+            if let (Some(f), Some(v)) = (field, value) {
+                ws.update_connector_field(&r#ref, &f, &v)?;
+                workspace::save(&ws)?;
+                output::print_ok(&format!(
+                    "Updated connector '{}' field '{}' to '{}'",
+                    r#ref, f, v
+                ));
+            } else {
+                let conn = ws
+                    .connectors
+                    .get(&r#ref)
+                    .ok_or_else(|| TldError::Generic(format!("Connector '{}' not found", r#ref)))?;
+                output::print_info(&format!("Available fields for connector '{}':", r#ref));
+                output::print_kv_table(vec![
+                    ("view", conn.view.clone()),
+                    ("source", conn.source.clone()),
+                    ("target", conn.target.clone()),
+                    ("label", conn.label.clone()),
+                    ("description", conn.description.clone()),
+                    ("relationship", conn.relationship.clone()),
+                    ("direction", conn.direction.clone()),
+                    ("style", conn.style.clone()),
+                    ("url", conn.url.clone()),
+                ]);
+            }
         }
     }
 

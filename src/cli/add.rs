@@ -28,14 +28,33 @@ pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
     let ref_name = workspace::slugify(&args.name);
 
-    let mut element = ws
-        .elements
-        .get(&ref_name)
-        .cloned()
-        .unwrap_or_else(|| Element {
-            name: args.name.clone(),
-            ..Default::default()
-        });
+    let existing = ws.elements.get(&ref_name).cloned();
+    let mut element = existing.clone().unwrap_or_else(|| Element {
+        name: args.name.clone(),
+        ..Default::default()
+    });
+
+    // Conflict detection helper
+    let check_conflict = |field_name: &str,
+                          new_val: &Option<String>,
+                          old_val: &str|
+     -> Result<(), TldError> {
+        if let Some(new) = new_val
+            && !old_val.is_empty() && old_val != new {
+            return Err(TldError::Generic(format!(
+                "Conflict: field '{}' for element '{}' is already set to '{}'. Use 'tld update' to change it.",
+                field_name, ref_name, old_val
+            )));
+        }
+        Ok(())
+    };
+
+    if existing.is_some() {
+        check_conflict("kind", &args.kind, &element.kind)?;
+        check_conflict("technology", &args.technology, &element.technology)?;
+        check_conflict("description", &args.description, &element.description)?;
+        check_conflict("url", &args.url, &element.url)?;
+    }
 
     if let Some(kind) = args.kind {
         element.kind = kind;
@@ -51,12 +70,29 @@ pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
     }
 
     if let Some(parent) = args.parent {
-        // Simple case: overwrite/set single placement.
-        // Go's add might have more complex placement logic but this is a good start.
+        // For parent, we check if it's already set in placements
+        let has_different_parent = element
+            .placements
+            .iter()
+            .any(|p| !p.parent_ref.is_empty() && p.parent_ref != parent);
+        if has_different_parent && existing.is_some() {
+            return Err(TldError::Generic(format!(
+                "Conflict: element '{}' already has a different parent. Use 'tld update' to change it.",
+                ref_name
+            )));
+        }
+
         element.placements = vec![ViewPlacement {
             parent_ref: parent,
             ..Default::default()
         }];
+    }
+
+    // Validation
+    if element.name.trim().is_empty() {
+        return Err(TldError::Generic(
+            "Element name cannot be empty".to_string(),
+        ));
     }
 
     ws.upsert_element(ref_name.clone(), element)?;
