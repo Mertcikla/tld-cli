@@ -77,13 +77,19 @@ pub fn load_metadata(dir: &str) -> Result<Meta, TldError> {
 
     // Fallback to YAML metadata sections in elements.yaml if lockfile is missing or incomplete
     // (This matches Go's LoadMetadata logic for backward compatibility/hybrid setups)
-    if meta.elements.is_empty() && let Ok(m) = load_yaml_metadata_section(dir, "elements.yaml", "_meta_elements") {
+    if meta.elements.is_empty()
+        && let Ok(m) = load_yaml_metadata_section(dir, "elements.yaml", "_meta_elements")
+    {
         meta.elements = m;
     }
-    if meta.views.is_empty() && let Ok(m) = load_yaml_metadata_section(dir, "elements.yaml", "_meta_views") {
+    if meta.views.is_empty()
+        && let Ok(m) = load_yaml_metadata_section(dir, "elements.yaml", "_meta_views")
+    {
         meta.views = m;
     }
-    if meta.connectors.is_empty() && let Ok(m) = load_yaml_metadata_section(dir, "connectors.yaml", "_meta_connectors") {
+    if meta.connectors.is_empty()
+        && let Ok(m) = load_yaml_metadata_section(dir, "connectors.yaml", "_meta_connectors")
+    {
         meta.connectors = m;
     }
 
@@ -103,9 +109,11 @@ fn load_yaml_metadata_section(
     let val: serde_yaml::Value =
         serde_yaml::from_str(&data).map_err(|e| TldError::Yaml(e.to_string()))?;
 
-    if let Some(mapping) = val.as_mapping() && let Some(sec_val) = mapping.get(serde_yaml::Value::String(section.to_string())) {
-        let m: HashMap<String, ResourceMetadata> = serde_yaml::from_value(sec_val.clone())
-            .map_err(|e| TldError::Yaml(e.to_string()))?;
+    if let Some(mapping) = val.as_mapping()
+        && let Some(sec_val) = mapping.get(serde_yaml::Value::String(section.to_string()))
+    {
+        let m: HashMap<String, ResourceMetadata> =
+            serde_yaml::from_value(sec_val.clone()).map_err(|e| TldError::Yaml(e.to_string()))?;
         return Ok(m);
     }
     Ok(HashMap::new())

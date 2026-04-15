@@ -67,7 +67,9 @@ pub fn from_export_response(
             },
         );
 
-        if let Some(meta) = &mut new_ws.meta && let Some(ts) = e.updated_at {
+        if let Some(meta) = &mut new_ws.meta
+            && let Some(ts) = e.updated_at
+        {
             meta.elements.insert(
                 ref_name,
                 ResourceMetadata {
@@ -98,7 +100,9 @@ pub fn from_export_response(
                     el.view_label = d.name.clone();
                 }
             }
-            if let Some(meta) = &mut new_ws.meta && let Some(ts) = d.updated_at {
+            if let Some(meta) = &mut new_ws.meta
+                && let Some(ts) = d.updated_at
+            {
                 meta.views.insert(
                     owner_ref,
                     ResourceMetadata {
@@ -154,7 +158,9 @@ pub fn from_export_response(
                 },
             );
 
-            if let Some(meta) = &mut new_ws.meta && let Some(ts) = c.updated_at {
+            if let Some(meta) = &mut new_ws.meta
+                && let Some(ts) = c.updated_at
+            {
                 meta.connectors.insert(
                     key,
                     ResourceMetadata {
