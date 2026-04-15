@@ -13,13 +13,55 @@ pub struct ResolvedCommand {
 
 pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
     let mut m = HashMap::new();
-    m.insert("go".to_string(), vec![ServerCommand { executable: "gopls".to_string(), args: vec![] }]);
-    m.insert("python".to_string(), vec![ServerCommand { executable: "pyright-langserver".to_string(), args: vec!["--stdio".to_string()] }]);
-    m.insert("rust".to_string(), vec![ServerCommand { executable: "rust-analyzer".to_string(), args: vec![] }]);
-    m.insert("typescript".to_string(), vec![ServerCommand { executable: "typescript-language-server".to_string(), args: vec!["--stdio".to_string()] }]);
-    m.insert("javascript".to_string(), vec![ServerCommand { executable: "typescript-language-server".to_string(), args: vec!["--stdio".to_string()] }]);
-    m.insert("c".to_string(), vec![ServerCommand { executable: "clangd".to_string(), args: vec![] }]);
-    m.insert("cpp".to_string(), vec![ServerCommand { executable: "clangd".to_string(), args: vec![] }]);
+    m.insert(
+        "go".to_string(),
+        vec![ServerCommand {
+            executable: "gopls".to_string(),
+            args: vec![],
+        }],
+    );
+    m.insert(
+        "python".to_string(),
+        vec![ServerCommand {
+            executable: "pyright-langserver".to_string(),
+            args: vec!["--stdio".to_string()],
+        }],
+    );
+    m.insert(
+        "rust".to_string(),
+        vec![ServerCommand {
+            executable: "rust-analyzer".to_string(),
+            args: vec![],
+        }],
+    );
+    m.insert(
+        "typescript".to_string(),
+        vec![ServerCommand {
+            executable: "typescript-language-server".to_string(),
+            args: vec!["--stdio".to_string()],
+        }],
+    );
+    m.insert(
+        "javascript".to_string(),
+        vec![ServerCommand {
+            executable: "typescript-language-server".to_string(),
+            args: vec!["--stdio".to_string()],
+        }],
+    );
+    m.insert(
+        "c".to_string(),
+        vec![ServerCommand {
+            executable: "clangd".to_string(),
+            args: vec![],
+        }],
+    );
+    m.insert(
+        "cpp".to_string(),
+        vec![ServerCommand {
+            executable: "clangd".to_string(),
+            args: vec![],
+        }],
+    );
     m
 }
 
@@ -50,10 +92,7 @@ pub async fn resolve_calls_with_lsp(
     use crate::analyzer::lsp::session::Session;
     use serde_json::json;
 
-    let root_uri = format!(
-        "file://{}",
-        root_dir.trim_end_matches('/')
-    );
+    let root_uri = format!("file://{}", root_dir.trim_end_matches('/'));
 
     for lang in unique_langs {
         let cmd = match resolve_command(lang) {

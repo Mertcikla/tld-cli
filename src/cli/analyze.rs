@@ -172,7 +172,9 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     if args.lsp {
         let unique_langs: Vec<&str> = {
             let mut seen = std::collections::HashSet::new();
-            result.symbols.iter()
+            result
+                .symbols
+                .iter()
                 .map(|s| s.technology.as_str())
                 .filter(|t| !t.is_empty() && seen.insert(*t))
                 .collect()

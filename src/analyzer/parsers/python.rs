@@ -1,12 +1,24 @@
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
-pub fn parse(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+pub fn parse(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     parse_declarations(node, source, path, language, result);
     parse_refs(node, source, path, language, result);
 }
 
-fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_declarations(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let decl_query_src = r#"
 (class_definition
   name: (identifier) @class_name
@@ -21,8 +33,12 @@ fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Languag
         Err(_) => return,
     };
 
-    let class_name_idx = query.capture_index_for_name("class_name").unwrap_or(u32::MAX);
-    let class_body_idx = query.capture_index_for_name("class_body").unwrap_or(u32::MAX);
+    let class_name_idx = query
+        .capture_index_for_name("class_name")
+        .unwrap_or(u32::MAX);
+    let class_body_idx = query
+        .capture_index_for_name("class_body")
+        .unwrap_or(u32::MAX);
     let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
 
     // Collect class body byte ranges to skip functions nested inside classes
@@ -70,11 +86,15 @@ fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Languag
         } else if let Some(name_node) = fn_name_node {
             // Only emit if not inside a class body.
             let fn_start = name_node.start_byte();
-            let inside_class = class_body_ranges.iter().any(|(s, e)| fn_start >= *s && fn_start < *e);
+            let inside_class = class_body_ranges
+                .iter()
+                .any(|(s, e)| fn_start >= *s && fn_start < *e);
             if !inside_class {
                 let outer = name_node.parent().unwrap_or(name_node);
                 let body = outer.child_by_field_name("body");
-                let description = body.map(|b| extract_docstring(&b, source)).unwrap_or_default();
+                let description = body
+                    .map(|b| extract_docstring(&b, source))
+                    .unwrap_or_default();
                 result.symbols.push(Symbol {
                     name: name_node.utf8_text(source).unwrap_or_default().to_string(),
                     kind: "function".to_string(),
@@ -108,7 +128,9 @@ fn parse_class_methods(
         Err(_) => return,
     };
 
-    let method_idx = query.capture_index_for_name("method_name").unwrap_or(u32::MAX);
+    let method_idx = query
+        .capture_index_for_name("method_name")
+        .unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, *body_node, source);
@@ -121,23 +143,33 @@ fn parse_class_methods(
                 // Also accept decorated_definition wrappers (e.g. @staticmethod).
                 let fn_node = name_node.parent().unwrap_or(name_node);
                 let fn_parent = fn_node.parent();
-                let is_direct = fn_parent.map(|p| {
-                    if p.id() == body_node.id() {
-                        true
-                    } else if p.kind() == "decorated_definition" {
-                        p.parent().map(|gp| gp.id() == body_node.id()).unwrap_or(false)
-                    } else {
-                        false
-                    }
-                }).unwrap_or(false);
+                let is_direct = fn_parent
+                    .map(|p| {
+                        if p.id() == body_node.id() {
+                            true
+                        } else if p.kind() == "decorated_definition" {
+                            p.parent()
+                                .map(|gp| gp.id() == body_node.id())
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        }
+                    })
+                    .unwrap_or(false);
                 if !is_direct {
                     continue;
                 }
 
                 let name = name_node.utf8_text(source).unwrap_or_default().to_string();
-                let kind = if name == "__init__" { "constructor" } else { "method" };
+                let kind = if name == "__init__" {
+                    "constructor"
+                } else {
+                    "method"
+                };
                 let fn_body = fn_node.child_by_field_name("body");
-                let description = fn_body.map(|b| extract_docstring(&b, source)).unwrap_or_default();
+                let description = fn_body
+                    .map(|b| extract_docstring(&b, source))
+                    .unwrap_or_default();
                 result.symbols.push(Symbol {
                     name,
                     kind: kind.to_string(),
@@ -173,7 +205,13 @@ fn extract_docstring(body_node: &Node, source: &[u8]) -> String {
     String::new()
 }
 
-fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_refs(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let ref_query_src = r#"
 (import_from_statement
   module_name: _ @module)
@@ -191,7 +229,9 @@ fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, resul
     };
 
     let module_idx = query.capture_index_for_name("module").unwrap_or(u32::MAX);
-    let import_idx = query.capture_index_for_name("import_name").unwrap_or(u32::MAX);
+    let import_idx = query
+        .capture_index_for_name("import_name")
+        .unwrap_or(u32::MAX);
     let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();

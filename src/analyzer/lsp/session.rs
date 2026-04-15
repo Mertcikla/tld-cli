@@ -1,10 +1,10 @@
+use crate::error::TldError;
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot};
-use serde_json::{json, Value};
-use crate::error::TldError;
 
 pub struct Session {
     child: Child,
@@ -12,7 +12,11 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn start(executable: &str, args: &[String], root_dir: &str) -> Result<Self, TldError> {
+    pub async fn start(
+        executable: &str,
+        args: &[String],
+        root_dir: &str,
+    ) -> Result<Self, TldError> {
         let mut child = Command::new(executable)
             .args(args)
             .current_dir(root_dir)
@@ -22,8 +26,14 @@ impl Session {
             .spawn()
             .map_err(|e| TldError::Generic(format!("Failed to start LSP {}: {}", executable, e)))?;
 
-        let stdin = child.stdin.take().ok_or_else(|| TldError::Generic("No stdin".to_string()))?;
-        let stdout = child.stdout.take().ok_or_else(|| TldError::Generic("No stdout".to_string()))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| TldError::Generic("No stdin".to_string()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| TldError::Generic("No stdout".to_string()))?;
 
         let (request_tx, mut request_rx) = mpsc::channel::<(Value, oneshot::Sender<Value>)>(100);
 
@@ -85,18 +95,25 @@ impl Session {
 
     pub async fn send_request(&self, params: Value) -> Result<Value, TldError> {
         let (tx, rx) = oneshot::channel();
-        self.request_tx.send((params, tx)).await
+        self.request_tx
+            .send((params, tx))
+            .await
             .map_err(|_| TldError::Generic("LSP channel closed".to_string()))?;
-        rx.await.map_err(|_| TldError::Generic("LSP response dropped".to_string()))
+        rx.await
+            .map_err(|_| TldError::Generic("LSP response dropped".to_string()))
     }
 
     pub async fn shutdown(&self) -> Result<(), TldError> {
-        let _ = self.send_request(json!({"method": "shutdown", "params": null})).await;
+        let _ = self
+            .send_request(json!({"method": "shutdown", "params": null}))
+            .await;
         Ok(())
     }
 }
 
-async fn read_lsp_message(reader: &mut BufReader<tokio::process::ChildStdout>) -> Result<Option<String>, std::io::Error> {
+async fn read_lsp_message(
+    reader: &mut BufReader<tokio::process::ChildStdout>,
+) -> Result<Option<String>, std::io::Error> {
     let mut line = String::new();
     let mut content_length: usize = 0;
 

@@ -85,22 +85,58 @@ impl TreeSitterService {
 
         match lang_name {
             "go" => {
-                parsers::go::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
+                parsers::go::parse(
+                    &tree.root_node(),
+                    source.as_bytes(),
+                    path,
+                    &language,
+                    &mut result,
+                );
             }
             "rust" => {
-                parsers::rust::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
+                parsers::rust::parse(
+                    &tree.root_node(),
+                    source.as_bytes(),
+                    path,
+                    &language,
+                    &mut result,
+                );
             }
             "cpp" => {
-                parsers::cpp::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
+                parsers::cpp::parse(
+                    &tree.root_node(),
+                    source.as_bytes(),
+                    path,
+                    &language,
+                    &mut result,
+                );
             }
             "java" => {
-                parsers::java::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
+                parsers::java::parse(
+                    &tree.root_node(),
+                    source.as_bytes(),
+                    path,
+                    &language,
+                    &mut result,
+                );
             }
             "python" => {
-                parsers::python::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
+                parsers::python::parse(
+                    &tree.root_node(),
+                    source.as_bytes(),
+                    path,
+                    &language,
+                    &mut result,
+                );
             }
             "typescript" | "javascript" | "tsx" => {
-                parsers::typescript::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
+                parsers::typescript::parse(
+                    &tree.root_node(),
+                    source.as_bytes(),
+                    path,
+                    &language,
+                    &mut result,
+                );
             }
             _ => {
                 // Guarded above by is_parser_implemented; this branch should not be reached.
@@ -123,7 +159,10 @@ impl TreeSitterService {
 /// lets us give a clear "not yet implemented" message rather than a generic
 /// tree-sitter error.
 fn is_parser_implemented(lang_name: &str) -> bool {
-    matches!(lang_name, "go" | "rust" | "cpp" | "java" | "python" | "typescript" | "javascript" | "tsx")
+    matches!(
+        lang_name,
+        "go" | "rust" | "cpp" | "java" | "python" | "typescript" | "javascript" | "tsx"
+    )
 }
 
 impl Service for TreeSitterService {

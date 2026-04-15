@@ -1,12 +1,24 @@
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
-pub fn parse(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+pub fn parse(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     parse_declarations(node, source, path, language, result);
     parse_refs(node, source, path, language, result);
 }
 
-fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_declarations(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let decl_query_src = r#"
 (class_declaration
   name: (type_identifier) @class_name
@@ -27,10 +39,18 @@ fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Languag
         Err(_) => return,
     };
 
-    let class_name_idx = query.capture_index_for_name("class_name").unwrap_or(u32::MAX);
-    let class_body_idx = query.capture_index_for_name("class_body").unwrap_or(u32::MAX);
-    let iface_idx = query.capture_index_for_name("iface_name").unwrap_or(u32::MAX);
-    let alias_idx = query.capture_index_for_name("alias_name").unwrap_or(u32::MAX);
+    let class_name_idx = query
+        .capture_index_for_name("class_name")
+        .unwrap_or(u32::MAX);
+    let class_body_idx = query
+        .capture_index_for_name("class_body")
+        .unwrap_or(u32::MAX);
+    let iface_idx = query
+        .capture_index_for_name("iface_name")
+        .unwrap_or(u32::MAX);
+    let alias_idx = query
+        .capture_index_for_name("alias_name")
+        .unwrap_or(u32::MAX);
     let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
 
     // Collect all classes first so we can process methods with parent context.
@@ -154,7 +174,9 @@ fn parse_class_members(
         Err(_) => return,
     };
 
-    let method_idx = query.capture_index_for_name("method_name").unwrap_or(u32::MAX);
+    let method_idx = query
+        .capture_index_for_name("method_name")
+        .unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, *body_node, source);
@@ -165,7 +187,11 @@ fn parse_class_members(
                 let name_node = cap.node;
                 let outer = name_node.parent().unwrap_or(name_node);
                 let name = name_node.utf8_text(source).unwrap_or_default().to_string();
-                let kind = if name == "constructor" { "constructor" } else { "method" };
+                let kind = if name == "constructor" {
+                    "constructor"
+                } else {
+                    "method"
+                };
                 result.symbols.push(Symbol {
                     name,
                     kind: kind.to_string(),
@@ -181,7 +207,13 @@ fn parse_class_members(
     }
 }
 
-fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_refs(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let ref_query_src = r#"
 (import_statement
   source: (string (string_fragment) @import_src))
@@ -195,7 +227,9 @@ fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, resul
         Err(_) => return,
     };
 
-    let import_idx = query.capture_index_for_name("import_src").unwrap_or(u32::MAX);
+    let import_idx = query
+        .capture_index_for_name("import_src")
+        .unwrap_or(u32::MAX);
     let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();

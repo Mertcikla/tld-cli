@@ -93,7 +93,9 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
             base_slug.clone()
         };
 
-        used_folder_slugs.entry(slug.clone()).or_insert(folder_path.clone());
+        used_folder_slugs
+            .entry(slug.clone())
+            .or_insert(folder_path.clone());
         folder_slug_by_path.insert(folder_path.clone(), slug);
     }
 
@@ -109,7 +111,10 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
             branch: ctx.branch.clone(),
             has_view: true,
             view_label: ctx.repo_name.clone(),
-            placements: vec![ViewPlacement { parent_ref: "root".to_string(), ..Default::default() }],
+            placements: vec![ViewPlacement {
+                parent_ref: "root".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         },
     );
@@ -138,7 +143,10 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
                 owner: ctx.owner.clone(),
                 branch: ctx.branch.clone(),
                 file_path: folder_path.to_string(),
-                placements: vec![ViewPlacement { parent_ref: parent_slug, ..Default::default() }],
+                placements: vec![ViewPlacement {
+                    parent_ref: parent_slug,
+                    ..Default::default()
+                }],
                 ..Default::default()
             },
         );
@@ -146,7 +154,9 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
 
     // --- Phase 5: file elements ---
     // Only create file elements for files that have at least one symbol.
-    let files_with_symbols: std::collections::HashSet<String> = result.symbols.iter()
+    let files_with_symbols: std::collections::HashSet<String> = result
+        .symbols
+        .iter()
         .map(|s| rel_from_base(&s.file_path, &scan_parent))
         .collect();
 
@@ -178,10 +188,15 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
             base_slug.clone()
         };
 
-        used_file_slugs.entry(slug.clone()).or_insert(rel_path.clone());
+        used_file_slugs
+            .entry(slug.clone())
+            .or_insert(rel_path.clone());
         file_slug_by_rel.insert(rel_path.clone(), slug.clone());
 
-        let parent_dir = Path::new(rel_path).parent().and_then(|p| p.to_str()).unwrap_or("");
+        let parent_dir = Path::new(rel_path)
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or("");
         let parent_slug = if parent_dir.is_empty() {
             repo_slug.clone()
         } else {
@@ -205,7 +220,10 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
                     branch: ctx.branch.clone(),
                     file_path: rel_path.clone(),
                     view_label: file_name.to_string(),
-                    placements: vec![ViewPlacement { parent_ref: parent_slug, ..Default::default() }],
+                    placements: vec![ViewPlacement {
+                        parent_ref: parent_slug,
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 },
             );
@@ -214,13 +232,14 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
 
     // --- Phase 6: symbol elements (sort by file+line so classes come before methods) ---
     let mut symbols_sorted = result.symbols.clone();
-    symbols_sorted.sort_by(|a, b| {
-        (&a.file_path, a.line).cmp(&(&b.file_path, b.line))
-    });
+    symbols_sorted.sort_by(|a, b| (&a.file_path, a.line).cmp(&(&b.file_path, b.line)));
 
     for sym in &symbols_sorted {
         let rel = rel_from_base(&sym.file_path, &scan_parent);
-        let file_slug = file_slug_by_rel.get(&rel).cloned().unwrap_or_else(|| slugify(&rel));
+        let file_slug = file_slug_by_rel
+            .get(&rel)
+            .cloned()
+            .unwrap_or_else(|| slugify(&rel));
 
         let parent_slug = symbol_parent_slug(sym, &file_slug, &elements);
         let base_sym_slug = slugify(&sym.name);
@@ -270,7 +289,10 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
                 file_path: rel.clone(),
                 symbol: sym.name.clone(),
                 description: sym.description.clone(),
-                placements: vec![ViewPlacement { parent_ref: parent_slug, ..Default::default() }],
+                placements: vec![ViewPlacement {
+                    parent_ref: parent_slug,
+                    ..Default::default()
+                }],
                 ..Default::default()
             },
         );
@@ -306,7 +328,8 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
         };
 
         // View = nearest common ancestor folder.
-        let tgt_rel_path = elements.get(&target_slug)
+        let tgt_rel_path = elements
+            .get(&target_slug)
             .map(|e| e.file_path.clone())
             .unwrap_or_default();
         let view = nearest_common_ancestor_folder_slug(
@@ -353,10 +376,12 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
             continue;
         }
 
-        let src_rel = elements.get(&src_slug)
+        let src_rel = elements
+            .get(&src_slug)
             .map(|e| e.file_path.clone())
             .unwrap_or_default();
-        let tgt_rel = elements.get(&tgt_slug)
+        let tgt_rel = elements
+            .get(&tgt_slug)
             .map(|e| e.file_path.clone())
             .unwrap_or_default();
 
@@ -382,7 +407,10 @@ pub fn build(result: &AnalysisResult, ctx: &BuildContext) -> BuildOutput {
         }
     }
 
-    BuildOutput { elements, connectors }
+    BuildOutput {
+        elements,
+        connectors,
+    }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -400,12 +428,26 @@ fn rel_from_base(abs: &str, base: &str) -> String {
 }
 
 fn should_skip_file(rel: &str) -> bool {
-    let ext = Path::new(rel).extension().and_then(|e| e.to_str()).unwrap_or("");
+    let ext = Path::new(rel)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
     // Skip lock files, YAML configs, markdown, build files, etc.
     matches!(
         ext,
-        "lock" | "toml" | "json" | "md" | "txt" | "yaml" | "yml"
-            | "sum" | "mod" | "gitignore" | "xml" | "gradle" | "properties"
+        "lock"
+            | "toml"
+            | "json"
+            | "md"
+            | "txt"
+            | "yaml"
+            | "yml"
+            | "sum"
+            | "mod"
+            | "gitignore"
+            | "xml"
+            | "gradle"
+            | "properties"
     ) || rel.contains(".git/")
         || rel.contains("node_modules/")
         || rel.contains("target/")
@@ -432,7 +474,10 @@ fn folder_parent_slug(
     folder_slug_by_path: &HashMap<String, String>,
     repo_slug: &str,
 ) -> String {
-    let parent = Path::new(folder_path).parent().and_then(|p| p.to_str()).unwrap_or("");
+    let parent = Path::new(folder_path)
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("");
     if parent.is_empty() {
         return repo_slug.to_string();
     }
@@ -474,8 +519,8 @@ fn symbol_parent_slug(
         sym.technology.as_str(),
         "typescript" | "javascript" | "java" | "python"
     );
-    let cpp_class_member = sym.technology == "cpp"
-        && matches!(sym.kind.as_str(), "constructor" | "destructor");
+    let cpp_class_member =
+        sym.technology == "cpp" && matches!(sym.kind.as_str(), "constructor" | "destructor");
 
     if (uses_class_parent || cpp_class_member) && !sym.parent.is_empty() {
         let parent_slug = slugify(&sym.parent);
@@ -496,9 +541,7 @@ fn find_containing_symbol<'a>(
     symbols
         .iter()
         .filter(|s| {
-            s.file_path == file_path
-                && s.line <= line
-                && (s.end_line == 0 || line <= s.end_line)
+            s.file_path == file_path && s.line <= line && (s.end_line == 0 || line <= s.end_line)
         })
         .min_by_key(|s| {
             // Narrowest range = most specific. Prefer non-zero end_line.
@@ -547,10 +590,7 @@ fn resolve_import_target(
     // Case 2: package/module path — try matching the last component against known folders/files.
     // Go: "github.com/example/myproject/internal/service" -> last component "service"
     // Python: "models", "services" -> match against file slugs
-    let last_component = target_path
-        .rsplit(['/', '.'])
-        .next()
-        .unwrap_or(target_path);
+    let last_component = target_path.rsplit(['/', '.']).next().unwrap_or(target_path);
 
     // Try as file slug (e.g., Python "models" -> "models-py" file)
     let file_slug = slugify(last_component);
@@ -600,7 +640,9 @@ fn normalize_path(path: &str) -> String {
     for part in path.split('/') {
         match part {
             "." | "" => {}
-            ".." => { components.pop(); }
+            ".." => {
+                components.pop();
+            }
             p => components.push(p),
         }
     }
@@ -615,8 +657,14 @@ fn nearest_common_ancestor_folder_slug(
     repo_slug: &str,
 ) -> String {
     // Get directory parts (strip filenames).
-    let src_dir = Path::new(src_file_rel).parent().and_then(|p| p.to_str()).unwrap_or("");
-    let tgt_dir = Path::new(tgt_file_rel).parent().and_then(|p| p.to_str()).unwrap_or("");
+    let src_dir = Path::new(src_file_rel)
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("");
+    let tgt_dir = Path::new(tgt_file_rel)
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("");
 
     let src_parts: Vec<&str> = if src_dir.is_empty() {
         vec![]

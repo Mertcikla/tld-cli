@@ -40,7 +40,9 @@ pub async fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
                           old_val: &str|
      -> Result<(), TldError> {
         if let Some(new) = new_val
-            && !old_val.is_empty() && old_val != new {
+            && !old_val.is_empty()
+            && old_val != new
+        {
             return Err(TldError::Generic(format!(
                 "Conflict: field '{}' for element '{}' is already set to '{}'. Use 'tld update' to change it.",
                 field_name, ref_name, old_val

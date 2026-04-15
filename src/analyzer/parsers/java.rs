@@ -1,12 +1,24 @@
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
-pub fn parse(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+pub fn parse(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     parse_declarations(node, source, path, language, result);
     parse_refs(node, source, path, language, result);
 }
 
-fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_declarations(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let decl_query_src = r#"
 (class_declaration
   name: (identifier) @class_name
@@ -22,10 +34,18 @@ fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Languag
         Err(_) => return,
     };
 
-    let class_name_idx = query.capture_index_for_name("class_name").unwrap_or(u32::MAX);
-    let class_body_idx = query.capture_index_for_name("class_body").unwrap_or(u32::MAX);
-    let iface_name_idx = query.capture_index_for_name("iface_name").unwrap_or(u32::MAX);
-    let iface_body_idx = query.capture_index_for_name("iface_body").unwrap_or(u32::MAX);
+    let class_name_idx = query
+        .capture_index_for_name("class_name")
+        .unwrap_or(u32::MAX);
+    let class_body_idx = query
+        .capture_index_for_name("class_body")
+        .unwrap_or(u32::MAX);
+    let iface_name_idx = query
+        .capture_index_for_name("iface_name")
+        .unwrap_or(u32::MAX);
+    let iface_body_idx = query
+        .capture_index_for_name("iface_body")
+        .unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, *node, source);
@@ -105,8 +125,12 @@ fn parse_class_members(
         Err(_) => return,
     };
 
-    let method_idx = query.capture_index_for_name("method_name").unwrap_or(u32::MAX);
-    let ctor_idx = query.capture_index_for_name("ctor_name").unwrap_or(u32::MAX);
+    let method_idx = query
+        .capture_index_for_name("method_name")
+        .unwrap_or(u32::MAX);
+    let ctor_idx = query
+        .capture_index_for_name("ctor_name")
+        .unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, *body_node, source);
@@ -119,7 +143,11 @@ fn parse_class_members(
             if idx == method_idx {
                 let decl_node = cap_node.parent().unwrap_or(cap_node);
                 // Only direct children of class body.
-                if decl_node.parent().map(|p| p.id() != body_node.id()).unwrap_or(true) {
+                if decl_node
+                    .parent()
+                    .map(|p| p.id() != body_node.id())
+                    .unwrap_or(true)
+                {
                     continue;
                 }
                 result.symbols.push(Symbol {
@@ -134,7 +162,11 @@ fn parse_class_members(
                 });
             } else if idx == ctor_idx {
                 let decl_node = cap_node.parent().unwrap_or(cap_node);
-                if decl_node.parent().map(|p| p.id() != body_node.id()).unwrap_or(true) {
+                if decl_node
+                    .parent()
+                    .map(|p| p.id() != body_node.id())
+                    .unwrap_or(true)
+                {
                     continue;
                 }
                 result.symbols.push(Symbol {
@@ -170,7 +202,9 @@ fn parse_interface_members(
         Err(_) => return,
     };
 
-    let method_idx = query.capture_index_for_name("method_name").unwrap_or(u32::MAX);
+    let method_idx = query
+        .capture_index_for_name("method_name")
+        .unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, *body_node, source);
@@ -195,7 +229,13 @@ fn parse_interface_members(
     }
 }
 
-fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_refs(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let ref_query_src = r#"
 (import_declaration) @import
 
@@ -209,7 +249,9 @@ fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, resul
     };
 
     let import_idx = query.capture_index_for_name("import").unwrap_or(u32::MAX);
-    let call_idx = query.capture_index_for_name("call_name").unwrap_or(u32::MAX);
+    let call_idx = query
+        .capture_index_for_name("call_name")
+        .unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, *node, source);
@@ -227,7 +269,11 @@ fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, resul
                     .trim_end_matches(';')
                     .trim();
                 if !import_path.is_empty() {
-                    let name = import_path.rsplit('.').next().unwrap_or(import_path).to_string();
+                    let name = import_path
+                        .rsplit('.')
+                        .next()
+                        .unwrap_or(import_path)
+                        .to_string();
                     result.refs.push(Ref {
                         name,
                         kind: "import".to_string(),
@@ -257,11 +303,19 @@ fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, resul
 fn find_comment(node: &Node, source: &[u8]) -> String {
     if let Some(prev) = node.prev_named_sibling() {
         if (prev.kind() == "line_comment" || prev.kind() == "block_comment")
-            && node.start_position().row.saturating_sub(prev.end_position().row) <= 1
+            && node
+                .start_position()
+                .row
+                .saturating_sub(prev.end_position().row)
+                <= 1
         {
             let text = prev.utf8_text(source).unwrap_or_default().trim();
             let text = text.strip_prefix("//").unwrap_or(text);
-            let text = text.strip_prefix("/*").unwrap_or(text).strip_suffix("*/").unwrap_or(text);
+            let text = text
+                .strip_prefix("/*")
+                .unwrap_or(text)
+                .strip_suffix("*/")
+                .unwrap_or(text);
             return text.trim().to_string();
         }
     }

@@ -1,12 +1,24 @@
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
-pub fn parse(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+pub fn parse(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     parse_declarations(node, source, path, language, result);
     parse_refs(node, source, path, language, result);
 }
 
-fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_declarations(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let decl_query_src = r#"
 (class_specifier
   name: (type_identifier) @class_name
@@ -28,12 +40,24 @@ fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Languag
         Err(_) => return,
     };
 
-    let class_name_idx = query.capture_index_for_name("class_name").unwrap_or(u32::MAX);
-    let class_body_idx = query.capture_index_for_name("class_body").unwrap_or(u32::MAX);
-    let struct_name_idx = query.capture_index_for_name("struct_name").unwrap_or(u32::MAX);
-    let struct_body_idx = query.capture_index_for_name("struct_body").unwrap_or(u32::MAX);
-    let enum_name_idx = query.capture_index_for_name("enum_name").unwrap_or(u32::MAX);
-    let fn_decl_idx = query.capture_index_for_name("fn_declarator").unwrap_or(u32::MAX);
+    let class_name_idx = query
+        .capture_index_for_name("class_name")
+        .unwrap_or(u32::MAX);
+    let class_body_idx = query
+        .capture_index_for_name("class_body")
+        .unwrap_or(u32::MAX);
+    let struct_name_idx = query
+        .capture_index_for_name("struct_name")
+        .unwrap_or(u32::MAX);
+    let struct_body_idx = query
+        .capture_index_for_name("struct_body")
+        .unwrap_or(u32::MAX);
+    let enum_name_idx = query
+        .capture_index_for_name("enum_name")
+        .unwrap_or(u32::MAX);
+    let fn_decl_idx = query
+        .capture_index_for_name("fn_declarator")
+        .unwrap_or(u32::MAX);
 
     let mut type_body_ranges: Vec<(usize, usize)> = Vec::new();
 
@@ -110,7 +134,9 @@ fn parse_declarations(node: &Node, source: &[u8], path: &str, language: &Languag
         } else if let Some(decl_node) = fn_decl_node {
             // Skip functions inside class/struct bodies.
             let fn_start = decl_node.start_byte();
-            let inside_type = type_body_ranges.iter().any(|(s, e)| fn_start >= *s && fn_start < *e);
+            let inside_type = type_body_ranges
+                .iter()
+                .any(|(s, e)| fn_start >= *s && fn_start < *e);
             if inside_type {
                 continue;
             }
@@ -165,9 +191,15 @@ fn parse_type_members(
         Err(_) => return,
     };
 
-    let decl_idx = query.capture_index_for_name("method_declarator").unwrap_or(u32::MAX);
-    let field_decl_idx = query.capture_index_for_name("decl_member").unwrap_or(u32::MAX);
-    let ctor_decl_idx = query.capture_index_for_name("ctor_decl_member").unwrap_or(u32::MAX);
+    let decl_idx = query
+        .capture_index_for_name("method_declarator")
+        .unwrap_or(u32::MAX);
+    let field_decl_idx = query
+        .capture_index_for_name("decl_member")
+        .unwrap_or(u32::MAX);
+    let ctor_decl_idx = query
+        .capture_index_for_name("ctor_decl_member")
+        .unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, *body_node, source);
@@ -234,7 +266,9 @@ fn parse_type_members(
 fn cpp_scoped_kind(decl_node: &Node, source: &[u8]) -> (String, String) {
     // Walk down through function_declarator to find the actual name node.
     let inner = if decl_node.kind() == "function_declarator" {
-        decl_node.child_by_field_name("declarator").unwrap_or(*decl_node)
+        decl_node
+            .child_by_field_name("declarator")
+            .unwrap_or(*decl_node)
     } else {
         *decl_node
     };
@@ -286,7 +320,13 @@ fn cpp_scoped_kind(decl_node: &Node, source: &[u8]) -> (String, String) {
     ("function".to_string(), String::new())
 }
 
-fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, result: &mut AnalysisResult) {
+fn parse_refs(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    result: &mut AnalysisResult,
+) {
     let ref_query_src = r#"
 (preproc_include path: _ @include_path)
 (call_expression function: _ @callee)
@@ -297,7 +337,9 @@ fn parse_refs(node: &Node, source: &[u8], path: &str, language: &Language, resul
         Err(_) => return,
     };
 
-    let include_idx = query.capture_index_for_name("include_path").unwrap_or(u32::MAX);
+    let include_idx = query
+        .capture_index_for_name("include_path")
+        .unwrap_or(u32::MAX);
     let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
 
     let mut cursor = QueryCursor::new();
