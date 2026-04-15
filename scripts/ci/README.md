@@ -1,0 +1,5 @@
+Use [tld-check.yml](./tld-check.yml) on pull requests when you want validation feedback without mutating the remote workspace. It is the safer default for teams that want architecture checks to behave like linting in review, and it is the right starting point for monorepos where only some paths should trigger diagram validation.
+
+Use [tld-apply.yml](./tld-apply.yml) on merges to the default branch when your repository is the source of truth for diagrams. Store `TLD_API_KEY` as a repository or environment secret in GitHub Actions before enabling the workflow, and keep `fetch-depth: 0` so `tld analyze --changed-since` can diff against the previous commit.
+
+For monorepos, narrow the workflow `paths` filters and cache scope so only the repositories that own the relevant `tld/` workspace trigger runs. When the cache restores an existing workspace, `--changed-since` is the fast path; on a cold cache, prefer a full `tld analyze .` so the local YAML state is rebuilt deterministically before apply.

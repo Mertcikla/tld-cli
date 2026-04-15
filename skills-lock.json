@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "skill-writer": {
+      "source": "pytorch/pytorch",
+      "sourceType": "github",
+      "computedHash": "c220867183e2f6a32290b0c87d6dcc56ce507154e20ae7cb64ad91bee2d4677e"
+    }
+  }
+}

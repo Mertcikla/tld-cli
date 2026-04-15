@@ -1,0 +1,25 @@
+name: tld diagram check
+
+on:
+  pull_request:
+    paths:
+      - 'tld/**'
+      - '**/*.go'
+      - '**/*.ts'
+      - '**/*.tsx'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tld
+        run: |
+          curl -sSL https://tldiagram.com/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Validate workspace
+        env:
+          TLD_API_KEY: ${{ secrets.TLD_API_KEY }}
+        run: tld check --strict

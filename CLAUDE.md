@@ -4,102 +4,112 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**tld** is a CLI for the tlDiagram.com architecture diagramming system. Users define diagrams, objects, edges, and drill-down links as YAML files, preview changes with `tld plan`, and apply them atomically to a diag backend server via gRPC.
+**tld** is a CLI for the tlDiagram.com architecture diagramming system. The workspace uses the unified `element/view/connector` model. New work should only touch `elements.yaml` and `connectors.yaml`; `tld plan`, `tld apply`, `tld export`, and `tld pull` bridge that workspace onto the backend's current request and export shapes.
 
 ## Development commands
 
+The project is built in **Rust**.
+
 ```bash
-make build        # Compile binary: go build -o tld .
-make test         # Full test suite (all packages)
-make test-unit    # Unit tests: workspace/, planner/, reporter/
-make test-cmd     # CLI command tests: cmd/
-make test-stage4  # Only TestApplyCmd (integration with mock gRPC server)
+make build        # Compile binary: cargo build
+make dev          # Run with args: cargo run -- <args>
+make test         # Run all tests: cargo test
+make fmt          # Format code: cargo fmt
+make lint         # Lint code: cargo clippy
+make install      # Install to path: cargo install --path .
 ```
-
-## Release process
-
-The project uses **Semantic Release** to automate versioning and tagging based on Conventional Commits.
-- **Workflow:** On push to `main`, the `Tag` workflow runs `semantic-release`.
-- **Versioning:** It analyzes commits (feat/fix/etc.), and creates a new git tag (e.g., `v1.2.3`).
-- **Artifacts:** Tag pushes trigger the `Release` workflow, which runs **GoReleaser** to build binaries and create the GitHub release.
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/) for automated releases.
 
 Run a single test:
 ```bash
-go test ./cmd/... -run TestPlanCmd -count=1
-go test ./workspace/... -run TestLoader -count=1
+cargo test --package tld --lib workspace::tests::test_load -- --nocapture
 ```
 
 ## Architecture
 
-### Data flow
+### Data flow (Rust)
 
 ```
 YAML files in workspace/ (usually ./tld/)
-  → workspace.Load()     - parse all YAML into a Workspace struct
-  → ws.Validate()        - check refs, cycles, required fields
-  → planner.Build()      - convert to gRPC ApplyPlanRequest + topo-sorted DiagramOrder
-  → planner.RenderPlanMarkdown() - human-readable preview
-  → client.ApplyPlan()   - gRPC call to diag backend
-  → reporter.RenderExecutionMarkdown() - execution summary
+  → workspace::load()     - parse all YAML into a Workspace struct
+  → ws.validate()         - check refs, cycles, required fields
+  → planner::build()      - convert to gRPC ApplyPlanRequest + topo-sorted view order
+  → planner::render_plan_markdown() - human-readable preview
+  → client::apply_plan()  - gRPC call to diag backend
+  → output::print_*       - render formatted text or JSON results
 ```
 
-### Packages
+### Modules (src/)
 
-- **`workspace/`** - load/validate/write/delete workspace YAML. `merger.go` handles surgical three-way merges using `yaml.Node`. `writer.go` handles cascading renames.
-- **`planner/`** - `Build()` maps workspace to `ApplyPlanRequest`.
-- **`reporter/`** - renders execution result markdown.
-- **`client/`** - gRPC client factory with bearer-token interceptor.
-- **`cmd/`** - Cobra commands. `root.go` auto-detects `./tld/` directory.
+- **`workspace/`** - load/validate/write/delete workspace YAML. Handles surgical three-way merges using `yaml-rust`.
+- **`planner/`** - `build()` maps workspace to `ApplyPlanRequest`.
+- **`analyzer/`** - `treesitter` based code analysis for symbol extraction.
+- **`client/`** - gRPC client using `tonic`.
+- **`cli/`** - Command definitions using `clap`. Mirrors the expected CLI structure.
+- **`output/`** - Formatting and terminal UI helpers (spinners, tables, colors).
 
 ### Command tree
 
 ```
 tld
-├── init [dir]         - initializes ./tld/ with diagrams.yaml, objects.yaml, etc.
+├── init               - initializes .tld/ with .tld.yaml, elements.yaml, and connectors.yaml
 ├── login
 ├── validate
+├── views              - summarize derived view structure and per-view counts
 ├── plan [-o file]
-├── apply [--auto-approve]
+├── apply [--force]
 ├── pull               - surgical three-way merge from server state
 ├── diff               - git-style diff between local and server state
 ├── status             - show sync status and merge conflicts
-├── rename
-│   ├── diagram <old> <new> - rename diagram ref and update all usages
-│   └── object <old> <new>  - rename object ref and update all usages
-├── create
-│   ├── diagram <name> [--ref --description --level-label --parent]
-│   └── object <diagram_ref> <name> <type> [--ref --description --technology --url --position-x --position-y]
-├── connect
-│   └── objects <diagram_ref> --from --to [--label --relationship-type --direction --edge-type]
-├── add
-│   └── link --from --to [--object]
-└── remove
-    ├── diagram <ref>
-    ├── object <ref>
-    ├── edge --diagram --from --to
-    └── link --from --to [--object]
+├── add <name>         - adds or updates an element
+├── connect            - adds a connector between two elements
+├── remove             - removes workspace resources
+├── analyze <path>     - extracts symbols from source files
+└── check              - check workspace for architectural issues
 ```
 
 ### Workspace file layout
 
 ```
 ~/.config/tldiagram/tld.yaml  # Global config: API key, org slug
-./tld/
-  ├── diagrams.yaml           # All diagrams
-  ├── objects.yaml            # All objects
-  ├── edges.yaml              # All edges
-  ├── links.yaml              # All drill-down links
+.tld/
+  ├── .tld.yaml              # Workspace config: project metadata, repositories, excludes
+  ├── elements.yaml           # Elements + placements + canonical-view ownership
+  ├── connectors.yaml         # Connectors inside element-owned views
   └── .tld.lock               # Sync state, hash, and metadata at last sync
 ```
 
+Local workspaces should only contain `elements.yaml`, `connectors.yaml`, and `.tld.lock`.
+
 ### Key patterns
 
-- All commands accept `-w <dir>` (defaults to `./tld` if it exists, else `.`).
+- All commands accept `-w <dir>` (global flag).
 - `pull` uses surgical merging to preserve local comments and formatting.
-- `rename` cascades changes to all files locally.
+- `analyze` uses tree-sitter to build the architecture plan from source code.
 - Version conflicts are detected during `pull` (merge conflicts) and `apply` (server-side version check).
-- `diff` uses `git diff --no-index` to compare local state with a temporary export of the server state.
+- `diff` compares local state with remote state.
 
-- Tests use `t.TempDir()` + helper functions from `cmd/testhelper_test.go`.
+- Tests use `tempfile` for workspace isolation.
+
+## CI & Release
+
+**Proto files** live in https://github.com/Mertcikla/tld-proto.git.
+The `diag-proto` Rust crate (`proto/rust/`) is a **path dependency** — `tld` links directly to it.
+
+- **Locally**: clone `tld-proto` as a sibling `../proto/` directory; `cargo build` just works.
+- **CI**: workflows must clone tld-proto into the expected relative path before `cargo build`.
+  ```yaml
+  - uses: actions/checkout@v4
+    with:
+      repository: Mertcikla/tld-proto
+      path: proto   # checked out at <workspace>/proto, sibling of tld
+  ```
+- **Updating protos**: edit `.proto` files in the proto repo, run `cd ../proto && buf generate`, then commit the updated `rust/src/diag.v1.rs` and `diag.v1.tonic.rs` to the proto repo.
+- No `build.rs`, no `protoc`, no `TLD_PROTO_PATH` env var needed.
+
+**Release flow** (`make release`):
+- Bumps patch version, runs `git-cliff --tag vX.Y.Z` to update `CHANGELOG.md`, commits, tags, and pushes.
+- Pushing the tag triggers `.github/workflows/release.yml` which cross-compiles for 6 targets and creates a GitHub Release.
+- `make changelog` regenerates the full `CHANGELOG.md` without tagging.
+- Requires `git-cliff` locally: `cargo install git-cliff`
+
+**Changelog config:** `cliff.toml` — groups `feat`/`fix`/`perf`/`refactor`/`docs`; skips `ci`/`chore`/`test`/`style`.

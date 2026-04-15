@@ -2,3 +2,11 @@ build/
 workdir/
 coverage.out
 .DS_Store
+.tld.yaml
+.tld/*
+scripts/test-analyze-codebase.sh
+
+
+# Added by cargo
+
+/target
