@@ -89,3 +89,17 @@ Local workspaces should only contain `elements.yaml`, `connectors.yaml`, and `.t
 - `diff` compares local state with remote state.
 
 - Tests use `tempfile` for workspace isolation.
+
+## CI & Release
+
+**Proto files** live in https://github.com/Mertcikla/tld-proto.git (not vendored).
+`build.rs` reads `TLD_PROTO_PATH` env var for the proto repo root; falls back to the hardcoded local sibling path.
+In CI, the workflows clone that repo and set the env var automatically.
+
+**Release flow** (`make release`):
+- Bumps patch version, runs `git-cliff --tag vX.Y.Z` to update `CHANGELOG.md`, commits, tags, and pushes.
+- Pushing the tag triggers `.github/workflows/release.yml` which cross-compiles for 6 targets and creates a GitHub Release.
+- `make changelog` regenerates the full `CHANGELOG.md` without tagging.
+- Requires `git-cliff` locally: `cargo install git-cliff`
+
+**Changelog config:** `cliff.toml` — groups `feat`/`fix`/`perf`/`refactor`/`docs`; skips `ci`/`chore`/`test`/`style`.
