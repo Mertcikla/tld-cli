@@ -3,6 +3,7 @@
 pub mod proto {
     pub mod diag {
         pub mod v1 {
+            #![allow(clippy::all)]
             tonic::include_proto!("diag.v1");
         }
     }

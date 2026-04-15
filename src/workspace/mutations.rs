@@ -212,10 +212,8 @@ impl Workspace {
         let new_ref = conn.resource_ref();
 
         // Update metadata if present
-        if let Some(meta) = &mut self.meta {
-            if let Some(m) = meta.connectors.remove(ref_name) {
-                meta.connectors.insert(new_ref.clone(), m);
-            }
+        if let Some(meta) = &mut self.meta && let Some(m) = meta.connectors.remove(ref_name) {
+            meta.connectors.insert(new_ref.clone(), m);
         }
 
         self.connectors.insert(new_ref, conn);

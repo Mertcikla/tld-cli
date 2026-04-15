@@ -91,7 +91,7 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
 
     // Conflicts
     if !resp.conflicts.is_empty() {
-        println!("");
+        println!();
         output::print_warn(&format!("{} conflicts detected!", resp.conflicts.len()));
         for conflict in &resp.conflicts {
             println!(
@@ -103,7 +103,7 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
 
     // Drift
     if !resp.drift.is_empty() {
-        println!("");
+        println!();
         output::print_info(&format!("{} drift items detected.", resp.drift.len()));
         for drift in &resp.drift {
             println!(

@@ -14,16 +14,9 @@ impl fmt::Display for ValidationError {
     }
 }
 
+#[derive(Default)]
 pub struct ValidationOptions {
     pub skip_symbols: bool,
-}
-
-impl Default for ValidationOptions {
-    fn default() -> Self {
-        Self {
-            skip_symbols: false,
-        }
-    }
 }
 
 impl Workspace {
@@ -230,16 +223,15 @@ impl Workspace {
 
             if let Ok(commit_time) =
                 crate::workspace::get_file_last_commit_at(&self.dir, &element.file_path)
+                && commit_time > m.updated_at
             {
-                if commit_time > m.updated_at {
-                    outdated.push(format!(
-                        "elements.yaml[{}]: file {} changed {}, diagram last synced {}",
-                        ref_name,
-                        element.file_path,
-                        commit_time.format("%Y-%m-%d %H:%M:%S"),
-                        m.updated_at.format("%Y-%m-%d %H:%M:%S")
-                    ));
-                }
+                outdated.push(format!(
+                    "elements.yaml[{}]: file {} changed {}, diagram last synced {}",
+                    ref_name,
+                    element.file_path,
+                    commit_time.format("%Y-%m-%d %H:%M:%S"),
+                    m.updated_at.format("%Y-%m-%d %H:%M:%S")
+                ));
             }
         }
         outdated

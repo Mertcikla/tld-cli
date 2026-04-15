@@ -280,34 +280,33 @@ fn find_doc_comment(node: &Node, source: &[u8]) -> String {
     // Check for line_comment or block_comment siblings immediately above
     if let Some(prev) = node.prev_named_sibling() {
         let kind = prev.kind();
-        if kind == "line_comment" || kind == "block_comment" || kind == "doc_comment" {
-            if node
+        if (kind == "line_comment" || kind == "block_comment" || kind == "doc_comment")
+            && node
                 .start_position()
                 .row
                 .saturating_sub(prev.end_position().row)
                 <= 1
-            {
-                let text = prev.utf8_text(source).unwrap_or_default().trim();
-                // Strip `///`, `//!`, `//`, `/*`, `*/`
-                let text = text
-                    .lines()
-                    .map(|l| {
-                        l.trim()
-                            .strip_prefix("///")
-                            .or_else(|| l.trim().strip_prefix("//!"))
-                            .or_else(|| l.trim().strip_prefix("//"))
-                            .or_else(|| l.trim().strip_prefix("/**"))
-                            .or_else(|| l.trim().strip_prefix("/*"))
-                            .unwrap_or(l.trim())
-                            .trim_end_matches("*/")
-                            .trim()
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .trim()
-                    .to_string();
-                return text;
-            }
+        {
+            let text = prev.utf8_text(source).unwrap_or_default().trim();
+            // Strip `///`, `//!`, `//`, `/*`, `*/`
+            let text = text
+                .lines()
+                .map(|l| {
+                    l.trim()
+                        .strip_prefix("///")
+                        .or_else(|| l.trim().strip_prefix("//!"))
+                        .or_else(|| l.trim().strip_prefix("//"))
+                        .or_else(|| l.trim().strip_prefix("/**"))
+                        .or_else(|| l.trim().strip_prefix("/*"))
+                        .unwrap_or(l.trim())
+                        .trim_end_matches("*/")
+                        .trim()
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+                .trim()
+                .to_string();
+            return text;
         }
     }
     String::new()

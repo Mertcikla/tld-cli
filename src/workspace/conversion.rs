@@ -67,17 +67,15 @@ pub fn from_export_response(
             },
         );
 
-        if let Some(meta) = &mut new_ws.meta {
-            if let Some(ts) = e.updated_at {
-                meta.elements.insert(
-                    ref_name,
-                    ResourceMetadata {
-                        id: e.id,
-                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
-                        conflict: false,
-                    },
-                );
-            }
+        if let Some(meta) = &mut new_ws.meta && let Some(ts) = e.updated_at {
+            meta.elements.insert(
+                ref_name,
+                ResourceMetadata {
+                    id: e.id,
+                    updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
+                    conflict: false,
+                },
+            );
         }
     }
 
@@ -100,17 +98,15 @@ pub fn from_export_response(
                     el.view_label = d.name.clone();
                 }
             }
-            if let Some(meta) = &mut new_ws.meta {
-                if let Some(ts) = d.updated_at {
-                    meta.views.insert(
-                        owner_ref,
-                        ResourceMetadata {
-                            id: d.id,
-                            updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
-                            conflict: false,
-                        },
-                    );
-                }
+            if let Some(meta) = &mut new_ws.meta && let Some(ts) = d.updated_at {
+                meta.views.insert(
+                    owner_ref,
+                    ResourceMetadata {
+                        id: d.id,
+                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
+                        conflict: false,
+                    },
+                );
             }
         }
     }
@@ -158,17 +154,15 @@ pub fn from_export_response(
                 },
             );
 
-            if let Some(meta) = &mut new_ws.meta {
-                if let Some(ts) = c.updated_at {
-                    meta.connectors.insert(
-                        key,
-                        ResourceMetadata {
-                            id: c.id,
-                            updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
-                            conflict: false,
-                        },
-                    );
-                }
+            if let Some(meta) = &mut new_ws.meta && let Some(ts) = c.updated_at {
+                meta.connectors.insert(
+                    key,
+                    ResourceMetadata {
+                        id: c.id,
+                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos as u32).unwrap(),
+                        conflict: false,
+                    },
+                );
             }
         }
     }

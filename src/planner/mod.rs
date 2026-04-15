@@ -54,24 +54,20 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             plan_el.placements.push(p);
         }
 
-        if !recreate_ids {
-            if let Some(meta) = &ws.meta {
-                if let Some(m) = meta.elements.get(ref_name) {
-                    plan_el.id = Some(m.id);
-                    plan_el.updated_at = Some(Timestamp {
-                        seconds: m.updated_at.timestamp(),
-                        nanos: m.updated_at.timestamp_subsec_nanos() as i32,
-                    });
-                }
-                if element.has_view {
-                    if let Some(m) = meta.views.get(ref_name) {
-                        plan_el.view_id = Some(m.id);
-                        plan_el.view_updated_at = Some(Timestamp {
-                            seconds: m.updated_at.timestamp(),
-                            nanos: m.updated_at.timestamp_subsec_nanos() as i32,
-                        });
-                    }
-                }
+        if !recreate_ids && let Some(meta) = &ws.meta {
+            if let Some(m) = meta.elements.get(ref_name) {
+                plan_el.id = Some(m.id);
+                plan_el.updated_at = Some(Timestamp {
+                    seconds: m.updated_at.timestamp(),
+                    nanos: m.updated_at.timestamp_subsec_nanos() as i32,
+                });
+            }
+            if element.has_view && let Some(m) = meta.views.get(ref_name) {
+                plan_el.view_id = Some(m.id);
+                plan_el.view_updated_at = Some(Timestamp {
+                    seconds: m.updated_at.timestamp(),
+                    nanos: m.updated_at.timestamp_subsec_nanos() as i32,
+                });
             }
         }
 
@@ -98,16 +94,12 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             ..Default::default()
         };
 
-        if !recreate_ids {
-            if let Some(meta) = &ws.meta {
-                if let Some(m) = meta.connectors.get(ref_name) {
-                    plan_conn.id = Some(m.id);
-                    plan_conn.updated_at = Some(Timestamp {
-                        seconds: m.updated_at.timestamp(),
-                        nanos: m.updated_at.timestamp_subsec_nanos() as i32,
-                    });
-                }
-            }
+        if !recreate_ids && let Some(meta) = &ws.meta && let Some(m) = meta.connectors.get(ref_name) {
+            plan_conn.id = Some(m.id);
+            plan_conn.updated_at = Some(Timestamp {
+                seconds: m.updated_at.timestamp(),
+                nanos: m.updated_at.timestamp_subsec_nanos() as i32,
+            });
         }
 
         req.connectors.push(plan_conn);

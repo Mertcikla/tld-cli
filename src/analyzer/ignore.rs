@@ -31,13 +31,12 @@ impl Rules {
             }
 
             // Handle trailing slash (directory matching)
-            if let Some(trimmed) = normalized_pattern.strip_suffix('/') {
-                if normalized_path == trimmed
+            if let Some(trimmed) = normalized_pattern.strip_suffix('/')
+                && (normalized_path == trimmed
                     || normalized_path.starts_with(&format!("{}/", trimmed))
-                    || base_name == trimmed
-                {
-                    return true;
-                }
+                    || base_name == trimmed)
+            {
+                return true;
             }
         }
         false

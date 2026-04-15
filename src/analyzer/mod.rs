@@ -9,12 +9,16 @@ use std::path::Path;
 use tree_sitter_language_pack::{detect_language_from_path, get_language};
 pub use types::*;
 
+/// Callback invoked for each file or directory visited during analysis.
+/// Arguments: (path, is_dir).
+pub type OnEntry<'a> = Option<&'a dyn Fn(&str, bool)>;
+
 pub trait Service {
     fn extract_path(
         &self,
         path: &str,
         rules: &Rules,
-        on_entry: Option<&dyn Fn(&str, bool)>,
+        on_entry: OnEntry<'_>,
     ) -> Result<AnalysisResult, TldError>;
 }
 
@@ -105,7 +109,7 @@ impl Service for TreeSitterService {
         &self,
         path: &str,
         rules: &Rules,
-        on_entry: Option<&dyn Fn(&str, bool)>,
+        on_entry: OnEntry<'_>,
     ) -> Result<AnalysisResult, TldError> {
         let metadata = fs::metadata(path)?;
         if metadata.is_dir() {
@@ -127,7 +131,7 @@ impl TreeSitterService {
         &self,
         root: &str,
         rules: &Rules,
-        on_entry: Option<&dyn Fn(&str, bool)>,
+        on_entry: OnEntry<'_>,
     ) -> Result<AnalysisResult, TldError> {
         let mut merged = AnalysisResult::default();
         self.walk_dir(Path::new(root), root, rules, on_entry, &mut merged)?;
@@ -139,7 +143,7 @@ impl TreeSitterService {
         dir: &Path,
         root: &str,
         rules: &Rules,
-        on_entry: Option<&dyn Fn(&str, bool)>,
+        on_entry: OnEntry<'_>,
         merged: &mut AnalysisResult,
     ) -> Result<(), TldError> {
         for entry in fs::read_dir(dir)? {
