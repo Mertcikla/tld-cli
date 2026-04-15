@@ -27,9 +27,9 @@ fn test_tld_analyze_idempotency_simple() {
     let dir = tempdir().unwrap();
     let wdir = dir.path().to_str().unwrap();
 
-    // Create a dummy file to analyze
-    let file_path = dir.path().join("main.rs");
-    fs::write(&file_path, "fn main() { println!(\"hello\"); }").unwrap();
+    // Create a dummy file with no symbols to analyze
+    let file_path = dir.path().join("ignored.txt");
+    fs::write(&file_path, "this is just text, no symbols here").unwrap();
 
     // First run
     let mut cmd = Command::cargo_bin("tld").unwrap();
