@@ -1,10 +1,24 @@
 #![expect(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
-    clippy::too_many_arguments
+    clippy::too_many_arguments,
+    clippy::expect_used
 )]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
+use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
+
+struct DeclQuery {
+    query: Query,
+    class_name_idx: u32,
+    class_body_idx: u32,
+    struct_name_idx: u32,
+    struct_body_idx: u32,
+    enum_name_idx: u32,
+    fn_decl_idx: u32,
+}
+
+static DECL_QUERY: OnceLock<DeclQuery> = OnceLock::new();
 
 pub fn parse(
     node: &Node,
@@ -24,7 +38,8 @@ fn parse_declarations(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let decl_query_src = r"
+    let decl = DECL_QUERY.get_or_init(|| {
+        let decl_query_src = r"
 (class_specifier
   name: (type_identifier) @class_name
   body: (field_declaration_list) @class_body) @class_decl
@@ -39,34 +54,41 @@ fn parse_declarations(
 (function_definition
   declarator: _ @fn_declarator) @fn_def
 ";
+        let query = Query::new(language, decl_query_src).expect("Failed to compile CPP decl query");
+        let class_name_idx = query
+            .capture_index_for_name("class_name")
+            .unwrap_or(u32::MAX);
+        let class_body_idx = query
+            .capture_index_for_name("class_body")
+            .unwrap_or(u32::MAX);
+        let struct_name_idx = query
+            .capture_index_for_name("struct_name")
+            .unwrap_or(u32::MAX);
+        let struct_body_idx = query
+            .capture_index_for_name("struct_body")
+            .unwrap_or(u32::MAX);
+        let enum_name_idx = query
+            .capture_index_for_name("enum_name")
+            .unwrap_or(u32::MAX);
+        let fn_decl_idx = query
+            .capture_index_for_name("fn_declarator")
+            .unwrap_or(u32::MAX);
 
-    let Ok(query) = Query::new(language, decl_query_src) else {
-        return;
-    };
-
-    let class_name_idx = query
-        .capture_index_for_name("class_name")
-        .unwrap_or(u32::MAX);
-    let class_body_idx = query
-        .capture_index_for_name("class_body")
-        .unwrap_or(u32::MAX);
-    let struct_name_idx = query
-        .capture_index_for_name("struct_name")
-        .unwrap_or(u32::MAX);
-    let struct_body_idx = query
-        .capture_index_for_name("struct_body")
-        .unwrap_or(u32::MAX);
-    let enum_name_idx = query
-        .capture_index_for_name("enum_name")
-        .unwrap_or(u32::MAX);
-    let fn_decl_idx = query
-        .capture_index_for_name("fn_declarator")
-        .unwrap_or(u32::MAX);
+        DeclQuery {
+            query,
+            class_name_idx,
+            class_body_idx,
+            struct_name_idx,
+            struct_body_idx,
+            enum_name_idx,
+            fn_decl_idx,
+        }
+    });
 
     let mut type_body_ranges: Vec<(usize, usize)> = Vec::new();
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *node, source);
+    let mut matches = cursor.matches(&decl.query, *node, source);
 
     while let Some(m) = matches.next() {
         let mut class_name_node: Option<Node> = None;
@@ -78,12 +100,12 @@ fn parse_declarations(
 
         for cap in m.captures {
             match cap.index {
-                i if i == class_name_idx => class_name_node = Some(cap.node),
-                i if i == class_body_idx => class_body_node = Some(cap.node),
-                i if i == struct_name_idx => struct_name_node = Some(cap.node),
-                i if i == struct_body_idx => struct_body_node = Some(cap.node),
-                i if i == enum_name_idx => enum_name_node = Some(cap.node),
-                i if i == fn_decl_idx => fn_decl_node = Some(cap.node),
+                i if i == decl.class_name_idx => class_name_node = Some(cap.node),
+                i if i == decl.class_body_idx => class_body_node = Some(cap.node),
+                i if i == decl.struct_name_idx => struct_name_node = Some(cap.node),
+                i if i == decl.struct_body_idx => struct_body_node = Some(cap.node),
+                i if i == decl.enum_name_idx => enum_name_node = Some(cap.node),
+                i if i == decl.fn_decl_idx => fn_decl_node = Some(cap.node),
                 _ => {}
             }
         }
@@ -165,6 +187,15 @@ fn parse_declarations(
     }
 }
 
+struct MemberQuery {
+    query: Query,
+    decl_idx: u32,
+    field_decl_idx: u32,
+    ctor_decl_idx: u32,
+}
+
+static MEMBER_QUERY: OnceLock<MemberQuery> = OnceLock::new();
+
 fn parse_type_members(
     body_node: &Node,
     source: &[u8],
@@ -173,11 +204,8 @@ fn parse_type_members(
     type_name: &str,
     result: &mut AnalysisResult,
 ) {
-    // Match:
-    // - function_definition (inline method with body)
-    // - field_declaration with function_declarator (declarations: virtual/pure-virtual/default)
-    // - declaration with function_declarator (constructor/destructor declarations)
-    let method_query_src = r"
+    let mq = MEMBER_QUERY.get_or_init(|| {
+        let method_query_src = r"
 (function_definition
   declarator: _ @method_declarator) @method_def
 
@@ -189,41 +217,41 @@ fn parse_type_members(
   declarator: (function_declarator
     declarator: _ @ctor_decl_member))
 ";
-
-    let Ok(query) = Query::new(language, method_query_src) else {
-        return;
-    };
-
-    let decl_idx = query
-        .capture_index_for_name("method_declarator")
-        .unwrap_or(u32::MAX);
-    let field_decl_idx = query
-        .capture_index_for_name("decl_member")
-        .unwrap_or(u32::MAX);
-    let ctor_decl_idx = query
-        .capture_index_for_name("ctor_decl_member")
-        .unwrap_or(u32::MAX);
+        let query =
+            Query::new(language, method_query_src).expect("Failed to compile CPP member query");
+        let decl_idx = query
+            .capture_index_for_name("method_declarator")
+            .unwrap_or(u32::MAX);
+        let field_decl_idx = query
+            .capture_index_for_name("decl_member")
+            .unwrap_or(u32::MAX);
+        let ctor_decl_idx = query
+            .capture_index_for_name("ctor_decl_member")
+            .unwrap_or(u32::MAX);
+        MemberQuery {
+            query,
+            decl_idx,
+            field_decl_idx,
+            ctor_decl_idx,
+        }
+    });
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *body_node, source);
+    let mut matches = cursor.matches(&mq.query, *body_node, source);
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
-            let (decl_node, from_field) = if cap.index == decl_idx {
+            let (decl_node, from_field) = if cap.index == mq.decl_idx {
                 (cap.node, false)
-            } else if cap.index == field_decl_idx || cap.index == ctor_decl_idx {
+            } else if cap.index == mq.field_decl_idx || cap.index == mq.ctor_decl_idx {
                 (cap.node, true)
             } else {
                 continue;
             };
 
             let outer = decl_node.parent().unwrap_or(decl_node);
-            // For field declarations, only emit if it looks like a function name
-            // (destructor_name or identifier). Skip if raw text is empty.
             let raw = decl_node.utf8_text(source).unwrap_or_default();
             let name = if from_field {
-                // The capture is the inner declarator inside function_declarator.
-                // For destructors it's e.g. `~Foo`, for virtual methods an identifier.
                 raw.trim().to_string()
             } else {
                 cpp_name(&decl_node, source)
@@ -233,10 +261,6 @@ fn parse_type_members(
                 continue;
             }
 
-            // For field/declaration nodes (no inline body), only emit destructors and
-            // constructors (name == class name). Pure-virtual / regular method declarations
-            // like `virtual void foo() = 0;` are skipped to avoid duplicates with the
-            // out-of-class implementations parsed separately.
             if from_field && !name.starts_with('~') && name != type_name {
                 continue;
             }
@@ -244,7 +268,6 @@ fn parse_type_members(
             let kind = if name.starts_with('~') {
                 "destructor"
             } else if name == type_name {
-                // Constructor: name matches class/struct name (both inline and declaration)
                 "constructor"
             } else {
                 "method"
@@ -264,10 +287,7 @@ fn parse_type_members(
     }
 }
 
-/// For a top-level function_definition declarator, if it's a scoped_identifier
-/// (e.g. ClassName::method), return ("method", "ClassName"). Otherwise ("function", "").
 fn cpp_scoped_kind(decl_node: &Node, source: &[u8]) -> (String, String) {
-    // Walk down through function_declarator to find the actual name node.
     let inner = if decl_node.kind() == "function_declarator" {
         decl_node
             .child_by_field_name("declarator")
@@ -289,11 +309,9 @@ fn cpp_scoped_kind(decl_node: &Node, source: &[u8]) -> (String, String) {
             .trim()
             .to_string();
 
-        // Destructor outside class body
         if name_part.starts_with('~') {
             return ("destructor".to_string(), scope);
         }
-        // Constructor: name matches scope (e.g. Foo::Foo)
         if !scope.is_empty() && name_part == scope {
             return ("constructor".to_string(), scope);
         }
@@ -302,11 +320,9 @@ fn cpp_scoped_kind(decl_node: &Node, source: &[u8]) -> (String, String) {
         }
     }
 
-    // Fallback: parse raw text for `ClassName::memberName` or `ClassName::ClassName`
     let raw = decl_node.utf8_text(source).unwrap_or_default().trim();
     if let Some(pos) = raw.find("::") {
         let scope = raw[..pos].trim().to_string();
-        // Strip function parameters from member name
         let after = raw[pos + 2..].trim();
         let name_part = after.split('(').next().unwrap_or(after).trim();
         if !scope.is_empty() && !name_part.is_empty() {
@@ -323,6 +339,14 @@ fn cpp_scoped_kind(decl_node: &Node, source: &[u8]) -> (String, String) {
     ("function".to_string(), String::new())
 }
 
+struct RefQuery {
+    query: Query,
+    include_idx: u32,
+    callee_idx: u32,
+}
+
+static REF_QUERY: OnceLock<RefQuery> = OnceLock::new();
+
 fn parse_refs(
     node: &Node,
     source: &[u8],
@@ -330,29 +354,32 @@ fn parse_refs(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let ref_query_src = r"
+    let rq = REF_QUERY.get_or_init(|| {
+        let ref_query_src = r"
 (preproc_include path: _ @include_path)
 (call_expression function: _ @callee)
 ";
-
-    let Ok(query) = Query::new(language, ref_query_src) else {
-        return;
-    };
-
-    let include_idx = query
-        .capture_index_for_name("include_path")
-        .unwrap_or(u32::MAX);
-    let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+        let query = Query::new(language, ref_query_src).expect("Failed to compile CPP ref query");
+        let include_idx = query
+            .capture_index_for_name("include_path")
+            .unwrap_or(u32::MAX);
+        let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+        RefQuery {
+            query,
+            include_idx,
+            callee_idx,
+        }
+    });
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *node, source);
+    let mut matches = cursor.matches(&rq.query, *node, source);
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
             let cap_node = cap.node;
             let idx = cap.index;
 
-            if idx == include_idx {
+            if idx == rq.include_idx {
                 let import_path = cap_node
                     .utf8_text(source)
                     .unwrap_or_default()
@@ -369,7 +396,7 @@ fn parse_refs(
                         column: (cap_node.start_position().column + 1) as i32,
                     });
                 }
-            } else if idx == callee_idx {
+            } else if idx == rq.callee_idx {
                 let text = cap_node.utf8_text(source).unwrap_or_default().trim();
                 let name = text
                     .rsplit("::")

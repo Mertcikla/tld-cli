@@ -2,10 +2,22 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::too_many_arguments,
-    clippy::map_unwrap_or
+    clippy::expect_used
 )]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
+use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
+
+struct DeclQuery {
+    query: Query,
+    class_name_idx: u32,
+    class_body_idx: u32,
+    iface_idx: u32,
+    alias_idx: u32,
+    fn_idx: u32,
+}
+
+static DECL_QUERY: OnceLock<DeclQuery> = OnceLock::new();
 
 pub fn parse(
     node: &Node,
@@ -25,7 +37,8 @@ fn parse_declarations(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let decl_query_src = r"
+    let decl = DECL_QUERY.get_or_init(|| {
+        let decl_query_src = r"
 (class_declaration
   name: (type_identifier) @class_name
   body: (class_body) @class_body) @class_decl
@@ -39,32 +52,37 @@ fn parse_declarations(
 (function_declaration
   name: (identifier) @fn_name) @fn_decl
 ";
+        let query = Query::new(language, decl_query_src).expect("Failed to compile TS decl query");
+        let class_name_idx = query
+            .capture_index_for_name("class_name")
+            .unwrap_or(u32::MAX);
+        let class_body_idx = query
+            .capture_index_for_name("class_body")
+            .unwrap_or(u32::MAX);
+        let iface_idx = query
+            .capture_index_for_name("iface_name")
+            .unwrap_or(u32::MAX);
+        let alias_idx = query
+            .capture_index_for_name("alias_name")
+            .unwrap_or(u32::MAX);
+        let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
 
-    let Ok(query) = Query::new(language, decl_query_src) else {
-        return;
-    };
-
-    let class_name_idx = query
-        .capture_index_for_name("class_name")
-        .unwrap_or(u32::MAX);
-    let class_body_idx = query
-        .capture_index_for_name("class_body")
-        .unwrap_or(u32::MAX);
-    let iface_idx = query
-        .capture_index_for_name("iface_name")
-        .unwrap_or(u32::MAX);
-    let alias_idx = query
-        .capture_index_for_name("alias_name")
-        .unwrap_or(u32::MAX);
-    let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
+        DeclQuery {
+            query,
+            class_name_idx,
+            class_body_idx,
+            iface_idx,
+            alias_idx,
+            fn_idx,
+        }
+    });
 
     // Collect all classes first so we can process methods with parent context.
-    // We store (class_name, class_body_node, outer_end_line, name_line) tuples.
     let mut classes: Vec<(String, Node, i32, i32)> = Vec::new();
     let mut other_symbols: Vec<Symbol> = Vec::new();
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *node, source);
+    let mut matches = cursor.matches(&decl.query, *node, source);
 
     while let Some(m) = matches.next() {
         let mut class_name_node: Option<Node> = None;
@@ -75,11 +93,11 @@ fn parse_declarations(
 
         for cap in m.captures {
             match cap.index {
-                i if i == class_name_idx => class_name_node = Some(cap.node),
-                i if i == class_body_idx => class_body_node = Some(cap.node),
-                i if i == iface_idx => iface_name_node = Some(cap.node),
-                i if i == alias_idx => alias_name_node = Some(cap.node),
-                i if i == fn_idx => fn_name_node = Some(cap.node),
+                i if i == decl.class_name_idx => class_name_node = Some(cap.node),
+                i if i == decl.class_body_idx => class_body_node = Some(cap.node),
+                i if i == decl.iface_idx => iface_name_node = Some(cap.node),
+                i if i == decl.alias_idx => alias_name_node = Some(cap.node),
+                i if i == decl.fn_idx => fn_name_node = Some(cap.node),
                 _ => {}
             }
         }
@@ -87,8 +105,9 @@ fn parse_declarations(
         if let Some(name_node) = class_name_node {
             let class_name = name_node.utf8_text(source).unwrap_or_default().to_string();
             let outer_line = class_body_node
-                .map(|b| (b.end_position().row + 1) as i32)
-                .unwrap_or((name_node.end_position().row + 1) as i32);
+                .map_or((name_node.end_position().row + 1) as i32, |b| {
+                    (b.end_position().row + 1) as i32
+                });
             let name_line = (name_node.start_position().row + 1) as i32;
             if let Some(body) = class_body_node {
                 classes.push((class_name, body, outer_line, name_line));
@@ -161,6 +180,13 @@ fn parse_declarations(
     result.symbols.extend(other_symbols);
 }
 
+struct MemberQuery {
+    query: Query,
+    method_idx: u32,
+}
+
+static MEMBER_QUERY: OnceLock<MemberQuery> = OnceLock::new();
+
 fn parse_class_members(
     body_node: &Node,
     source: &[u8],
@@ -169,25 +195,25 @@ fn parse_class_members(
     class_name: &str,
     result: &mut AnalysisResult,
 ) {
-    let method_query_src = r"
+    let mq = MEMBER_QUERY.get_or_init(|| {
+        let method_query_src = r"
 (method_definition
   name: (property_identifier) @method_name) @method_def
 ";
-
-    let Ok(query) = Query::new(language, method_query_src) else {
-        return;
-    };
-
-    let method_idx = query
-        .capture_index_for_name("method_name")
-        .unwrap_or(u32::MAX);
+        let query =
+            Query::new(language, method_query_src).expect("Failed to compile TS member query");
+        let method_idx = query
+            .capture_index_for_name("method_name")
+            .unwrap_or(u32::MAX);
+        MemberQuery { query, method_idx }
+    });
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *body_node, source);
+    let mut matches = cursor.matches(&mq.query, *body_node, source);
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
-            if cap.index == method_idx {
+            if cap.index == mq.method_idx {
                 let name_node = cap.node;
                 let outer = name_node.parent().unwrap_or(name_node);
                 let name = name_node.utf8_text(source).unwrap_or_default().to_string();
@@ -211,6 +237,14 @@ fn parse_class_members(
     }
 }
 
+struct RefQuery {
+    query: Query,
+    import_idx: u32,
+    callee_idx: u32,
+}
+
+static REF_QUERY: OnceLock<RefQuery> = OnceLock::new();
+
 fn parse_refs(
     node: &Node,
     source: &[u8],
@@ -218,32 +252,35 @@ fn parse_refs(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let ref_query_src = r"
+    let rq = REF_QUERY.get_or_init(|| {
+        let ref_query_src = r"
 (import_statement
   source: (string (string_fragment) @import_src))
 
 (call_expression
   function: _ @callee)
 ";
-
-    let Ok(query) = Query::new(language, ref_query_src) else {
-        return;
-    };
-
-    let import_idx = query
-        .capture_index_for_name("import_src")
-        .unwrap_or(u32::MAX);
-    let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+        let query = Query::new(language, ref_query_src).expect("Failed to compile TS ref query");
+        let import_idx = query
+            .capture_index_for_name("import_src")
+            .unwrap_or(u32::MAX);
+        let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+        RefQuery {
+            query,
+            import_idx,
+            callee_idx,
+        }
+    });
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *node, source);
+    let mut matches = cursor.matches(&rq.query, *node, source);
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
             let cap_node = cap.node;
             let idx = cap.index;
 
-            if idx == import_idx {
+            if idx == rq.import_idx {
                 let import_path = cap_node.utf8_text(source).unwrap_or_default().to_string();
                 if !import_path.is_empty() {
                     result.refs.push(Ref {
@@ -255,7 +292,7 @@ fn parse_refs(
                         column: (cap_node.start_position().column + 1) as i32,
                     });
                 }
-            } else if idx == callee_idx {
+            } else if idx == rq.callee_idx {
                 let text = cap_node.utf8_text(source).unwrap_or_default();
                 let terminal_name = text.rsplit('.').next().unwrap_or(text).to_string();
                 if !terminal_name.is_empty() {

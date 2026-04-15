@@ -1,154 +1,327 @@
 #![expect(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
-    clippy::map_unwrap_or
+    clippy::too_many_arguments,
+    clippy::expect_used
 )]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
-use tree_sitter::{Language, Node};
+use std::sync::OnceLock;
+use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
+
+struct DeclQuery {
+    query: Query,
+    fn_idx: u32,
+    struct_idx: u32,
+    enum_idx: u32,
+    trait_idx: u32,
+    type_idx: u32,
+    impl_idx: u32,
+    impl_type_idx: u32,
+    use_idx: u32,
+}
+
+static DECL_QUERY: OnceLock<DeclQuery> = OnceLock::new();
 
 pub fn parse(
     node: &Node,
     source: &[u8],
     path: &str,
-    _language: &Language,
+    language: &Language,
     result: &mut AnalysisResult,
 ) {
-    walk_node(node, source, path, None, result);
+    parse_declarations(node, source, path, language, result);
+    parse_refs(node, source, path, language, result);
 }
 
-fn walk_node(
+fn parse_declarations(
     node: &Node,
     source: &[u8],
     path: &str,
-    impl_parent: Option<&str>,
+    language: &Language,
     result: &mut AnalysisResult,
 ) {
-    match node.kind() {
-        "function_item" => {
-            append_function(node, source, path, impl_parent, result);
-            // Walk body for nested calls but don't recurse into the full tree
-            // to avoid double-counting nested functions
-            if let Some(body) = node.child_by_field_name("body") {
-                walk_calls_only(&body, source, path, result);
+    let decl = DECL_QUERY.get_or_init(|| {
+        let decl_query_src = r"
+(function_item name: (identifier) @fn_name) @fn
+(struct_item name: (type_identifier) @struct_name) @struct
+(enum_item name: (type_identifier) @enum_name) @enum
+(trait_item name: (type_identifier) @trait_name) @trait
+(type_item name: (type_identifier) @type_name) @type
+(impl_item type: _ @impl_type) @impl
+(use_declaration argument: _ @use_arg) @use
+";
+        let query =
+            Query::new(language, decl_query_src).expect("Failed to compile Rust decl query");
+        let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
+        let struct_idx = query
+            .capture_index_for_name("struct_name")
+            .unwrap_or(u32::MAX);
+        let enum_idx = query
+            .capture_index_for_name("enum_name")
+            .unwrap_or(u32::MAX);
+        let trait_idx = query
+            .capture_index_for_name("trait_name")
+            .unwrap_or(u32::MAX);
+        let type_idx = query
+            .capture_index_for_name("type_name")
+            .unwrap_or(u32::MAX);
+        let impl_idx = query.capture_index_for_name("impl").unwrap_or(u32::MAX);
+        let impl_type_idx = query
+            .capture_index_for_name("impl_type")
+            .unwrap_or(u32::MAX);
+        let use_idx = query.capture_index_for_name("use_arg").unwrap_or(u32::MAX);
+
+        DeclQuery {
+            query,
+            fn_idx,
+            struct_idx,
+            enum_idx,
+            trait_idx,
+            type_idx,
+            impl_idx,
+            impl_type_idx,
+            use_idx,
+        }
+    });
+
+    let mut cursor = QueryCursor::new();
+    let mut matches = cursor.matches(&decl.query, *node, source);
+
+    while let Some(m) = matches.next() {
+        let mut fn_name_node: Option<Node> = None;
+        let mut struct_name_node: Option<Node> = None;
+        let mut enum_name_node: Option<Node> = None;
+        let mut trait_name_node: Option<Node> = None;
+        let mut type_name_node: Option<Node> = None;
+        let mut impl_node: Option<Node> = None;
+        let mut impl_type_node: Option<Node> = None;
+        let mut use_node: Option<Node> = None;
+
+        for cap in m.captures {
+            match cap.index {
+                i if i == decl.fn_idx => fn_name_node = Some(cap.node),
+                i if i == decl.struct_idx => struct_name_node = Some(cap.node),
+                i if i == decl.enum_idx => enum_name_node = Some(cap.node),
+                i if i == decl.trait_idx => trait_name_node = Some(cap.node),
+                i if i == decl.type_idx => type_name_node = Some(cap.node),
+                i if i == decl.impl_idx => impl_node = Some(cap.node),
+                i if i == decl.impl_type_idx => impl_type_node = Some(cap.node),
+                i if i == decl.use_idx => use_node = Some(cap.node),
+                _ => {}
             }
-            return;
         }
-        "struct_item" => append_type_item(node, source, path, "struct", result),
-        "enum_item" => append_type_item(node, source, path, "enum", result),
-        "trait_item" => append_type_item(node, source, path, "trait", result),
-        "type_item" => append_type_item(node, source, path, "type", result),
-        "use_declaration" => append_use(node, source, path, result),
-        "impl_item" => {
-            // Determine the type name from the impl's type field
-            let parent = impl_type_name(node, source);
-            let mut cursor = node.walk();
-            for child in node.named_children(&mut cursor) {
-                walk_node(&child, source, path, parent.as_deref(), result);
+
+        if let Some(name_node) = fn_name_node {
+            let outer = name_node.parent().unwrap_or(name_node);
+            // Skip if inside an impl block (handled separately)
+            if is_inside_impl(&outer) {
+                continue;
             }
-            return;
+            result.symbols.push(Symbol {
+                name: name_node.utf8_text(source).unwrap_or_default().to_string(),
+                kind: "function".to_string(),
+                file_path: path.to_string(),
+                line: (name_node.start_position().row + 1) as i32,
+                end_line: (outer.end_position().row + 1) as i32,
+                description: find_doc_comment(&outer, source),
+                parent: String::new(),
+                technology: String::new(),
+            });
+        } else if let Some(name_node) = struct_name_node {
+            let outer = name_node.parent().unwrap_or(name_node);
+            result.symbols.push(Symbol {
+                name: name_node.utf8_text(source).unwrap_or_default().to_string(),
+                kind: "struct".to_string(),
+                file_path: path.to_string(),
+                line: (name_node.start_position().row + 1) as i32,
+                end_line: (outer.end_position().row + 1) as i32,
+                description: find_doc_comment(&outer, source),
+                parent: String::new(),
+                technology: String::new(),
+            });
+        } else if let Some(name_node) = enum_name_node {
+            let outer = name_node.parent().unwrap_or(name_node);
+            result.symbols.push(Symbol {
+                name: name_node.utf8_text(source).unwrap_or_default().to_string(),
+                kind: "enum".to_string(),
+                file_path: path.to_string(),
+                line: (name_node.start_position().row + 1) as i32,
+                end_line: (outer.end_position().row + 1) as i32,
+                description: find_doc_comment(&outer, source),
+                parent: String::new(),
+                technology: String::new(),
+            });
+        } else if let Some(name_node) = trait_name_node {
+            let outer = name_node.parent().unwrap_or(name_node);
+            result.symbols.push(Symbol {
+                name: name_node.utf8_text(source).unwrap_or_default().to_string(),
+                kind: "trait".to_string(),
+                file_path: path.to_string(),
+                line: (name_node.start_position().row + 1) as i32,
+                end_line: (outer.end_position().row + 1) as i32,
+                description: find_doc_comment(&outer, source),
+                parent: String::new(),
+                technology: String::new(),
+            });
+        } else if let Some(name_node) = type_name_node {
+            let outer = name_node.parent().unwrap_or(name_node);
+            result.symbols.push(Symbol {
+                name: name_node.utf8_text(source).unwrap_or_default().to_string(),
+                kind: "type".to_string(),
+                file_path: path.to_string(),
+                line: (name_node.start_position().row + 1) as i32,
+                end_line: (outer.end_position().row + 1) as i32,
+                description: find_doc_comment(&outer, source),
+                parent: String::new(),
+                technology: String::new(),
+            });
+        } else if let Some(node) = impl_node {
+            if let Some(type_node) = impl_type_node {
+                let parent = type_name_from_node(&type_node, source);
+                parse_impl_members(&node, source, path, language, &parent, result);
+            }
+        } else if let Some(node) = use_node {
+            collect_use_paths(&node, source, path, result);
         }
-        _ => {}
-    }
-
-    let mut cursor = node.walk();
-    for child in node.named_children(&mut cursor) {
-        walk_node(&child, source, path, impl_parent, result);
     }
 }
 
-/// Walk only looking for call and method call expressions (used inside function bodies).
-fn walk_calls_only(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult) {
-    match node.kind() {
-        "call_expression" => {
-            append_call(node, source, path, result);
+fn is_inside_impl(node: &Node) -> bool {
+    let mut current = node.parent();
+    while let Some(p) = current {
+        if p.kind() == "impl_item" {
+            return true;
         }
-        "method_call_expression" => {
-            append_method_call(node, source, path, result);
-        }
-        // Don't descend into nested function/closure bodies to avoid duplicates
-        "closure_expression" => return,
-        _ => {}
+        current = p.parent();
     }
-    let mut cursor = node.walk();
-    for child in node.named_children(&mut cursor) {
-        walk_calls_only(&child, source, path, result);
+    false
+}
+
+struct ImplMemberQuery {
+    query: Query,
+    name_idx: u32,
+}
+
+static IMPL_MEMBER_QUERY: OnceLock<ImplMemberQuery> = OnceLock::new();
+
+fn parse_impl_members(
+    impl_node: &Node,
+    source: &[u8],
+    path: &str,
+    language: &Language,
+    parent_type: &str,
+    result: &mut AnalysisResult,
+) {
+    let imq = IMPL_MEMBER_QUERY.get_or_init(|| {
+        let query_src = r"(function_item name: (identifier) @fn_name) @fn";
+        let query =
+            Query::new(language, query_src).expect("Failed to compile Rust impl member query");
+        let name_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
+        ImplMemberQuery { query, name_idx }
+    });
+
+    let mut cursor = QueryCursor::new();
+    let mut matches = cursor.matches(&imq.query, *impl_node, source);
+    while let Some(m) = matches.next() {
+        for cap in m.captures {
+            if cap.index == imq.name_idx {
+                let name_node = cap.node;
+                let outer = name_node.parent().unwrap_or(name_node);
+                result.symbols.push(Symbol {
+                    name: name_node.utf8_text(source).unwrap_or_default().to_string(),
+                    kind: "method".to_string(),
+                    file_path: path.to_string(),
+                    line: (name_node.start_position().row + 1) as i32,
+                    end_line: (outer.end_position().row + 1) as i32,
+                    description: find_doc_comment(&outer, source),
+                    parent: parent_type.to_string(),
+                    technology: String::new(),
+                });
+            }
+        }
     }
 }
 
-fn append_function(
+struct RefQuery {
+    query: Query,
+    call_idx: u32,
+    method_idx: u32,
+}
+
+static REF_QUERY: OnceLock<RefQuery> = OnceLock::new();
+
+fn parse_refs(
     node: &Node,
     source: &[u8],
     path: &str,
-    parent: Option<&str>,
+    language: &Language,
     result: &mut AnalysisResult,
 ) {
-    if let Some(name_node) = node.child_by_field_name("name") {
-        let name = name_node.utf8_text(source).unwrap_or_default().to_string();
-        let kind = if parent.is_some() {
-            "method"
-        } else {
-            "function"
-        };
-        result.symbols.push(Symbol {
-            name,
-            kind: kind.to_string(),
-            file_path: path.to_string(),
-            line: (name_node.start_position().row + 1) as i32,
-            end_line: (node.end_position().row + 1) as i32,
-            description: find_doc_comment(node, source),
-            parent: parent.unwrap_or("").to_string(),
-            technology: String::new(),
-        });
-    }
-}
+    let rq = REF_QUERY.get_or_init(|| {
+        let query_src = r"
+(call_expression function: _ @callee)
+(method_call_expression method: (field_identifier) @method_name)
+";
+        let query = Query::new(language, query_src).expect("Failed to compile Rust ref query");
+        let call_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+        let method_idx = query
+            .capture_index_for_name("method_name")
+            .unwrap_or(u32::MAX);
+        RefQuery {
+            query,
+            call_idx,
+            method_idx,
+        }
+    });
 
-fn append_type_item(
-    node: &Node,
-    source: &[u8],
-    path: &str,
-    kind: &str,
-    result: &mut AnalysisResult,
-) {
-    if let Some(name_node) = node.child_by_field_name("name") {
-        result.symbols.push(Symbol {
-            name: name_node.utf8_text(source).unwrap_or_default().to_string(),
-            kind: kind.to_string(),
-            file_path: path.to_string(),
-            line: (name_node.start_position().row + 1) as i32,
-            end_line: (node.end_position().row + 1) as i32,
-            description: find_doc_comment(node, source),
-            parent: String::new(),
-            technology: String::new(),
-        });
+    let mut cursor = QueryCursor::new();
+    let mut matches = cursor.matches(&rq.query, *node, source);
+    while let Some(m) = matches.next() {
+        for cap in m.captures {
+            let cap_node = cap.node;
+            let idx = cap.index;
+            if idx == rq.call_idx {
+                let name = rust_call_name(&cap_node, source);
+                if !name.is_empty() {
+                    result.refs.push(Ref {
+                        name,
+                        kind: "call".to_string(),
+                        target_path: String::new(),
+                        file_path: path.to_string(),
+                        line: (cap_node.start_position().row + 1) as i32,
+                        column: (cap_node.start_position().column + 1) as i32,
+                    });
+                }
+            } else if idx == rq.method_idx {
+                let name = cap_node.utf8_text(source).unwrap_or_default().to_string();
+                if !name.is_empty() {
+                    result.refs.push(Ref {
+                        name,
+                        kind: "call".to_string(),
+                        target_path: String::new(),
+                        file_path: path.to_string(),
+                        line: (cap_node.start_position().row + 1) as i32,
+                        column: (cap_node.start_position().column + 1) as i32,
+                    });
+                }
+            }
+        }
     }
-}
-
-/// Extract the self type name from an impl item (e.g. `impl Foo` → "Foo", `impl<T> Bar<T>` → "Bar").
-fn impl_type_name(node: &Node, source: &[u8]) -> Option<String> {
-    // Rust tree-sitter: impl_item has a "type" field for the implementing type
-    node.child_by_field_name("type").map(|t| {
-        // type_identifier for simple types; scoped_type_identifier for qualified ones
-        // Just grab the first type_identifier descendant
-        type_name_from_node(&t, source)
-    })
 }
 
 fn type_name_from_node(node: &Node, source: &[u8]) -> String {
     match node.kind() {
         "type_identifier" | "identifier" => node.utf8_text(source).unwrap_or_default().to_string(),
-        "generic_type" => {
-            // `Foo<T>` → take the `type_identifier` child
-            node.child_by_field_name("type")
-                .or_else(|| {
-                    let mut cursor = node.walk();
-                    node.named_children(&mut cursor)
-                        .find(|c| c.kind() == "type_identifier")
-                })
-                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
-                .unwrap_or_default()
-        }
+        "generic_type" => node
+            .child_by_field_name("type")
+            .or_else(|| {
+                let mut cursor = node.walk();
+                node.named_children(&mut cursor)
+                    .find(|c| c.kind() == "type_identifier")
+            })
+            .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+            .unwrap_or_default(),
         "scoped_type_identifier" => {
-            // `foo::Bar` → take the last segment
             let mut cursor = node.walk();
             node.named_children(&mut cursor)
                 .filter(|c| c.kind() == "type_identifier")
@@ -157,89 +330,35 @@ fn type_name_from_node(node: &Node, source: &[u8]) -> String {
                 .unwrap_or_default()
         }
         _ => {
-            // Fallback: grab text and strip generics
             let text = node.utf8_text(source).unwrap_or_default();
             text.split('<').next().unwrap_or(text).trim().to_string()
         }
     }
 }
 
-fn append_call(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult) {
-    // call_expression: function field points to the callee
-    if let Some(func_node) = node.child_by_field_name("function") {
-        let name = rust_call_name(&func_node, source);
-        if !name.is_empty() {
-            result.refs.push(Ref {
-                name,
-                kind: "call".to_string(),
-                target_path: String::new(),
-                file_path: path.to_string(),
-                line: (func_node.start_position().row + 1) as i32,
-                column: (func_node.start_position().column + 1) as i32,
-            });
-        }
-    }
-}
-
-fn append_method_call(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult) {
-    // method_call_expression: method field is the method name identifier
-    if let Some(method_node) = node.child_by_field_name("method") {
-        let name = method_node
-            .utf8_text(source)
-            .unwrap_or_default()
-            .to_string();
-        if !name.is_empty() {
-            result.refs.push(Ref {
-                name,
-                kind: "call".to_string(),
-                target_path: String::new(),
-                file_path: path.to_string(),
-                line: (method_node.start_position().row + 1) as i32,
-                column: (method_node.start_position().column + 1) as i32,
-            });
-        }
-    }
-}
-
-/// Resolve the terminal callable name from a call expression's function node.
 fn rust_call_name(node: &Node, source: &[u8]) -> String {
     match node.kind() {
         "identifier" => node.utf8_text(source).unwrap_or_default().to_string(),
-        "field_expression" => {
-            // e.g. `self.foo` or `obj.method` — terminal field
-            node.child_by_field_name("field")
-                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
-                .unwrap_or_default()
-        }
-        "scoped_identifier" => {
-            // e.g. `Foo::bar` or `std::mem::drop` — last segment
-            node.child_by_field_name("name")
-                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
-                .unwrap_or_else(|| {
-                    // Fallback: take text after last `::`
-                    let text = node.utf8_text(source).unwrap_or_default();
-                    text.rsplit("::").next().unwrap_or(text).trim().to_string()
-                })
-        }
-        "generic_function" => {
-            // e.g. `foo::<T>()` — function field
-            node.child_by_field_name("function")
-                .map(|n| rust_call_name(&n, source))
-                .unwrap_or_default()
-        }
+        "field_expression" => node
+            .child_by_field_name("field")
+            .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+            .unwrap_or_default(),
+        "scoped_identifier" => node.child_by_field_name("name").map_or_else(
+            || {
+                let text = node.utf8_text(source).unwrap_or_default();
+                text.rsplit("::").next().unwrap_or(text).trim().to_string()
+            },
+            |n| n.utf8_text(source).unwrap_or_default().to_string(),
+        ),
+        "generic_function" => node
+            .child_by_field_name("function")
+            .map(|n| rust_call_name(&n, source))
+            .unwrap_or_default(),
         _ => {
             let text = node.utf8_text(source).unwrap_or_default();
-            // Best-effort: last segment after `::`
             let text = text.rsplit("::").next().unwrap_or(text);
             text.split('<').next().unwrap_or(text).trim().to_string()
         }
-    }
-}
-
-fn append_use(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult) {
-    // use_declaration has an "argument" field containing a use_list, scoped_identifier, etc.
-    if let Some(arg) = node.child_by_field_name("argument") {
-        collect_use_paths(&arg, source, path, result);
     }
 }
 
@@ -267,7 +386,6 @@ fn collect_use_paths(node: &Node, source: &[u8], path: &str, result: &mut Analys
             }
         }
         "use_wildcard" => {
-            // `use foo::*` — emit the prefix as import
             let text = node.utf8_text(source).unwrap_or_default();
             let text = text.trim_end_matches("::*").trim_end_matches("/*");
             if !text.is_empty() {
@@ -288,7 +406,6 @@ fn collect_use_paths(node: &Node, source: &[u8], path: &str, result: &mut Analys
 }
 
 fn find_doc_comment(node: &Node, source: &[u8]) -> String {
-    // Check for line_comment or block_comment siblings immediately above
     if let Some(prev) = node.prev_named_sibling() {
         let kind = prev.kind();
         if (kind == "line_comment" || kind == "block_comment" || kind == "doc_comment")
@@ -299,7 +416,6 @@ fn find_doc_comment(node: &Node, source: &[u8]) -> String {
                 <= 1
         {
             let text = prev.utf8_text(source).unwrap_or_default().trim();
-            // Strip `///`, `//!`, `//`, `/*`, `*/`
             let text = text
                 .lines()
                 .map(|l| {

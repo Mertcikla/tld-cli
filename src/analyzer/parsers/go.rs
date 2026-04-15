@@ -1,10 +1,25 @@
 #![expect(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
-    clippy::map_unwrap_or
+    clippy::expect_used,
+    clippy::collapsible_if
 )]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
+use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
+
+struct DeclQuery {
+    query: Query,
+    fn_idx: u32,
+    method_idx: u32,
+    recv_idx: u32,
+    struct_idx: u32,
+    iface_idx: u32,
+    type_idx: u32,
+    alias_idx: u32,
+}
+
+static DECL_QUERY: OnceLock<DeclQuery> = OnceLock::new();
 
 pub fn parse(
     node: &Node,
@@ -24,7 +39,8 @@ fn parse_declarations(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let query_src = r"
+    let decl = DECL_QUERY.get_or_init(|| {
+        let query_src = r"
 (function_declaration
   name: (identifier) @fn_name) @fn
 
@@ -51,33 +67,41 @@ fn parse_declarations(
 (type_alias
   name: (type_identifier) @alias_name) @alias_decl
 ";
+        let query = Query::new(language, query_src).expect("Failed to compile Go decl query");
+        let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
+        let method_idx = query
+            .capture_index_for_name("method_name")
+            .unwrap_or(u32::MAX);
+        let recv_idx = query
+            .capture_index_for_name("recv_type")
+            .unwrap_or(u32::MAX);
+        let struct_idx = query
+            .capture_index_for_name("struct_name")
+            .unwrap_or(u32::MAX);
+        let iface_idx = query
+            .capture_index_for_name("iface_name")
+            .unwrap_or(u32::MAX);
+        let type_idx = query
+            .capture_index_for_name("type_name")
+            .unwrap_or(u32::MAX);
+        let alias_idx = query
+            .capture_index_for_name("alias_name")
+            .unwrap_or(u32::MAX);
 
-    let Ok(query) = Query::new(language, query_src) else {
-        return;
-    };
-
-    let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
-    let method_idx = query
-        .capture_index_for_name("method_name")
-        .unwrap_or(u32::MAX);
-    let recv_idx = query
-        .capture_index_for_name("recv_type")
-        .unwrap_or(u32::MAX);
-    let struct_idx = query
-        .capture_index_for_name("struct_name")
-        .unwrap_or(u32::MAX);
-    let iface_idx = query
-        .capture_index_for_name("iface_name")
-        .unwrap_or(u32::MAX);
-    let type_idx = query
-        .capture_index_for_name("type_name")
-        .unwrap_or(u32::MAX);
-    let alias_idx = query
-        .capture_index_for_name("alias_name")
-        .unwrap_or(u32::MAX);
+        DeclQuery {
+            query,
+            fn_idx,
+            method_idx,
+            recv_idx,
+            struct_idx,
+            iface_idx,
+            type_idx,
+            alias_idx,
+        }
+    });
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *node, source);
+    let mut matches = cursor.matches(&decl.query, *node, source);
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
@@ -85,7 +109,7 @@ fn parse_declarations(
             let idx = cap.index;
             let name = cap_node.utf8_text(source).unwrap_or_default().to_string();
 
-            if idx == fn_idx {
+            if idx == decl.fn_idx {
                 let outer =
                     find_ancestor_of_kind(&cap_node, "function_declaration").unwrap_or(cap_node);
                 result.symbols.push(Symbol {
@@ -98,11 +122,11 @@ fn parse_declarations(
                     parent: String::new(),
                     technology: String::new(),
                 });
-            } else if idx == method_idx {
+            } else if idx == decl.method_idx {
                 let recv_type = m
                     .captures
                     .iter()
-                    .find(|c| c.index == recv_idx)
+                    .find(|c| c.index == decl.recv_idx)
                     .map(|c| {
                         let t = c.node.utf8_text(source).unwrap_or_default();
                         t.trim_start_matches('*').to_string()
@@ -120,7 +144,7 @@ fn parse_declarations(
                     parent: recv_type,
                     technology: String::new(),
                 });
-            } else if idx == struct_idx {
+            } else if idx == decl.struct_idx {
                 let outer = find_ancestor_of_kind(&cap_node, "type_spec").unwrap_or(cap_node);
                 result.symbols.push(Symbol {
                     name,
@@ -132,7 +156,7 @@ fn parse_declarations(
                     parent: String::new(),
                     technology: String::new(),
                 });
-            } else if idx == iface_idx {
+            } else if idx == decl.iface_idx {
                 let outer = find_ancestor_of_kind(&cap_node, "type_spec").unwrap_or(cap_node);
                 result.symbols.push(Symbol {
                     name,
@@ -144,13 +168,12 @@ fn parse_declarations(
                     parent: String::new(),
                     technology: String::new(),
                 });
-            } else if idx == type_idx {
+            } else if idx == decl.type_idx {
                 // Check whether it's already covered by struct/iface captures.
                 let outer = find_ancestor_of_kind(&cap_node, "type_spec").unwrap_or(cap_node);
                 let type_val = outer.child_by_field_name("type");
-                let is_struct_or_iface = type_val
-                    .map(|t| matches!(t.kind(), "struct_type" | "interface_type"))
-                    .unwrap_or(false);
+                let is_struct_or_iface =
+                    type_val.is_some_and(|t| matches!(t.kind(), "struct_type" | "interface_type"));
                 if !is_struct_or_iface {
                     result.symbols.push(Symbol {
                         name,
@@ -163,7 +186,7 @@ fn parse_declarations(
                         technology: String::new(),
                     });
                 }
-            } else if idx == alias_idx {
+            } else if idx == decl.alias_idx {
                 let outer = find_ancestor_of_kind(&cap_node, "type_alias").unwrap_or(cap_node);
                 result.symbols.push(Symbol {
                     name,
@@ -180,6 +203,14 @@ fn parse_declarations(
     }
 }
 
+struct RefQuery {
+    query: Query,
+    import_idx: u32,
+    callee_idx: u32,
+}
+
+static REF_QUERY: OnceLock<RefQuery> = OnceLock::new();
+
 fn parse_refs(
     node: &Node,
     source: &[u8],
@@ -187,29 +218,32 @@ fn parse_refs(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let query_src = r"
+    let rq = REF_QUERY.get_or_init(|| {
+        let query_src = r"
 (import_spec path: (interpreted_string_literal) @import_path)
 (call_expression function: _ @callee)
 ";
-
-    let Ok(query) = Query::new(language, query_src) else {
-        return;
-    };
-
-    let import_idx = query
-        .capture_index_for_name("import_path")
-        .unwrap_or(u32::MAX);
-    let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+        let query = Query::new(language, query_src).expect("Failed to compile Go ref query");
+        let import_idx = query
+            .capture_index_for_name("import_path")
+            .unwrap_or(u32::MAX);
+        let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+        RefQuery {
+            query,
+            import_idx,
+            callee_idx,
+        }
+    });
 
     let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&query, *node, source);
+    let mut matches = cursor.matches(&rq.query, *node, source);
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
             let cap_node = cap.node;
             let idx = cap.index;
 
-            if idx == import_idx {
+            if idx == rq.import_idx {
                 let text = cap_node.utf8_text(source).unwrap_or_default().trim();
                 let import_path = text.trim_matches('"');
                 if !import_path.is_empty() {
@@ -227,7 +261,7 @@ fn parse_refs(
                         column: (cap_node.start_position().column + 1) as i32,
                     });
                 }
-            } else if idx == callee_idx {
+            } else if idx == rq.callee_idx {
                 let name = go_call_name(&cap_node, source);
                 if !name.is_empty() {
                     result.refs.push(Ref {
@@ -256,19 +290,20 @@ fn find_ancestor_of_kind<'a>(node: &Node<'a>, kind: &str) -> Option<Node<'a>> {
 }
 
 fn find_comment(node: &Node, source: &[u8]) -> String {
-    if let Some(prev) = node.prev_named_sibling()
-        && prev.kind() == "comment"
-        && node
-            .start_position()
-            .row
-            .saturating_sub(prev.end_position().row)
-            <= 1
-    {
-        let text = prev.utf8_text(source).unwrap_or_default().trim();
-        let text = text.strip_prefix("//").unwrap_or(text).trim();
-        let text = text.strip_prefix("/*").unwrap_or(text);
-        let text = text.strip_suffix("*/").unwrap_or(text);
-        return text.trim().to_string();
+    if let Some(prev) = node.prev_named_sibling() {
+        if prev.kind() == "comment"
+            && node
+                .start_position()
+                .row
+                .saturating_sub(prev.end_position().row)
+                <= 1
+        {
+            let text = prev.utf8_text(source).unwrap_or_default().trim();
+            let text = text.strip_prefix("//").unwrap_or(text).trim();
+            let text = text.strip_prefix("/*").unwrap_or(text);
+            let text = text.strip_suffix("*/").unwrap_or(text);
+            return text.trim().to_string();
+        }
     }
     String::new()
 }

@@ -105,10 +105,20 @@ fn merge_file<T: serde::Serialize>(
                 if local_changed && server_changed {
                     // CONFLICT
                     conflicts += 1;
+
+                    let mut local_yaml_str = String::new();
+                    {
+                        let mut emitter = YamlEmitter::new(&mut local_yaml_str);
+                        emitter.dump(val).ok();
+                    }
+                    let local_yaml_str = clean_yaml_str(&local_yaml_str);
+
                     let server_yaml_str = serde_yaml::to_string(server_item).unwrap_or_default();
-                    let local_yaml_str = format!("{val:?}"); // Simplified local capture
-                    let conflict_val =
-                        format!("<<< LOCAL\n{local_yaml_str}\n===\n{server_yaml_str}>>> SERVER");
+                    let server_yaml_str = clean_yaml_str(&server_yaml_str);
+
+                    let conflict_val = format!(
+                        "<<<<<<< LOCAL\n{local_yaml_str}\n=======\n{server_yaml_str}>>>>>>> SERVER"
+                    );
                     *val = Yaml::String(conflict_val);
                 } else if server_changed {
                     // Update from server
@@ -149,4 +159,12 @@ fn merge_file<T: serde::Serialize>(
         .map_err(|e| TldError::Generic(e.to_string()))?;
     fs::write(path, out_str).map_err(|e| TldError::Generic(e.to_string()))?;
     Ok(conflicts)
+}
+
+fn clean_yaml_str(s: &str) -> String {
+    s.trim_start_matches("---")
+        .trim_start_matches("?\n")
+        .trim_start_matches('?')
+        .trim()
+        .to_string()
 }
