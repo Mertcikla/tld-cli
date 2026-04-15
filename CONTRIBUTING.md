@@ -8,14 +8,25 @@ If you've noticed a bug or have a feature request, check our [Issues](https://gi
 
 ## Development
 
-Make sure you have Go 1.26 or later installed.
+Make sure you have **Rust 1.84** or later installed.
 Clone the repository and run the tests:
 
 ```bash
-git clone https://github.com/mertcikla/tld-cli.git
+git clone https://github.com/Mertcikla/tld.git
 cd tld
 make test
 ```
+
+### Speeding Up Development Builds
+
+To speed up Rust builds, we recommend:
+1. **[sccache](https://github.com/mozilla/sccache)**: A compiler cache for Rust.
+   ```bash
+   cargo install sccache
+   # Add RUSTC_WRAPPER=sccache to your shell profile
+   ```
+2. **[mold](https://github.com/rui314/mold)** (Linux) or **[zld](https://github.com/michaeleisel/zld)** (macOS): Faster linkers.
+3. **`split-debuginfo = "unpacked"`**: Already configured in `Cargo.toml` for faster macOS linking.
 
 We recommend running the linters before committing:
 
