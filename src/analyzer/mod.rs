@@ -37,7 +37,16 @@ impl TreeSitterService {
                     .extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or("<none>");
-                return Err(TldError::UnsupportedLanguage(ext.to_string()));
+                match ext {
+                    "py" => "python",
+                    "java" => "java",
+                    "cpp" | "cc" | "hpp" | "h" | "cxx" => "cpp",
+                    "ts" | "tsx" => "typescript",
+                    "js" | "jsx" => "javascript",
+                    "go" => "go",
+                    "rs" => "rust",
+                    _ => return Err(TldError::UnsupportedLanguage(ext.to_string())),
+                }
             }
         };
 
@@ -80,6 +89,18 @@ impl TreeSitterService {
             "rust" => {
                 parsers::rust::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
             }
+            "cpp" => {
+                parsers::cpp::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+            }
+            "java" => {
+                parsers::java::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+            }
+            "python" => {
+                parsers::python::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+            }
+            "typescript" | "javascript" | "tsx" => {
+                parsers::typescript::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+            }
             _ => {
                 // Guarded above by is_parser_implemented; this branch should not be reached.
                 return Err(TldError::ParserNotImplemented(lang_name.to_string()));
@@ -101,7 +122,7 @@ impl TreeSitterService {
 /// lets us give a clear "not yet implemented" message rather than a generic
 /// tree-sitter error.
 fn is_parser_implemented(lang_name: &str) -> bool {
-    matches!(lang_name, "go" | "rust")
+    matches!(lang_name, "go" | "rust" | "cpp" | "java" | "python" | "typescript" | "javascript" | "tsx")
 }
 
 impl Service for TreeSitterService {

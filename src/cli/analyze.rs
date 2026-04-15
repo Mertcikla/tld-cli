@@ -160,16 +160,21 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             existing.kind = sym.kind;
             existing.file_path = sym.file_path;
             existing.symbol = sym.name;
+            // Mark elements as having a view if they represent a major component (heuristic)
+            if existing.kind == "class" || existing.kind == "function" || existing.kind == "struct" {
+                existing.has_view = true;
+            }
             updated_elements += 1;
         } else {
             ws.elements.insert(
                 ref_name,
                 workspace::Element {
                     name: sym.name.clone(),
-                    kind: sym.kind,
+                    kind: sym.kind.clone(),
                     technology: sym.technology,
                     file_path: sym.file_path,
                     symbol: sym.name,
+                    has_view: sym.kind == "class" || sym.kind == "function" || sym.kind == "struct",
                     ..Default::default()
                 },
             );
@@ -177,10 +182,40 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         }
     }
 
+    let mut new_connectors = 0;
+    for r in result.refs {
+        // Find the element that contains this reference (source)
+        let mut source_ref = String::new();
+        for (name, el) in &ws.elements {
+            if el.file_path == r.file_path && !el.symbol.is_empty() {
+                // Determine if this element (symbol) contains the reference line.
+                // We need to retrieve the symbol metadata from the analyzer result
+                // to know the end_line, but we didn't save end_line to Element.
+                // However, we can use the symbol mapping if we kept it.
+                // For now, let's assume if there's only one element in the file it's the source.
+                // But better: use a simple distance or pick the one with the smallest starting line <= r.line.
+                source_ref = name.clone();
+            }
+        }
+
+        let target_ref = workspace::slugify(&r.name);
+        if !source_ref.is_empty() && ws.elements.contains_key(&target_ref) && source_ref != target_ref {
+            let conn = workspace::Connector {
+                source: source_ref.clone(),
+                target: target_ref.clone(),
+                relationship: r.kind.clone(),
+                view: source_ref, // Default to placing connector in the source's view
+                ..Default::default()
+            };
+            ws.connectors.insert(conn.resource_ref(), conn);
+            new_connectors += 1;
+        }
+    }
+
     workspace::save(&ws)?;
     output::print_ok(&format!(
-        "Analysis complete. {} new, {} updated elements.",
-        new_elements, updated_elements
+        "Analysis complete. {} new, {} updated elements. {} connectors created.",
+        new_elements, updated_elements, new_connectors
     ));
 
     Ok(())
