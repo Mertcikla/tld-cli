@@ -19,17 +19,9 @@ clean:
 	cargo clean
 
 changelog:
-	@if ! command -v git-cliff &> /dev/null; then \
-		echo "Installing git-cliff..."; \
-		cargo install git-cliff; \
-	fi
 	git-cliff --output CHANGELOG.md
 
 release:
-	@if ! command -v git-cliff &> /dev/null; then \
-		echo "Installing git-cliff..."; \
-		cargo install git-cliff; \
-	fi
 	@echo "Fetching latest tags..."
 	@git fetch --tags --quiet
 	@LATEST_TAG=$$(git tag --sort=-v:refname | head -n 1); \
