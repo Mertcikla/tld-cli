@@ -7,7 +7,7 @@ dev:
 	cargo run -- $(filter-out $@,$(MAKECMDGOALS))
 
 test:
-	cargo test
+	cargo test -- --nocapture
 
 fmt:
 	cargo fmt

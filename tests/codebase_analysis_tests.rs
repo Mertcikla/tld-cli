@@ -30,14 +30,21 @@ fn test_analyze_all_codebases() {
         
         // 2. Verify connectors.yaml exists and is not empty
         let connectors_path = dir.path().join("connectors.yaml");
-        assert!(connectors_path.exists(), "connectors.yaml should exist for {} codebase. elements found: {}", lang, elements_data);
+        assert!(connectors_path.exists(), "connectors.yaml should exist for {} codebase", lang);
         let connectors_data = fs::read_to_string(&connectors_path).expect("Failed to read connectors.yaml");
         assert!(!connectors_data.trim().is_empty(), "connectors.yaml should not be empty for {} codebase", lang);
         
         // 3. Verify at least one element has a view
-        // In elements.yaml, it should have "has_view: true"
         assert!(elements_data.contains("has_view: true"), "At least one element should have a view for {} codebase", lang);
         
+        // Count elements, views, and connectors
+        let element_count = elements_data.matches("  name:").count();
+        let view_count = elements_data.matches("has_view: true").count();
+        let connector_count = connectors_data.matches("  source:").count();
+
         println!("Success for {} codebase!", lang);
+        println!("  - Elements:   {}", element_count);
+        println!("  - Views:      {}", view_count);
+        println!("  - Connectors: {}", connector_count);
     }
 }
