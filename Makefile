@@ -1,4 +1,4 @@
-.PHONY: build dev test fmt lint clean release install
+.PHONY: build dev test fmt lint clean release install changelog
 
 # Default protoc path for macOS Homebrew, can be overridden
 PROTOC ?= protoc
@@ -21,9 +21,18 @@ lint:
 clean:
 	cargo clean
 
+changelog:
+	@if ! command -v git-cliff &> /dev/null; then \
+		echo "Installing git-cliff..."; \
+		cargo install git-cliff; \
+	fi
+	git-cliff --output CHANGELOG.md
+
 release:
-	@echo "Building release binary..."
-	PROTOC=$(PROTOC) cargo build --release
+	@if ! command -v git-cliff &> /dev/null; then \
+		echo "Installing git-cliff..."; \
+		cargo install git-cliff; \
+	fi
 	@echo "Fetching latest tags..."
 	@git fetch --tags --quiet
 	@LATEST_TAG=$$(git tag --sort=-v:refname | head -n 1); \
@@ -39,12 +48,16 @@ release:
 	printf "Confirm release tag and push? [y/N] "; \
 	read confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		echo "Generating changelog..."; \
+		git-cliff --tag $$NEW_TAG --output CHANGELOG.md; \
+		git add CHANGELOG.md; \
+		git commit -m "chore(release): update changelog for $$NEW_TAG"; \
 		echo "Creating tag $$NEW_TAG..."; \
 		git tag $$NEW_TAG; \
-		echo "Pushing tag $$NEW_TAG to origin..."; \
-		git push origin $$NEW_TAG; \
+		echo "Pushing to origin..."; \
+		git push origin HEAD $$NEW_TAG; \
 	else \
-		echo "Tagging cancelled. Release binary is ready in target/release/tld"; \
+		echo "Tagging cancelled."; \
 	fi
 
 install:

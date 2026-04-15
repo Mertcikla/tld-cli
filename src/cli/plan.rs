@@ -1,9 +1,9 @@
-use clap::Args;
+use crate::client;
 use crate::error::TldError;
 use crate::output;
-use crate::workspace;
 use crate::planner;
-use crate::client;
+use crate::workspace;
+use clap::Args;
 use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
@@ -24,24 +24,29 @@ pub struct PlanArgs {
 
 pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
-    
+
     // Check for API key
     if ws.config.api_key.is_empty() {
-        return Err(TldError::Generic("No API key found. Run 'tld login' first.".to_string()));
+        return Err(TldError::Generic(
+            "No API key found. Run 'tld login' first.".to_string(),
+        ));
     }
 
     output::print_info("Building plan...");
     let plan = planner::build(&ws, args.recreate_ids)?;
 
     let spinner = output::new_spinner("Contacting server for dry-run...");
-    let mut ws_client = client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
+    let mut ws_client =
+        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
 
-    let resp = ws_client.apply_workspace_plan(Request::new(plan.request)).await?
+    let resp = ws_client
+        .apply_workspace_plan(Request::new(plan.request))
+        .await?
         .into_inner();
     spinner.finish_and_clear();
 
     output::print_ok("Plan built successfully.");
-    
+
     // Summary of counts
     if let Some(summary) = &resp.summary {
         println!("\nPlan Summary:");
@@ -54,7 +59,7 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
     if !resp.element_results.is_empty() || !resp.connector_results.is_empty() {
         println!("\nProposed Changes:");
         use tabled::{Table, Tabled};
-        
+
         #[derive(Tabled)]
         struct ChangeRow {
             #[tabled(rename = "Type")]
@@ -92,16 +97,22 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
         println!("");
         output::print_warn(&format!("{} conflicts detected!", resp.conflicts.len()));
         for conflict in &resp.conflicts {
-            println!("  * {} \"{}\": {}", conflict.resource_type, conflict.r#ref, conflict.resolution_hint);
+            println!(
+                "  * {} \"{}\": {}",
+                conflict.resource_type, conflict.r#ref, conflict.resolution_hint
+            );
         }
     }
-    
+
     // Drift
     if !resp.drift.is_empty() {
         println!("");
         output::print_info(&format!("{} drift items detected.", resp.drift.len()));
         for drift in &resp.drift {
-            println!("  * {} \"{}\": {}", drift.resource_type, drift.r#ref, drift.reason);
+            println!(
+                "  * {} \"{}\": {}",
+                drift.resource_type, drift.r#ref, drift.reason
+            );
         }
     }
 

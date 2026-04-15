@@ -1,7 +1,7 @@
-use clap::{Args, Subcommand};
 use crate::error::TldError;
-use crate::workspace;
 use crate::output;
+use crate::workspace;
+use clap::{Args, Subcommand};
 
 #[derive(Args, Debug, Clone)]
 pub struct UpdateArgs {
@@ -35,15 +35,29 @@ pub async fn exec(args: UpdateArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
 
     match args.resource {
-        UpdateResource::Element { r#ref, field, value } => {
+        UpdateResource::Element {
+            r#ref,
+            field,
+            value,
+        } => {
             ws.update_element_field(&r#ref, &field, &value)?;
             workspace::save(&ws)?;
-            output::print_ok(&format!("Updated element '{}' field '{}' to '{}'", r#ref, field, value));
+            output::print_ok(&format!(
+                "Updated element '{}' field '{}' to '{}'",
+                r#ref, field, value
+            ));
         }
-        UpdateResource::Connector { r#ref, field, value } => {
+        UpdateResource::Connector {
+            r#ref,
+            field,
+            value,
+        } => {
             ws.update_connector_field(&r#ref, &field, &value)?;
             workspace::save(&ws)?;
-            output::print_ok(&format!("Updated connector '{}' field '{}' to '{}'", r#ref, field, value));
+            output::print_ok(&format!(
+                "Updated connector '{}' field '{}' to '{}'",
+                r#ref, field, value
+            ));
         }
     }
 

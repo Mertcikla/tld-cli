@@ -1,15 +1,19 @@
-use std::collections::HashMap;
 use crate::error::TldError;
 use crate::workspace::types::*;
+use std::collections::HashMap;
 
 impl Workspace {
     /// Upserts an element in the workspace.
-    pub fn upsert_element(&mut self, ref_name: String, mut element: Element) -> Result<(), TldError> {
+    pub fn upsert_element(
+        &mut self,
+        ref_name: String,
+        mut element: Element,
+    ) -> Result<(), TldError> {
         // Enforce some defaults if missing
         if element.kind.is_empty() {
             element.kind = "service".to_string();
         }
-        
+
         self.elements.insert(ref_name, element);
         Ok(())
     }
@@ -18,13 +22,14 @@ impl Workspace {
     pub fn remove_element(&mut self, ref_name: &str) -> Result<(), TldError> {
         if self.elements.remove(ref_name).is_some() {
             // 1. Remove connectors where this element is source or target
-            self.connectors.retain(|_, c| c.source != ref_name && c.target != ref_name);
-            
+            self.connectors
+                .retain(|_, c| c.source != ref_name && c.target != ref_name);
+
             // 2. Remove placements in other elements where this element is parent
             for el in self.elements.values_mut() {
                 el.placements.retain(|p| p.parent_ref != ref_name);
             }
-            
+
             // 3. Remove from metadata
             if let Some(meta) = &mut self.meta {
                 meta.elements.remove(ref_name);
@@ -96,7 +101,7 @@ impl Workspace {
         if connector.view.is_empty() {
             connector.view = self.infer_connector_view(&connector.source, &connector.target)?;
         }
-        
+
         let ref_name = connector.resource_ref();
         self.connectors.insert(ref_name.clone(), connector);
         Ok(ref_name)
@@ -104,13 +109,23 @@ impl Workspace {
 
     /// Infers the shared parent view for two elements.
     fn infer_connector_view(&self, source_ref: &str, target_ref: &str) -> Result<String, TldError> {
-        let source = self.elements.get(source_ref)
-            .ok_or_else(|| TldError::Generic(format!("Source element '{}' not found", source_ref)))?;
-        let target = self.elements.get(target_ref)
-            .ok_or_else(|| TldError::Generic(format!("Target element '{}' not found", target_ref)))?;
+        let source = self.elements.get(source_ref).ok_or_else(|| {
+            TldError::Generic(format!("Source element '{}' not found", source_ref))
+        })?;
+        let target = self.elements.get(target_ref).ok_or_else(|| {
+            TldError::Generic(format!("Target element '{}' not found", target_ref))
+        })?;
 
-        let source_parents: Vec<_> = source.placements.iter().map(|p| p.parent_ref.as_str()).collect();
-        let target_parents: Vec<_> = target.placements.iter().map(|p| p.parent_ref.as_str()).collect();
+        let source_parents: Vec<_> = source
+            .placements
+            .iter()
+            .map(|p| p.parent_ref.as_str())
+            .collect();
+        let target_parents: Vec<_> = target
+            .placements
+            .iter()
+            .map(|p| p.parent_ref.as_str())
+            .collect();
 
         for sp in &source_parents {
             if target_parents.contains(sp) {
@@ -122,12 +137,19 @@ impl Workspace {
     }
 
     /// Updates a specific field on an element.
-    pub fn update_element_field(&mut self, ref_name: &str, field: &str, value: &str) -> Result<(), TldError> {
+    pub fn update_element_field(
+        &mut self,
+        ref_name: &str,
+        field: &str,
+        value: &str,
+    ) -> Result<(), TldError> {
         if field == "ref" {
             return self.rename_element(ref_name, value);
         }
 
-        let el = self.elements.get_mut(ref_name)
+        let el = self
+            .elements
+            .get_mut(ref_name)
             .ok_or_else(|| TldError::Generic(format!("Element '{}' not found", ref_name)))?;
 
         match field {
@@ -145,15 +167,27 @@ impl Workspace {
             "symbol" => el.symbol = value.to_string(),
             "has_view" => el.has_view = value.parse().unwrap_or(false),
             "view_label" => el.view_label = value.to_string(),
-            _ => return Err(TldError::Generic(format!("Unknown element field '{}'", field))),
+            _ => {
+                return Err(TldError::Generic(format!(
+                    "Unknown element field '{}'",
+                    field
+                )));
+            }
         }
 
         Ok(())
     }
 
     /// Updates a specific field on a connector.
-    pub fn update_connector_field(&mut self, ref_name: &str, field: &str, value: &str) -> Result<(), TldError> {
-        let mut conn = self.connectors.remove(ref_name)
+    pub fn update_connector_field(
+        &mut self,
+        ref_name: &str,
+        field: &str,
+        value: &str,
+    ) -> Result<(), TldError> {
+        let mut conn = self
+            .connectors
+            .remove(ref_name)
             .ok_or_else(|| TldError::Generic(format!("Connector '{}' not found", ref_name)))?;
 
         match field {
@@ -168,25 +202,33 @@ impl Workspace {
             "url" => conn.url = value.to_string(),
             _ => {
                 self.connectors.insert(ref_name.to_string(), conn);
-                return Err(TldError::Generic(format!("Unknown connector field '{}'", field)));
+                return Err(TldError::Generic(format!(
+                    "Unknown connector field '{}'",
+                    field
+                )));
             }
         }
 
         let new_ref = conn.resource_ref();
-        
+
         // Update metadata if present
         if let Some(meta) = &mut self.meta {
             if let Some(m) = meta.connectors.remove(ref_name) {
                 meta.connectors.insert(new_ref.clone(), m);
             }
         }
-        
+
         self.connectors.insert(new_ref, conn);
         Ok(())
     }
 
     /// Removes a connector matching coordinates. Returns count of removed items.
-    pub fn remove_connector(&mut self, view: &str, source: &str, target: &str) -> Result<usize, TldError> {
+    pub fn remove_connector(
+        &mut self,
+        view: &str,
+        source: &str,
+        target: &str,
+    ) -> Result<usize, TldError> {
         let before = self.connectors.len();
         let mut removed_refs = Vec::new();
 

@@ -10,19 +10,17 @@ pub mod proto {
 
 pub use proto::diag::v1 as diagv1;
 
+use crate::error::TldError;
 use std::str::FromStr;
 use tonic::{
-    metadata::{MetadataValue, Ascii},
-    transport::Channel,
-    Request,
-    Status,
+    Request, Status,
+    metadata::{Ascii, MetadataValue},
     service::interceptor::{InterceptedService, Interceptor},
+    transport::Channel,
 };
-use crate::error::TldError;
 
 use diagv1::{
-    workspace_service_client::WorkspaceServiceClient,
-    device_service_client::DeviceServiceClient,
+    device_service_client::DeviceServiceClient, workspace_service_client::WorkspaceServiceClient,
 };
 
 /// Normalises a server URL to include the `/api` suffix.
@@ -52,7 +50,9 @@ pub struct AuthInterceptor {
 
 impl Interceptor for AuthInterceptor {
     fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, Status> {
-        request.metadata_mut().insert("authorization", self.token.clone());
+        request
+            .metadata_mut()
+            .insert("authorization", self.token.clone());
         Ok(request)
     }
 }
@@ -65,16 +65,14 @@ pub async fn new_workspace_client(
     let channel = connect_channel(&normalize_url(server_url)).await?;
     let token = MetadataValue::from_str(&format!("Bearer {}", api_key))
         .map_err(|e| TldError::Generic(e.to_string()))?;
-    
+
     let interceptor = AuthInterceptor { token };
     let client = WorkspaceServiceClient::with_interceptor(channel, interceptor);
     Ok(client)
 }
 
 /// Creates a DeviceServiceClient (no auth required for device flow).
-pub async fn new_device_client(
-    server_url: &str,
-) -> Result<DeviceServiceClient<Channel>, TldError> {
+pub async fn new_device_client(server_url: &str) -> Result<DeviceServiceClient<Channel>, TldError> {
     let channel = connect_channel(&normalize_url(server_url)).await?;
     let client = DeviceServiceClient::new(channel);
     Ok(client)

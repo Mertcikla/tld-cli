@@ -1,9 +1,9 @@
-use clap::Args;
-use std::path::{Path};
+use crate::analyzer::{Rules, Service, TreeSitterService};
 use crate::error::TldError;
 use crate::output;
 use crate::workspace;
-use crate::analyzer::{Service, TreeSitterService, Rules};
+use clap::Args;
+use std::path::Path;
 
 #[derive(Args, Debug, Clone)]
 pub struct AnalyzeArgs {
@@ -24,12 +24,18 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
     let scan_path = args.path.clone();
 
-    let abs_scan_path = Path::new(&scan_path).canonicalize()
+    let abs_scan_path = Path::new(&scan_path)
+        .canonicalize()
         .map_err(|e| TldError::Generic(format!("Failed to resolve path {}: {}", scan_path, e)))?;
 
     output::print_info(&format!("Analyzing {}...", scan_path));
 
-    let rules = Rules::new(ws.workspace_config.as_ref().map(|c| c.exclude.clone()).unwrap_or_default());
+    let rules = Rules::new(
+        ws.workspace_config
+            .as_ref()
+            .map(|c| c.exclude.clone())
+            .unwrap_or_default(),
+    );
     let analyzer_service = TreeSitterService::new();
 
     let spinner = output::new_spinner("Scanning files...");
@@ -55,7 +61,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     for sym in result.symbols {
         let ref_name = workspace::slugify(&sym.name);
-        
+
         // Simple upsert logic
         if let Some(existing) = ws.elements.get_mut(&ref_name) {
             existing.technology = sym.technology;
@@ -64,20 +70,26 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             existing.symbol = sym.name;
             updated_elements += 1;
         } else {
-            ws.elements.insert(ref_name, workspace::Element {
-                name: sym.name.clone(),
-                kind: sym.kind,
-                technology: sym.technology,
-                file_path: sym.file_path,
-                symbol: sym.name,
-                ..Default::default()
-            });
+            ws.elements.insert(
+                ref_name,
+                workspace::Element {
+                    name: sym.name.clone(),
+                    kind: sym.kind,
+                    technology: sym.technology,
+                    file_path: sym.file_path,
+                    symbol: sym.name,
+                    ..Default::default()
+                },
+            );
             new_elements += 1;
         }
     }
 
     workspace::save(&ws)?;
-    output::print_ok(&format!("Analysis complete. {} new, {} updated elements.", new_elements, updated_elements));
+    output::print_ok(&format!(
+        "Analysis complete. {} new, {} updated elements.",
+        new_elements, updated_elements
+    ));
 
     Ok(())
 }

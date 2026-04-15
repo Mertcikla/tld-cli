@@ -1,10 +1,10 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
-use std::fs;
-use std::path::Path;
 use crate::error::TldError;
 use crate::workspace::types::{Meta, ResourceMetadata};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct LockFile {
@@ -54,15 +54,14 @@ pub fn load_lock_file(dir: &str) -> Result<Option<LockFile>, TldError> {
         return Ok(None);
     }
     let data = fs::read_to_string(&path)?;
-    let lock_file: LockFile = serde_yaml::from_str(&data)
-        .map_err(|e| TldError::Yaml(e.to_string()))?;
+    let lock_file: LockFile =
+        serde_yaml::from_str(&data).map_err(|e| TldError::Yaml(e.to_string()))?;
     Ok(Some(lock_file))
 }
 
 pub fn save_lock_file(dir: &str, lock_file: &LockFile) -> Result<(), TldError> {
     let path = Path::new(dir).join(".tld.lock");
-    let data = serde_yaml::to_string(lock_file)
-        .map_err(|e| TldError::Yaml(e.to_string()))?;
+    let data = serde_yaml::to_string(lock_file).map_err(|e| TldError::Yaml(e.to_string()))?;
     fs::write(path, data)?;
     Ok(())
 }
@@ -97,15 +96,19 @@ pub fn load_metadata(dir: &str) -> Result<Meta, TldError> {
     Ok(meta)
 }
 
-fn load_yaml_metadata_section(dir: &str, filename: &str, section: &str) -> Result<HashMap<String, ResourceMetadata>, TldError> {
+fn load_yaml_metadata_section(
+    dir: &str,
+    filename: &str,
+    section: &str,
+) -> Result<HashMap<String, ResourceMetadata>, TldError> {
     let path = Path::new(dir).join(filename);
     if !path.exists() {
         return Ok(HashMap::new());
     }
     let data = fs::read_to_string(&path)?;
-    let val: serde_yaml::Value = serde_yaml::from_str(&data)
-        .map_err(|e| TldError::Yaml(e.to_string()))?;
-    
+    let val: serde_yaml::Value =
+        serde_yaml::from_str(&data).map_err(|e| TldError::Yaml(e.to_string()))?;
+
     if let Some(mapping) = val.as_mapping() {
         if let Some(sec_val) = mapping.get(&serde_yaml::Value::String(section.to_string())) {
             let m: HashMap<String, ResourceMetadata> = serde_yaml::from_value(sec_val.clone())

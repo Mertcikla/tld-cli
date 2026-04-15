@@ -1,6 +1,6 @@
-use crate::workspace::Workspace;
-use crate::client::diagv1::{ApplyPlanRequest, PlanElement, PlanViewPlacement, PlanConnector};
+use crate::client::diagv1::{ApplyPlanRequest, PlanConnector, PlanElement, PlanViewPlacement};
 use crate::error::TldError;
+use crate::workspace::Workspace;
 use prost_types::Timestamp;
 
 pub struct Plan {
@@ -38,11 +38,19 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
 
         for placement in &element.placements {
             let mut p = PlanViewPlacement {
-                parent_ref: if placement.parent_ref.is_empty() { synth_root.clone() } else { placement.parent_ref.clone() },
+                parent_ref: if placement.parent_ref.is_empty() {
+                    synth_root.clone()
+                } else {
+                    placement.parent_ref.clone()
+                },
                 ..Default::default()
             };
-            if placement.position_x != 0.0 { p.position_x = Some(placement.position_x); }
-            if placement.position_y != 0.0 { p.position_y = Some(placement.position_y); }
+            if placement.position_x != 0.0 {
+                p.position_x = Some(placement.position_x);
+            }
+            if placement.position_y != 0.0 {
+                p.position_y = Some(placement.position_y);
+            }
             plan_el.placements.push(p);
         }
 
@@ -74,7 +82,11 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
     for (ref_name, connector) in &ws.connectors {
         let mut plan_conn = PlanConnector {
             r#ref: ref_name.clone(),
-            view_ref: if connector.view.is_empty() { synth_root.clone() } else { connector.view.clone() },
+            view_ref: if connector.view.is_empty() {
+                synth_root.clone()
+            } else {
+                connector.view.clone()
+            },
             source_element_ref: connector.source.clone(),
             target_element_ref: connector.target.clone(),
             label: some_if_not_empty(&connector.label),
@@ -105,5 +117,9 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
 }
 
 fn some_if_not_empty(s: &str) -> Option<String> {
-    if s.is_empty() { None } else { Some(s.to_string()) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
 }

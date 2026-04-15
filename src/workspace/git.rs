@@ -1,8 +1,11 @@
-use std::process::Command;
-use chrono::{DateTime, Utc};
 use crate::error::TldError;
+use chrono::{DateTime, Utc};
+use std::process::Command;
 
-pub fn get_file_last_commit_at(repo_root: &str, file_path: &str) -> Result<DateTime<Utc>, TldError> {
+pub fn get_file_last_commit_at(
+    repo_root: &str,
+    file_path: &str,
+) -> Result<DateTime<Utc>, TldError> {
     let output = Command::new("git")
         .args(["log", "-1", "--format=%cI", file_path])
         .current_dir(repo_root)
@@ -15,7 +18,9 @@ pub fn get_file_last_commit_at(repo_root: &str, file_path: &str) -> Result<DateT
 
     let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if s.is_empty() {
-        return Err(TldError::Generic("No commit history found for file".to_string()));
+        return Err(TldError::Generic(
+            "No commit history found for file".to_string(),
+        ));
     }
 
     DateTime::parse_from_rfc3339(&s)

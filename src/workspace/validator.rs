@@ -1,6 +1,6 @@
-use std::fmt;
-use crate::workspace::types::*;
 use crate::analyzer::TreeSitterService;
+use crate::workspace::types::*;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct ValidationError {
@@ -39,29 +39,43 @@ impl Workspace {
             let loc = format!("elements.yaml[{}]", ref_name);
 
             if element.name.is_empty() {
-                errs.push(ValidationError { location: loc.clone(), message: "name is required".to_string() });
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: "name is required".to_string(),
+                });
             } else {
                 if let Some(existing_ref) = names.get(&element.name) {
-                    errs.push(ValidationError { 
-                        location: loc.clone(), 
-                        message: format!("duplicate element name \"{}\" (also used by \"{}\")", element.name, existing_ref) 
+                    errs.push(ValidationError {
+                        location: loc.clone(),
+                        message: format!(
+                            "duplicate element name \"{}\" (also used by \"{}\")",
+                            element.name, existing_ref
+                        ),
                     });
                 }
                 names.insert(element.name.clone(), ref_name.clone());
             }
 
             if element.kind.is_empty() {
-                errs.push(ValidationError { location: loc.clone(), message: "kind is required".to_string() });
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: "kind is required".to_string(),
+                });
             }
 
             for (index, placement) in element.placements.iter().enumerate() {
                 let ploc = format!("{}[placements][{}]", loc, index);
                 if placement.parent_ref.is_empty() {
-                    errs.push(ValidationError { location: ploc, message: "parent is required".to_string() });
-                } else if placement.parent_ref != "root" && !self.elements.contains_key(&placement.parent_ref) {
-                    errs.push(ValidationError { 
-                        location: ploc, 
-                        message: format!("parent ref \"{}\" not found", placement.parent_ref) 
+                    errs.push(ValidationError {
+                        location: ploc,
+                        message: "parent is required".to_string(),
+                    });
+                } else if placement.parent_ref != "root"
+                    && !self.elements.contains_key(&placement.parent_ref)
+                {
+                    errs.push(ValidationError {
+                        location: ploc,
+                        message: format!("parent ref \"{}\" not found", placement.parent_ref),
                     });
                 }
             }
@@ -71,29 +85,38 @@ impl Workspace {
             let loc = format!("connectors.yaml[{}]", ref_name);
 
             if connector.view.is_empty() {
-                errs.push(ValidationError { location: loc.clone(), message: "view is required".to_string() });
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: "view is required".to_string(),
+                });
             } else if connector.view != "root" && !self.elements.contains_key(&connector.view) {
-                errs.push(ValidationError { 
-                    location: loc.clone(), 
-                    message: format!("view ref \"{}\" not found", connector.view) 
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: format!("view ref \"{}\" not found", connector.view),
                 });
             }
 
             if connector.source.is_empty() {
-                errs.push(ValidationError { location: loc.clone(), message: "source is required".to_string() });
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: "source is required".to_string(),
+                });
             } else if !self.elements.contains_key(&connector.source) {
-                errs.push(ValidationError { 
-                    location: loc.clone(), 
-                    message: format!("source ref \"{}\" not found", connector.source) 
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: format!("source ref \"{}\" not found", connector.source),
                 });
             }
 
             if connector.target.is_empty() {
-                errs.push(ValidationError { location: loc.clone(), message: "target is required".to_string() });
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: "target is required".to_string(),
+                });
             } else if !self.elements.contains_key(&connector.target) {
-                errs.push(ValidationError { 
-                    location: loc.clone(), 
-                    message: format!("target ref \"{}\" not found", connector.target) 
+                errs.push(ValidationError {
+                    location: loc.clone(),
+                    message: format!("target ref \"{}\" not found", connector.target),
                 });
             }
         }
@@ -114,8 +137,14 @@ impl Workspace {
         for (ref_name, element) in &self.elements {
             let loc = format!("elements.yaml[{}]", ref_name);
             for marker in markers {
-                if element.name.contains(marker) || element.description.contains(marker) || element.technology.contains(marker) {
-                    errs.push(ValidationError { location: loc.clone(), message: "unresolved merge conflict".to_string() });
+                if element.name.contains(marker)
+                    || element.description.contains(marker)
+                    || element.technology.contains(marker)
+                {
+                    errs.push(ValidationError {
+                        location: loc.clone(),
+                        message: "unresolved merge conflict".to_string(),
+                    });
                     break;
                 }
             }
@@ -124,8 +153,14 @@ impl Workspace {
         for (ref_name, connector) in &self.connectors {
             let loc = format!("connectors.yaml[{}]", ref_name);
             for marker in markers {
-                if connector.label.contains(marker) || connector.description.contains(marker) || connector.relationship.contains(marker) {
-                    errs.push(ValidationError { location: loc.clone(), message: "unresolved merge conflict".to_string() });
+                if connector.label.contains(marker)
+                    || connector.description.contains(marker)
+                    || connector.relationship.contains(marker)
+                {
+                    errs.push(ValidationError {
+                        location: loc.clone(),
+                        message: "unresolved merge conflict".to_string(),
+                    });
                     break;
                 }
             }
@@ -154,14 +189,19 @@ impl Workspace {
                     if !found {
                         errs.push(ValidationError {
                             location: format!("elements.yaml[{}]", ref_name),
-                            message: format!("symbol \"{}\" not found in {}", element.symbol, element.file_path),
+                            message: format!(
+                                "symbol \"{}\" not found in {}",
+                                element.symbol, element.file_path
+                            ),
                         });
                     }
                 }
                 Err(e) => {
                     // Ignore unsupported languages or other parsing errors for now to match Go behavior
-                    if !e.to_string().contains("Unsupported language") && !e.to_string().contains("Parser logic not yet implemented") {
-                       errs.push(ValidationError {
+                    if !e.to_string().contains("Unsupported language")
+                        && !e.to_string().contains("Parser logic not yet implemented")
+                    {
+                        errs.push(ValidationError {
                             location: format!("elements.yaml[{}]", ref_name),
                             message: format!("symbol verification failed: {}", e),
                         });
@@ -190,7 +230,9 @@ impl Workspace {
                 None => continue,
             };
 
-            if let Ok(commit_time) = crate::workspace::get_file_last_commit_at(&self.dir, &element.file_path) {
+            if let Ok(commit_time) =
+                crate::workspace::get_file_last_commit_at(&self.dir, &element.file_path)
+            {
                 if commit_time > m.updated_at {
                     outdated.push(format!(
                         "elements.yaml[{}]: file {} changed {}, diagram last synced {}",

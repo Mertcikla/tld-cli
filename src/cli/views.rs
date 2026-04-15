@@ -1,7 +1,7 @@
-use clap::Args;
 use crate::error::TldError;
-use crate::workspace;
 use crate::output::{self};
+use crate::workspace;
+use clap::Args;
 use tabled::Tabled;
 
 #[derive(Args, Debug, Clone)]
@@ -23,7 +23,7 @@ struct ViewRow {
 
 pub async fn exec(args: ViewsArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
-    
+
     let mut rows = Vec::new();
 
     for (ref_name, element) in &ws.elements {

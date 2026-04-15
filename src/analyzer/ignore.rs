@@ -23,17 +23,19 @@ impl Rules {
                 continue;
             }
             let normalized_pattern = self.normalize_pattern(pattern);
-            
-            if self.match_pattern(&normalized_pattern, &normalized_path) || 
-               self.match_pattern(&normalized_pattern, base_name) {
+
+            if self.match_pattern(&normalized_pattern, &normalized_path)
+                || self.match_pattern(&normalized_pattern, base_name)
+            {
                 return true;
             }
 
             // Handle trailing slash (directory matching)
             if let Some(trimmed) = normalized_pattern.strip_suffix('/') {
-                if normalized_path == trimmed || 
-                   normalized_path.starts_with(&format!("{}/", trimmed)) || 
-                   base_name == trimmed {
+                if normalized_path == trimmed
+                    || normalized_path.starts_with(&format!("{}/", trimmed))
+                    || base_name == trimmed
+                {
                     return true;
                 }
             }
@@ -71,7 +73,8 @@ impl Rules {
     }
 
     fn normalize_pattern(&self, pattern: &str) -> String {
-        pattern.trim()
+        pattern
+            .trim()
             .replace('\\', "/")
             .trim_start_matches("./")
             .to_string()

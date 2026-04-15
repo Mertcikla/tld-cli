@@ -1,6 +1,6 @@
+use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use std::path::Path;
 use tree_sitter::Node;
-use crate::analyzer::types::{AnalysisResult, Symbol, Ref};
 
 pub fn parse(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult) {
     walk_node(node, source, path, result);
@@ -23,7 +23,13 @@ fn walk_node(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult
     }
 }
 
-fn append_function(node: &Node, source: &[u8], path: &str, kind: &str, result: &mut AnalysisResult) {
+fn append_function(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    kind: &str,
+    result: &mut AnalysisResult,
+) {
     if let Some(name_node) = node.child_by_field_name("name") {
         result.symbols.push(Symbol {
             name: name_node.utf8_text(source).unwrap_or_default().to_string(),
@@ -102,7 +108,7 @@ fn append_import(node: &Node, source: &[u8], file_path: &str, result: &mut Analy
                 .and_then(|s| s.to_str())
                 .unwrap_or(import_path)
                 .to_string();
-            
+
             result.refs.push(Ref {
                 name,
                 kind: "import".to_string(),

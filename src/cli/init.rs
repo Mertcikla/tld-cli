@@ -1,9 +1,9 @@
-use clap::Args;
-use std::fs;
-use std::path::Path;
 use crate::error::TldError;
 use crate::output;
 use crate::workspace;
+use clap::Args;
+use std::fs;
+use std::path::Path;
 
 #[derive(Args, Debug, Clone)]
 pub struct InitArgs {
@@ -23,10 +23,7 @@ pub async fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
     }
 
     // Create empty YAML files if they don't exist
-    let files = [
-        ("elements.yaml", "{}\n"),
-        ("connectors.yaml", "{}\n"),
-    ];
+    let files = [("elements.yaml", "{}\n"), ("connectors.yaml", "{}\n")];
 
     for (filename, content) in files {
         let file_path = path.join(filename);
@@ -50,7 +47,10 @@ pub async fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
         }
         let default_global = "server_url: https://tldiagram.com\napi_key: \"\"\norg_id: \"\"\n";
         fs::write(&global_cfg_path, default_global)?;
-        output::print_ok(&format!("Global configuration created at {:?}", global_cfg_path));
+        output::print_ok(&format!(
+            "Global configuration created at {:?}",
+            global_cfg_path
+        ));
     }
 
     output::print_ok(&format!("Initialized workspace at {}", dir));

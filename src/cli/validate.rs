@@ -1,7 +1,7 @@
-use clap::Args;
 use crate::error::TldError;
-use crate::workspace::{self, ValidationOptions};
 use crate::output;
+use crate::workspace::{self, ValidationOptions};
+use clap::Args;
 
 #[derive(Args, Debug, Clone)]
 pub struct ValidateArgs {
@@ -15,7 +15,7 @@ pub struct ValidateArgs {
 
 pub async fn exec(args: ValidateArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
-    
+
     let opts = ValidationOptions {
         strictness: args.strictness,
         skip_symbols: args.skip_symbols,

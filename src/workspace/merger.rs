@@ -1,9 +1,9 @@
-use yaml_rust2::{YamlLoader, YamlEmitter, Yaml};
 use crate::error::TldError;
-use crate::workspace::types::{Workspace, Meta, ResourceMetadata};
+use crate::workspace::types::{Meta, ResourceMetadata, Workspace};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::collections::HashMap;
+use yaml_rust2::{Yaml, YamlEmitter, YamlLoader};
 
 /// Merges server state into local YAML files while preserving comments and formatting.
 pub fn merge_workspace(
@@ -20,7 +20,11 @@ pub fn merge_workspace(
         merge_file(
             &elements_path,
             &server_ws.elements,
-            &server_ws.meta.as_ref().map(|m| m.elements.clone()).unwrap_or_default(),
+            &server_ws
+                .meta
+                .as_ref()
+                .map(|m| m.elements.clone())
+                .unwrap_or_default(),
             &last_sync.elements,
             &current_meta.elements,
         )?;
@@ -33,7 +37,11 @@ pub fn merge_workspace(
         merge_file(
             &connectors_path,
             &server_ws.connectors,
-            &server_ws.meta.as_ref().map(|m| m.connectors.clone()).unwrap_or_default(),
+            &server_ws
+                .meta
+                .as_ref()
+                .map(|m| m.connectors.clone())
+                .unwrap_or_default(),
             &last_sync.connectors,
             &current_meta.connectors,
         )?;
@@ -51,8 +59,10 @@ fn merge_file<T: serde::Serialize>(
 ) -> Result<(), TldError> {
     let content = fs::read_to_string(path).map_err(|e| TldError::Generic(e.to_string()))?;
     let docs = YamlLoader::load_from_str(&content).map_err(|e| TldError::Generic(e.to_string()))?;
-    if docs.is_empty() { return Ok(()); }
-    
+    if docs.is_empty() {
+        return Ok(());
+    }
+
     // We treat the first document as the mapping.
     let mut doc = docs[0].clone();
 
@@ -64,7 +74,7 @@ fn merge_file<T: serde::Serialize>(
                 Some(s) => s.to_string(),
                 None => continue,
             };
-            
+
             if key_str.starts_with("_meta") {
                 continue;
             }
@@ -96,7 +106,8 @@ fn merge_file<T: serde::Serialize>(
                 } else if server_changed {
                     // Update from server
                     let server_yaml_str = serde_yaml::to_string(server_item).unwrap_or_default();
-                    let server_docs = YamlLoader::load_from_str(&server_yaml_str).unwrap_or_default();
+                    let server_docs =
+                        YamlLoader::load_from_str(&server_yaml_str).unwrap_or_default();
                     if !server_docs.is_empty() {
                         *val = server_docs[0].clone();
                     }
@@ -126,7 +137,9 @@ fn merge_file<T: serde::Serialize>(
 
     let mut out_str = String::new();
     let mut emitter = YamlEmitter::new(&mut out_str);
-    emitter.dump(&doc).map_err(|e| TldError::Generic(e.to_string()))?;
+    emitter
+        .dump(&doc)
+        .map_err(|e| TldError::Generic(e.to_string()))?;
     fs::write(path, out_str).map_err(|e| TldError::Generic(e.to_string()))?;
     Ok(())
 }

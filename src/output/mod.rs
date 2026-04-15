@@ -2,8 +2,8 @@ pub mod json;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
+use tabled::settings::{Color, Style as TStyle, object::Rows};
 use tabled::{Table, Tabled};
-use tabled::settings::{Style as TStyle, object::Rows, Color};
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ pub fn new_progress_bar(total: u64, msg: &str) -> ProgressBar {
     let pb = ProgressBar::new(total);
     pb.set_style(
         ProgressStyle::with_template(
-            "{spinner:.cyan} {msg} [{bar:40.cyan/blue}] {pos}/{len} ({eta})"
+            "{spinner:.cyan} {msg} [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
         )
         .unwrap()
         .tick_chars(SPINNER_CHARS)
@@ -106,7 +106,10 @@ pub fn print_kv_table(pairs: Vec<(&str, String)>) {
 
 /// Print a value as pretty-printed JSON to stdout.
 pub fn print_json<T: serde::Serialize>(value: &T) {
-    println!("{}", serde_json::to_string_pretty(value).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).unwrap_or_default()
+    );
 }
 
 /// Output format selector.

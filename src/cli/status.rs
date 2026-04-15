@@ -1,7 +1,7 @@
-use clap::Args;
 use crate::error::TldError;
-use crate::workspace;
 use crate::output;
+use crate::workspace;
+use clap::Args;
 
 #[derive(Args, Debug, Clone)]
 pub struct StatusArgs {
@@ -17,12 +17,10 @@ pub async fn exec(args: StatusArgs, wdir: String) -> Result<(), TldError> {
     match lock_file {
         Some(lf) => {
             output::print_ok("Workspace is initialized and has sync history.");
-            
-            let mut pairs: Vec<(&str, String)> = vec![
-                ("Version ID", lf.version_id),
-                ("Applied By", lf.applied_by),
-            ];
-            
+
+            let mut pairs: Vec<(&str, String)> =
+                vec![("Version ID", lf.version_id), ("Applied By", lf.applied_by)];
+
             if let Some(last) = lf.last_apply {
                 pairs.push(("Last Apply", last.to_rfc3339()));
             }

@@ -1,11 +1,11 @@
-use clap::Args;
-use std::time::Duration;
-use tokio::time::sleep;
 use crate::client;
+use crate::client::diagv1;
 use crate::error::TldError;
 use crate::output;
 use crate::workspace;
-use crate::client::diagv1;
+use clap::Args;
+use std::time::Duration;
+use tokio::time::sleep;
 
 #[derive(Args, Debug, Clone)]
 pub struct LoginArgs {
@@ -31,8 +31,14 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
 
     let auth = device_client.authorize(req).await?.into_inner();
 
-    println!("\nOpen the following URL to log in:\n\n  {}\n\n", auth.verification_uri_complete);
-    println!("Or navigate to {} and enter the code:\n\n  {}\n\n", auth.verification_uri, auth.user_code);
+    println!(
+        "\nOpen the following URL to log in:\n\n  {}\n\n",
+        auth.verification_uri_complete
+    );
+    println!(
+        "Or navigate to {} and enter the code:\n\n  {}\n\n",
+        auth.verification_uri, auth.user_code
+    );
     println!("Waiting for authorisation… (press Ctrl+C to cancel)");
 
     if !args.no_browser {
@@ -61,9 +67,22 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
                 if !token.error.is_empty() {
                     match token.error.as_str() {
                         "authorization_pending" => continue,
-                        "access_denied" => return Err(TldError::Generic("Authorisation denied by user".to_string())),
-                        "expired_token" => return Err(TldError::Generic("Device code expired - run 'tld login' again".to_string())),
-                        _ => return Err(TldError::Generic(format!("Unexpected error from server: {}", token.error))),
+                        "access_denied" => {
+                            return Err(TldError::Generic(
+                                "Authorisation denied by user".to_string(),
+                            ));
+                        }
+                        "expired_token" => {
+                            return Err(TldError::Generic(
+                                "Device code expired - run 'tld login' again".to_string(),
+                            ));
+                        }
+                        _ => {
+                            return Err(TldError::Generic(format!(
+                                "Unexpected error from server: {}",
+                                token.error
+                            )));
+                        }
                     }
                 }
                 api_key = token.api_key;

@@ -1,7 +1,7 @@
-use clap::Args;
 use crate::error::TldError;
-use crate::workspace::{self, ValidationOptions};
 use crate::output;
+use crate::workspace::{self, ValidationOptions};
+use clap::Args;
 
 #[derive(Args, Debug, Clone)]
 pub struct CheckArgs {

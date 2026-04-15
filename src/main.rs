@@ -6,9 +6,9 @@ mod output;
 mod planner;
 mod workspace;
 
-use clap::Parser;
 use crate::cli::{Cli, Commands};
 use crate::error::TldError;
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<(), TldError> {

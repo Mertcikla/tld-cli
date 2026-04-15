@@ -1,7 +1,7 @@
-use clap::Args;
 use crate::error::TldError;
-use crate::workspace::{self, Connector};
 use crate::output;
+use crate::workspace::{self, Connector};
+use clap::Args;
 
 #[derive(Args, Debug, Clone)]
 pub struct ConnectArgs {
@@ -43,7 +43,10 @@ pub async fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
     let ref_name = ws.append_connector(connector)?;
     workspace::save(&ws)?;
 
-    output::print_ok(&format!("Appended connector '{}' to connectors.yaml", ref_name));
+    output::print_ok(&format!(
+        "Appended connector '{}' to connectors.yaml",
+        ref_name
+    ));
     output::print_info("Run 'tld apply' to push changes to the server.");
 
     Ok(())

@@ -1,7 +1,7 @@
+use chrono::{DateTime, Utc};
 /// Workspace types – mirrors the Go `workspace` package structs.
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Global user configuration (~/.config/tldiagram/tld.yaml).
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -140,7 +140,10 @@ pub struct Connector {
 impl Connector {
     /// Returns the canonical ref for the connector (view:source:target:label).
     pub fn resource_ref(&self) -> String {
-        format!("{}:{}:{}:{}", self.view, self.source, self.target, self.label)
+        format!(
+            "{}:{}:{}:{}",
+            self.view, self.source, self.target, self.label
+        )
     }
 }
 

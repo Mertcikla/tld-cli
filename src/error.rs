@@ -19,7 +19,11 @@ impl fmt::Display for TldError {
             TldError::Yaml(s) => write!(f, "YAML error: {}", s),
             TldError::Grpc(s) => write!(f, "gRPC error: {} ({})", s.message(), s.code()),
             TldError::Transport(e) => write!(f, "Transport error: {}", e),
-            TldError::Auth(s) => write!(f, "Authentication error: {}\n\nRun `tld login` to authenticate.", s),
+            TldError::Auth(s) => write!(
+                f,
+                "Authentication error: {}\n\nRun `tld login` to authenticate.",
+                s
+            ),
             TldError::Workspace(s) => write!(f, "Workspace error: {}", s),
             TldError::Generic(s) => write!(f, "{}", s),
         }

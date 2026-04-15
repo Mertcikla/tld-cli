@@ -1,6 +1,6 @@
+pub mod add;
 /// CLI command definitions using `clap`.
 /// Mirrors the Go `cmd/` package structure with identical command names.
-
 pub mod analyze;
 pub mod apply;
 pub mod check;
@@ -12,15 +12,14 @@ pub mod login;
 pub mod plan;
 pub mod pull;
 pub mod remove;
-pub mod update;
 pub mod status;
+pub mod update;
 pub mod validate;
 pub mod version;
 pub mod views;
-pub mod add;
 
-use clap::{Parser, Subcommand};
 use crate::output::OutputFormat;
+use clap::{Parser, Subcommand};
 
 // ── Root CLI struct ────────────────────────────────────────────────────────────
 
@@ -57,7 +56,9 @@ pub struct Cli {
 
 impl Cli {
     pub fn output_format(&self) -> OutputFormat {
-        self.format.parse::<OutputFormat>().unwrap_or(OutputFormat::Text)
+        self.format
+            .parse::<OutputFormat>()
+            .unwrap_or(OutputFormat::Text)
     }
 
     pub fn workspace_dir(&self) -> String {
@@ -70,7 +71,6 @@ impl Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     // ── CRUD actions on resources ─────────────────────────────────────────────
-
     /// Add or update an element in elements.yaml
     Add(add::AddArgs),
 
@@ -84,7 +84,6 @@ pub enum Commands {
     Update(update::UpdateArgs),
 
     // ── Secondary actions ─────────────────────────────────────────────────────
-
     /// Initialize a new tld workspace
     Init(init::InitArgs),
 

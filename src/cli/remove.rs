@@ -1,7 +1,7 @@
-use clap::{Args, Subcommand};
 use crate::error::TldError;
-use crate::workspace;
 use crate::output;
+use crate::workspace;
+use clap::{Args, Subcommand};
 
 #[derive(Args, Debug, Clone)]
 pub struct RemoveArgs {
@@ -43,7 +43,10 @@ pub async fn exec(args: RemoveArgs, wdir: String) -> Result<(), TldError> {
             let count = ws.remove_connector(&view, &from, &to)?;
             if count > 0 {
                 workspace::save(&ws)?;
-                output::print_ok(&format!("Removed {} connector(s) matching coordinates", count));
+                output::print_ok(&format!(
+                    "Removed {} connector(s) matching coordinates",
+                    count
+                ));
             } else {
                 output::print_warn("No matching connectors found - nothing removed.");
             }

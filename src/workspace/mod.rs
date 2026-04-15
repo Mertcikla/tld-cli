@@ -1,14 +1,14 @@
-pub mod types;
-pub mod mutations;
-pub mod lockfile;
-pub mod validator;
 pub mod conversion;
 pub mod git;
+pub mod lockfile;
 pub mod merger;
+pub mod mutations;
+pub mod types;
+pub mod validator;
+pub use git::*;
+pub use lockfile::*;
 pub use types::*;
 pub use validator::*;
-pub use lockfile::*;
-pub use git::*;
 
 use std::{
     fs,
@@ -28,10 +28,12 @@ pub fn config_dir() -> Result<PathBuf, TldError> {
     if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
         return Ok(PathBuf::from(xdg).join("tldiagram"));
     }
-    let home = dirs::home_dir().ok_or_else(|| TldError::Io(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "cannot determine home directory",
-    )))?;
+    let home = dirs::home_dir().ok_or_else(|| {
+        TldError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "cannot determine home directory",
+        ))
+    })?;
     Ok(home.join(".config").join("tldiagram"))
 }
 
@@ -48,8 +50,7 @@ pub fn load_config() -> Result<Config, TldError> {
         return Ok(Config::default());
     }
     let data = fs::read_to_string(&path)?;
-    let cfg: Config = serde_yaml::from_str(&data)
-        .map_err(|e| TldError::Yaml(e.to_string()))?;
+    let cfg: Config = serde_yaml::from_str(&data).map_err(|e| TldError::Yaml(e.to_string()))?;
     Ok(cfg)
 }
 
@@ -63,8 +64,7 @@ pub fn write_config(server_url: &str, api_key: &str, org_id: &str) -> Result<Pat
     cfg.api_key = api_key.to_string();
     cfg.org_id = org_id.to_string();
 
-    let data = serde_yaml::to_string(&cfg)
-        .map_err(|e| TldError::Yaml(e.to_string()))?;
+    let data = serde_yaml::to_string(&cfg).map_err(|e| TldError::Yaml(e.to_string()))?;
     fs::write(&path, data)?;
     Ok(path)
 }
@@ -92,8 +92,10 @@ pub fn load(wdir: &str) -> Result<Workspace, TldError> {
     let ws_config_path = Path::new(wdir).join(".tld.yaml");
     let workspace_config = if ws_config_path.exists() {
         let data = fs::read_to_string(&ws_config_path)?;
-        Some(serde_yaml::from_str::<WorkspaceConfig>(&data)
-            .map_err(|e| TldError::Yaml(e.to_string()))?)
+        Some(
+            serde_yaml::from_str::<WorkspaceConfig>(&data)
+                .map_err(|e| TldError::Yaml(e.to_string()))?,
+        )
     } else {
         None
     };
@@ -135,14 +137,13 @@ pub fn load(wdir: &str) -> Result<Workspace, TldError> {
 /// Saves `elements.yaml`, `connectors.yaml`, and metadata to `.tld.lock`.
 pub fn save(ws: &Workspace) -> Result<(), TldError> {
     let elements_path = Path::new(&ws.dir).join("elements.yaml");
-    let data = serde_yaml::to_string(&ws.elements)
-        .map_err(|e| TldError::Yaml(e.to_string()))?;
+    let data = serde_yaml::to_string(&ws.elements).map_err(|e| TldError::Yaml(e.to_string()))?;
     fs::write(&elements_path, data)?;
 
     if !ws.connectors.is_empty() {
         let connectors_path = Path::new(&ws.dir).join("connectors.yaml");
-        let data = serde_yaml::to_string(&ws.connectors)
-            .map_err(|e| TldError::Yaml(e.to_string()))?;
+        let data =
+            serde_yaml::to_string(&ws.connectors).map_err(|e| TldError::Yaml(e.to_string()))?;
         fs::write(&connectors_path, data)?;
     }
 
