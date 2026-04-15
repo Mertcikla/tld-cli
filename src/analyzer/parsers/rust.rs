@@ -73,7 +73,11 @@ fn append_function(
 ) {
     if let Some(name_node) = node.child_by_field_name("name") {
         let name = name_node.utf8_text(source).unwrap_or_default().to_string();
-        let kind = if parent.is_some() { "method" } else { "function" };
+        let kind = if parent.is_some() {
+            "method"
+        } else {
+            "function"
+        };
         result.symbols.push(Symbol {
             name,
             kind: kind.to_string(),
@@ -87,7 +91,13 @@ fn append_function(
     }
 }
 
-fn append_type_item(node: &Node, source: &[u8], path: &str, kind: &str, result: &mut AnalysisResult) {
+fn append_type_item(
+    node: &Node,
+    source: &[u8],
+    path: &str,
+    kind: &str,
+    result: &mut AnalysisResult,
+) {
     if let Some(name_node) = node.child_by_field_name("name") {
         result.symbols.push(Symbol {
             name: name_node.utf8_text(source).unwrap_or_default().to_string(),
@@ -114,9 +124,7 @@ fn impl_type_name(node: &Node, source: &[u8]) -> Option<String> {
 
 fn type_name_from_node(node: &Node, source: &[u8]) -> String {
     match node.kind() {
-        "type_identifier" | "identifier" => {
-            node.utf8_text(source).unwrap_or_default().to_string()
-        }
+        "type_identifier" | "identifier" => node.utf8_text(source).unwrap_or_default().to_string(),
         "generic_type" => {
             // `Foo<T>` → take the `type_identifier` child
             node.child_by_field_name("type")
@@ -165,7 +173,10 @@ fn append_call(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResu
 fn append_method_call(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult) {
     // method_call_expression: method field is the method name identifier
     if let Some(method_node) = node.child_by_field_name("method") {
-        let name = method_node.utf8_text(source).unwrap_or_default().to_string();
+        let name = method_node
+            .utf8_text(source)
+            .unwrap_or_default()
+            .to_string();
         if !name.is_empty() {
             result.refs.push(Ref {
                 name,
@@ -270,7 +281,12 @@ fn find_doc_comment(node: &Node, source: &[u8]) -> String {
     if let Some(prev) = node.prev_named_sibling() {
         let kind = prev.kind();
         if kind == "line_comment" || kind == "block_comment" || kind == "doc_comment" {
-            if node.start_position().row.saturating_sub(prev.end_position().row) <= 1 {
+            if node
+                .start_position()
+                .row
+                .saturating_sub(prev.end_position().row)
+                <= 1
+            {
                 let text = prev.utf8_text(source).unwrap_or_default().trim();
                 // Strip `///`, `//!`, `//`, `/*`, `*/`
                 let text = text

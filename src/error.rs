@@ -13,7 +13,10 @@ pub enum TldError {
     UnsupportedLanguage(String),
     /// The tree-sitter grammar for this language is not cached locally and
     /// needs to be downloaded before parsing can proceed.
-    ParserDownloadRequired { lang: String, reason: String },
+    ParserDownloadRequired {
+        lang: String,
+        reason: String,
+    },
     /// The tree-sitter grammar loaded fine but tld has no AST-walk
     /// implementation for this language yet.
     ParserNotImplemented(String),

@@ -110,7 +110,6 @@ pub struct Element {
     pub placements: Vec<ViewPlacement>,
 }
 
-
 /// One entry in `connectors.yaml`.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Connector {

@@ -77,4 +77,3 @@ pub fn print_kv_table(pairs: Vec<(&str, String)>) {
         .collect();
     print_table(rows);
 }
-

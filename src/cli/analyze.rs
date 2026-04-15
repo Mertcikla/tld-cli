@@ -73,10 +73,13 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         Ok(r) => r,
         Err(TldError::ParserDownloadRequired { ref lang, .. }) => {
             spinner.finish_and_clear();
-            eprintln!("{}", TldError::ParserDownloadRequired {
-                lang: lang.clone(),
-                reason: "grammar not in local cache".to_string(),
-            });
+            eprintln!(
+                "{}",
+                TldError::ParserDownloadRequired {
+                    lang: lang.clone(),
+                    reason: "grammar not in local cache".to_string(),
+                }
+            );
             eprintln!();
             // Prompt user interactively.
             eprint!("Download the '{}' parser now? [y/N]: ", lang);
