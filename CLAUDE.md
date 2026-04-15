@@ -92,9 +92,19 @@ Local workspaces should only contain `elements.yaml`, `connectors.yaml`, and `.t
 
 ## CI & Release
 
-**Proto files** live in https://github.com/Mertcikla/tld-proto.git (not vendored).
-`build.rs` reads `TLD_PROTO_PATH` env var for the proto repo root; falls back to the hardcoded local sibling path.
-In CI, the workflows clone that repo and set the env var automatically.
+**Proto files** live in https://github.com/Mertcikla/tld-proto.git.
+The `diag-proto` Rust crate (`proto/rust/`) is a **path dependency** — `tld` links directly to it.
+
+- **Locally**: clone `tld-proto` as a sibling `../proto/` directory; `cargo build` just works.
+- **CI**: workflows must clone tld-proto into the expected relative path before `cargo build`.
+  ```yaml
+  - uses: actions/checkout@v4
+    with:
+      repository: Mertcikla/tld-proto
+      path: proto   # checked out at <workspace>/proto, sibling of tld
+  ```
+- **Updating protos**: edit `.proto` files in the proto repo, run `cd ../proto && buf generate`, then commit the updated `rust/src/diag.v1.rs` and `diag.v1.tonic.rs` to the proto repo.
+- No `build.rs`, no `protoc`, no `TLD_PROTO_PATH` env var needed.
 
 **Release flow** (`make release`):
 - Bumps patch version, runs `git-cliff --tag vX.Y.Z` to update `CHANGELOG.md`, commits, tags, and pushes.

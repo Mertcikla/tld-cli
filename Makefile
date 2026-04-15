@@ -1,22 +1,19 @@
 .PHONY: build dev test fmt lint clean release install changelog
 
-# Default protoc path for macOS Homebrew, can be overridden
-PROTOC ?= protoc
-
 build:
-	PROTOC=$(PROTOC) cargo build
+	cargo build
 
 dev:
-	PROTOC=$(PROTOC) cargo run -- $(filter-out $@,$(MAKECMDGOALS))
+	cargo run -- $(filter-out $@,$(MAKECMDGOALS))
 
 test:
-	PROTOC=$(PROTOC) cargo test
+	cargo test
 
 fmt:
 	cargo fmt
 
 lint:
-	PROTOC=$(PROTOC) cargo clippy -- -D warnings
+	cargo clippy -- -D warnings
 
 clean:
 	cargo clean
@@ -61,7 +58,7 @@ release:
 	fi
 
 install:
-	PROTOC=$(PROTOC) cargo install --path .
+	cargo install --path .
 
 # Allow passing arguments to cargo run
 %:

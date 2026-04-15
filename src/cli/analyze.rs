@@ -29,7 +29,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     if let Some(ref langs_csv) = args.download {
         let langs: Vec<&str> = langs_csv.split(',').map(str::trim).collect();
         let spinner = output::new_spinner(&format!("Downloading parsers: {}...", langs_csv));
-        match tree_sitter_language_pack::download(&langs) {
+        match ts_pack_core::download(&langs) {
             Ok(count) => {
                 spinner.finish_and_clear();
                 if count > 0 {
@@ -89,7 +89,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 let lang_clone = lang.clone();
                 let dl_spinner =
                     output::new_spinner(&format!("Downloading '{}' parser...", lang_clone));
-                match tree_sitter_language_pack::download(&[lang_clone.as_str()]) {
+                match ts_pack_core::download(&[lang_clone.as_str()]) {
                     Ok(_) => {
                         dl_spinner.finish_and_clear();
                         output::print_ok("Download complete. Re-running analysis...");

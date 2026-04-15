@@ -6,7 +6,7 @@ use crate::error::TldError;
 pub use ignore::Rules;
 use std::fs;
 use std::path::Path;
-use tree_sitter_language_pack::{detect_language_from_path, get_language};
+use ts_pack_core::{detect_language_from_path, get_language};
 pub use types::*;
 
 /// Callback invoked for each file or directory visited during analysis.
