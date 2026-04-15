@@ -18,9 +18,33 @@ pub struct AnalyzeArgs {
     /// Only re-analyse files changed since this git SHA or ref
     #[arg(long = "changed-since")]
     pub changed_since: Option<String>,
+    /// Download tree-sitter parsers for specific languages before analyzing.
+    /// Accepts a comma-separated list: --download rust,python
+    #[arg(long = "download")]
+    pub download: Option<String>,
 }
 
 pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
+    // Pre-download requested parsers before doing any analysis.
+    if let Some(ref langs_csv) = args.download {
+        let langs: Vec<&str> = langs_csv.split(',').map(str::trim).collect();
+        let spinner = output::new_spinner(&format!("Downloading parsers: {}...", langs_csv));
+        match tree_sitter_language_pack::download(&langs) {
+            Ok(count) => {
+                spinner.finish_and_clear();
+                if count > 0 {
+                    output::print_ok(&format!("Downloaded {} parser(s).", count));
+                } else {
+                    output::print_info("All requested parsers already cached.");
+                }
+            }
+            Err(e) => {
+                spinner.finish_and_clear();
+                return Err(TldError::Generic(format!("Parser download failed: {}", e)));
+            }
+        }
+    }
+
     let mut ws = workspace::load(&wdir)?;
     let scan_path = args.path.clone();
 
@@ -39,13 +63,54 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     let analyzer_service = TreeSitterService::new();
 
     let spinner = output::new_spinner("Scanning files...");
-    let result = analyzer_service.extract_path(
+    let result = match analyzer_service.extract_path(
         abs_scan_path.to_str().unwrap_or(""),
         &rules,
         Some(&|path, _is_dir| {
             spinner.set_message(format!("Scanning {}", path));
         }),
-    )?;
+    ) {
+        Ok(r) => r,
+        Err(TldError::ParserDownloadRequired { ref lang, .. }) => {
+            spinner.finish_and_clear();
+            eprintln!("{}", TldError::ParserDownloadRequired {
+                lang: lang.clone(),
+                reason: "grammar not in local cache".to_string(),
+            });
+            eprintln!();
+            // Prompt user interactively.
+            eprint!("Download the '{}' parser now? [y/N]: ", lang);
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).ok();
+            if input.trim().eq_ignore_ascii_case("y") {
+                let lang_clone = lang.clone();
+                let dl_spinner =
+                    output::new_spinner(&format!("Downloading '{}' parser...", lang_clone));
+                match tree_sitter_language_pack::download(&[lang_clone.as_str()]) {
+                    Ok(_) => {
+                        dl_spinner.finish_and_clear();
+                        output::print_ok("Download complete. Re-running analysis...");
+                        // Retry once after download.
+                        analyzer_service.extract_path(
+                            abs_scan_path.to_str().unwrap_or(""),
+                            &rules,
+                            None,
+                        )?
+                    }
+                    Err(e) => {
+                        dl_spinner.finish_and_clear();
+                        return Err(TldError::Generic(format!("Download failed: {}", e)));
+                    }
+                }
+            } else {
+                return Err(TldError::Generic("Analysis aborted.".to_string()));
+            }
+        }
+        Err(e) => {
+            spinner.finish_and_clear();
+            return Err(e);
+        }
+    };
     spinner.finish_and_clear();
 
     if args.dry_run {

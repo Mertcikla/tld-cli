@@ -21,7 +21,6 @@ pub fn from_export_response(
             views: HashMap::new(),
             connectors: HashMap::new(),
         }),
-        active_repo: String::new(),
     };
 
     let mut existing_element_refs = HashMap::new();

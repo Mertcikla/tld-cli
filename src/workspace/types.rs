@@ -110,12 +110,6 @@ pub struct Element {
     pub placements: Vec<ViewPlacement>,
 }
 
-impl Element {
-    /// Returns the slugified ref name for the element.
-    pub fn slug(&self) -> String {
-        crate::workspace::slugify(&self.name)
-    }
-}
 
 /// One entry in `connectors.yaml`.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -174,5 +168,4 @@ pub struct Workspace {
     pub elements: HashMap<String, Element>,
     pub connectors: HashMap<String, Connector>,
     pub meta: Option<Meta>,
-    pub active_repo: String,
 }

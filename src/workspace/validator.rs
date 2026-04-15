@@ -16,14 +16,12 @@ impl fmt::Display for ValidationError {
 
 pub struct ValidationOptions {
     pub skip_symbols: bool,
-    pub strictness: i32,
 }
 
 impl Default for ValidationOptions {
     fn default() -> Self {
         Self {
             skip_symbols: false,
-            strictness: 0,
         }
     }
 }

@@ -8,8 +8,15 @@ pub enum TldError {
     Grpc(tonic::Status),
     Transport(tonic::transport::Error),
     Auth(String),
-    Workspace(String),
     Generic(String),
+    /// The file extension maps to a language that tld does not recognise.
+    UnsupportedLanguage(String),
+    /// The tree-sitter grammar for this language is not cached locally and
+    /// needs to be downloaded before parsing can proceed.
+    ParserDownloadRequired { lang: String, reason: String },
+    /// The tree-sitter grammar loaded fine but tld has no AST-walk
+    /// implementation for this language yet.
+    ParserNotImplemented(String),
 }
 
 impl fmt::Display for TldError {
@@ -24,8 +31,23 @@ impl fmt::Display for TldError {
                 "Authentication error: {}\n\nRun `tld login` to authenticate.",
                 s
             ),
-            TldError::Workspace(s) => write!(f, "Workspace error: {}", s),
             TldError::Generic(s) => write!(f, "{}", s),
+            TldError::UnsupportedLanguage(ext) => {
+                write!(f, "Unsupported file type: .{}", ext)
+            }
+            TldError::ParserDownloadRequired { lang, reason } => write!(
+                f,
+                "The tree-sitter parser for '{}' is not available locally.\n\
+                 Reason: {}\n\n\
+                 To download it, run:\n  tld analyze --download {}",
+                lang, reason, lang
+            ),
+            TldError::ParserNotImplemented(lang) => write!(
+                f,
+                "tld does not yet have an analyzer for '{}'. \
+                 See adding-new-languages.md to add support.",
+                lang
+            ),
         }
     }
 }

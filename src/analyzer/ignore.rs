@@ -43,20 +43,6 @@ impl Rules {
         false
     }
 
-    pub fn should_ignore_symbol(&self, name: &str) -> bool {
-        let name = name.trim();
-        for pattern in &self.exclude {
-            if pattern.is_empty() {
-                continue;
-            }
-            let normalized_pattern = self.normalize_pattern(pattern);
-            if self.match_pattern(&normalized_pattern, name) {
-                return true;
-            }
-        }
-        false
-    }
-
     fn match_pattern(&self, pattern: &str, value: &str) -> bool {
         match Pattern::new(pattern) {
             Ok(p) => p.matches(value),

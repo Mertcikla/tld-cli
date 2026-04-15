@@ -130,7 +130,6 @@ pub fn load(wdir: &str) -> Result<Workspace, TldError> {
         elements,
         connectors,
         meta,
-        active_repo: String::new(),
     })
 }
 

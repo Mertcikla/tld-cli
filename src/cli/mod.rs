@@ -18,7 +18,6 @@ pub mod validate;
 pub mod version;
 pub mod views;
 
-use crate::output::OutputFormat;
 use clap::{Parser, Subcommand};
 
 // ── Root CLI struct ────────────────────────────────────────────────────────────
@@ -55,12 +54,6 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn output_format(&self) -> OutputFormat {
-        self.format
-            .parse::<OutputFormat>()
-            .unwrap_or(OutputFormat::Text)
-    }
-
     pub fn workspace_dir(&self) -> String {
         crate::workspace::resolve_workspace_dir(self.workspace.as_deref())
     }

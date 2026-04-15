@@ -17,9 +17,6 @@ pub struct PlanArgs {
     /// show detailed resource reporting (elements, diagrams, connectors)
     #[arg(short, long, default_value = "false")]
     pub verbose: bool,
-    /// override validation strictness level [1-3]
-    #[arg(long, default_value = "0")]
-    pub strictness: i32,
 }
 
 pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {

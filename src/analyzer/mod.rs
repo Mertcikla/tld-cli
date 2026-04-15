@@ -6,7 +6,7 @@ use crate::error::TldError;
 pub use ignore::Rules;
 use std::fs;
 use std::path::Path;
-use tree_sitter_language_pack::get_language;
+use tree_sitter_language_pack::{detect_language_from_path, get_language};
 pub use types::*;
 
 pub trait Service {
@@ -26,33 +26,35 @@ impl TreeSitterService {
     }
 
     pub fn extract_file(&self, path: &str) -> Result<AnalysisResult, TldError> {
-        let extension = Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
-
-        // Map extension to tree-sitter language identifier string
-        let lang_name = match extension {
-            "go" => "go",
-            "py" => "python",
-            "rs" => "rust",
-            "java" => "java",
-            "ts" | "tsx" | "mts" | "cts" => "typescript",
-            "js" | "jsx" | "mjs" | "cjs" => "javascript",
-            "cc" | "cpp" | "cxx" | "hpp" | "hh" | "hxx" => "cpp",
-            "c" | "h" => "c",
-            _ => {
-                return Err(TldError::Generic(format!(
-                    "Unsupported language for extension: {}",
-                    extension
-                )));
+        let lang_name = match detect_language_from_path(path) {
+            Some(l) => l,
+            None => {
+                let ext = Path::new(path)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("<none>");
+                return Err(TldError::UnsupportedLanguage(ext.to_string()));
             }
         };
 
-        // On-demand download and load via the pack's global registry
+        // Load the parser — auto-downloads when the `download` feature is enabled.
+        // If the download fails we surface a helpful error instead of a generic one.
         let language = get_language(lang_name).map_err(|e| {
-            TldError::Generic(format!("Failed to load language {}: {}", lang_name, e))
+            let msg = e.to_string();
+            if msg.contains("download") || msg.contains("network") || msg.contains("http") {
+                TldError::ParserDownloadRequired {
+                    lang: lang_name.to_string(),
+                    reason: msg,
+                }
+            } else {
+                TldError::UnsupportedLanguage(lang_name.to_string())
+            }
         })?;
+
+        // Check that we have a parser implementation for this language.
+        if !is_parser_implemented(lang_name) {
+            return Err(TldError::ParserNotImplemented(lang_name.to_string()));
+        }
 
         let source = fs::read_to_string(path)?;
         let mut parser = tree_sitter::Parser::new();
@@ -67,17 +69,16 @@ impl TreeSitterService {
         let mut result = AnalysisResult::default();
         let technology = lang_name.to_string();
 
-        // Dispatch to specific parser implementation
         match lang_name {
             "go" => {
                 parsers::go::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
             }
-            // Add other languages here later
+            "rust" => {
+                parsers::rust::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+            }
             _ => {
-                return Err(TldError::Generic(format!(
-                    "Parser logic not yet implemented for {}",
-                    technology
-                )));
+                // Guarded above by is_parser_implemented; this branch should not be reached.
+                return Err(TldError::ParserNotImplemented(lang_name.to_string()));
             }
         }
 
@@ -87,6 +88,16 @@ impl TreeSitterService {
 
         Ok(result)
     }
+}
+
+/// Returns true when tld has an AST-walk implementation for the language.
+///
+/// A language can be recognised by tree-sitter-language-pack (and downloaded)
+/// without tld having a parser written for it yet.  Separating the two checks
+/// lets us give a clear "not yet implemented" message rather than a generic
+/// tree-sitter error.
+fn is_parser_implemented(lang_name: &str) -> bool {
+    matches!(lang_name, "go" | "rust")
 }
 
 impl Service for TreeSitterService {
@@ -155,8 +166,24 @@ impl TreeSitterService {
                 if let Some(cb) = on_entry {
                     cb(path.to_str().unwrap_or(""), false);
                 }
-                if let Ok(result) = self.extract_file(path.to_str().unwrap_or("")) {
-                    merged.merge(result);
+                match self.extract_file(path.to_str().unwrap_or("")) {
+                    Ok(result) => merged.merge(result),
+                    Err(TldError::UnsupportedLanguage(_)) => {
+                        // Silently skip files in languages tld doesn't support.
+                    }
+                    Err(TldError::ParserNotImplemented(lang)) => {
+                        // Language is recognised but tld doesn't have a parser
+                        // for it yet — skip silently during directory walks.
+                        let _ = lang;
+                    }
+                    Err(TldError::ParserDownloadRequired { lang, reason }) => {
+                        // Surface download errors so the CLI can prompt the user.
+                        return Err(TldError::ParserDownloadRequired { lang, reason });
+                    }
+                    Err(e) => {
+                        // Skip files that fail to parse for other reasons.
+                        let _ = e;
+                    }
                 }
             }
         }

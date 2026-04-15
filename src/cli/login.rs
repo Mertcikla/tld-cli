@@ -51,11 +51,8 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
         Duration::from_secs(5)
     };
 
-    let mut api_key = String::new();
-    let mut org_id = String::new();
-
     // Poll for token
-    loop {
+    let (api_key, org_id) = loop {
         sleep(interval).await;
         let poll_req = tonic::Request::new(diagv1::DevicePollTokenRequest {
             device_code: auth.device_code.clone(),
@@ -85,9 +82,7 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
                         }
                     }
                 }
-                api_key = token.api_key;
-                org_id = token.org_id;
-                break;
+                break (token.api_key, token.org_id);
             }
             Err(status) => {
                 // Keep polling on transient errors
@@ -97,7 +92,7 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
                 return Err(status.into());
             }
         }
-    }
+    };
 
     workspace::write_config(&server_url, &api_key, &org_id)?;
     output::print_ok("Authorised! Config written.");
