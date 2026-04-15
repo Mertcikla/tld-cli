@@ -2,6 +2,7 @@ use crate::analyzer::{Rules, Service, TreeSitterService};
 use crate::error::TldError;
 use crate::output;
 use crate::workspace;
+use crate::workspace::workspace_builder::{self, BuildContext};
 use clap::Args;
 use std::path::Path;
 
@@ -22,6 +23,9 @@ pub struct AnalyzeArgs {
     /// Accepts a comma-separated list: --download rust,python
     #[arg(long = "download")]
     pub download: Option<String>,
+    /// Enable LSP for enhanced cross-file call resolution (requires language server in PATH)
+    #[arg(long, default_value = "false")]
+    pub lsp: bool,
 }
 
 pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
@@ -45,7 +49,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         }
     }
 
-    let mut ws = workspace::load(&wdir)?;
+    let ws = workspace::load(&wdir)?;
     let scan_path = args.path.clone();
 
     let abs_scan_path = Path::new(&scan_path)
@@ -80,7 +84,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     let analyzer_service = TreeSitterService::new();
 
     let spinner = output::new_spinner("Scanning files...");
-    let result = match analyzer_service.extract_path(
+    let mut result = match analyzer_service.extract_path(
         abs_scan_path.to_str().unwrap_or(""),
         &rules,
         Some(&|path, _is_dir| {
@@ -98,7 +102,6 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 }
             );
             eprintln!();
-            // Prompt user interactively.
             eprint!("Download the '{}' parser now? [y/N]: ", lang);
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).ok();
@@ -110,7 +113,6 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                     Ok(_) => {
                         dl_spinner.finish_and_clear();
                         output::print_ok("Download complete. Re-running analysis...");
-                        // Retry once after download.
                         analyzer_service.extract_path(
                             abs_scan_path.to_str().unwrap_or(""),
                             &rules,
@@ -134,89 +136,131 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     spinner.finish_and_clear();
 
     if args.dry_run {
-        output::print_info("Dry run: found the following symbols:");
+        output::print_info(&format!(
+            "Dry run: {} files scanned, {} symbols found",
+            result.files_scanned.len(),
+            result.symbols.len()
+        ));
         for sym in &result.symbols {
-            println!("  {} ({}) in {}", sym.name, sym.kind, sym.file_path);
+            println!(
+                "  {} ({}) in {} [parent: {}]",
+                sym.name, sym.kind, sym.file_path, sym.parent
+            );
         }
         return Ok(());
     }
 
-    if result.symbols.is_empty() {
+    // Filter files_scanned to only code files (mirrors workspace_builder's should_skip_file).
+    let has_code = result.files_scanned.iter().any(|p| {
+        let ext = std::path::Path::new(p)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        !matches!(
+            ext,
+            "lock" | "toml" | "json" | "md" | "txt" | "yaml" | "yml" | "sum" | "mod" | "gitignore"
+        )
+    });
+    if result.symbols.is_empty() && !has_code {
         output::print_info(
             "No symbols or architectural elements were found at the specified path.",
         );
         return Ok(());
     }
 
-    let mut new_elements = 0;
-    let mut updated_elements = 0;
-
-    for sym in result.symbols {
-        let ref_name = workspace::slugify(&sym.name);
-
-        // Simple upsert logic
-        if let Some(existing) = ws.elements.get_mut(&ref_name) {
-            existing.technology = sym.technology;
-            existing.kind = sym.kind;
-            existing.file_path = sym.file_path;
-            existing.symbol = sym.name;
-            // Mark elements as having a view if they represent a major component (heuristic)
-            if existing.kind == "class" || existing.kind == "function" || existing.kind == "struct" {
-                existing.has_view = true;
+    // Optional LSP enrichment for better call resolution.
+    if args.lsp {
+        let unique_langs: Vec<&str> = {
+            let mut seen = std::collections::HashSet::new();
+            result.symbols.iter()
+                .map(|s| s.technology.as_str())
+                .filter(|t| !t.is_empty() && seen.insert(*t))
+                .collect()
+        };
+        if !unique_langs.is_empty() {
+            let lsp_spinner = output::new_spinner("Running LSP definition lookup...");
+            if let Err(e) = crate::analyzer::lsp::resolve_calls_with_lsp(
+                &mut result.refs,
+                abs_scan_path.to_str().unwrap_or(""),
+                &unique_langs,
+            )
+            .await
+            {
+                lsp_spinner.finish_and_clear();
+                output::print_info(&format!("LSP enrichment skipped: {}", e));
+            } else {
+                lsp_spinner.finish_and_clear();
+                output::print_info("LSP enrichment complete.");
             }
-            updated_elements += 1;
-        } else {
-            ws.elements.insert(
-                ref_name,
-                workspace::Element {
-                    name: sym.name.clone(),
-                    kind: sym.kind.clone(),
-                    technology: sym.technology,
-                    file_path: sym.file_path,
-                    symbol: sym.name,
-                    has_view: sym.kind == "class" || sym.kind == "function" || sym.kind == "struct",
-                    ..Default::default()
-                },
-            );
-            new_elements += 1;
         }
     }
 
-    let mut new_connectors = 0;
-    for r in result.refs {
-        // Find the element that contains this reference (source)
-        let mut source_ref = String::new();
-        for (name, el) in &ws.elements {
-            if el.file_path == r.file_path && !el.symbol.is_empty() {
-                // Determine if this element (symbol) contains the reference line.
-                // We need to retrieve the symbol metadata from the analyzer result
-                // to know the end_line, but we didn't save end_line to Element.
-                // However, we can use the symbol mapping if we kept it.
-                // For now, let's assume if there's only one element in the file it's the source.
-                // But better: use a simple distance or pick the one with the smallest starting line <= r.line.
-                source_ref = name.clone();
-            }
-        }
+    // Build workspace elements and connectors from the analysis result.
+    let scan_root = abs_scan_path.to_str().unwrap_or("").to_string();
+    let repo_name = derive_repo_name(&ws, &abs_scan_path);
+    let branch = detect_git_branch(&abs_scan_path).unwrap_or_else(|| "main".to_string());
 
-        let target_ref = workspace::slugify(&r.name);
-        if !source_ref.is_empty() && ws.elements.contains_key(&target_ref) && source_ref != target_ref {
-            let conn = workspace::Connector {
-                source: source_ref.clone(),
-                target: target_ref.clone(),
-                relationship: r.kind.clone(),
-                view: source_ref, // Default to placing connector in the source's view
-                ..Default::default()
-            };
-            ws.connectors.insert(conn.resource_ref(), conn);
-            new_connectors += 1;
-        }
+    let ctx = BuildContext {
+        repo_name: repo_name.clone(),
+        branch,
+        owner: repo_name,
+        scan_root,
+    };
+
+    let output = workspace_builder::build(&result, &ctx);
+
+    let element_count = output.elements.len();
+    let connector_count = output.connectors.len();
+
+    let mut ws = workspace::load(&wdir)?;
+    for (slug, el) in output.elements {
+        ws.elements.insert(slug, el);
+    }
+    for conn in output.connectors {
+        ws.connectors.insert(conn.resource_ref(), conn);
     }
 
     workspace::save(&ws)?;
     output::print_ok(&format!(
-        "Analysis complete. {} new, {} updated elements. {} connectors created.",
-        new_elements, updated_elements, new_connectors
+        "Analysis complete. {} elements written, {} connectors created.",
+        element_count, connector_count
     ));
 
     Ok(())
+}
+
+fn derive_repo_name(ws: &workspace::Workspace, scan_path: &Path) -> String {
+    ws.workspace_config
+        .as_ref()
+        .map(|c| c.project_name.clone())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            // Use the grandparent of scan_path if possible, otherwise the basename.
+            scan_path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str())
+                .unwrap_or_else(|| {
+                    scan_path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("codebase")
+                })
+                .to_string()
+        })
+}
+
+fn detect_git_branch(path: &Path) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(path)
+        .output()
+        .ok()?;
+    if output.status.success() {
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !branch.is_empty() {
+            return Some(branch);
+        }
+    }
+    None
 }

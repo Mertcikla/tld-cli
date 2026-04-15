@@ -90,6 +90,36 @@ Local workspaces should only contain `elements.yaml`, `connectors.yaml`, and `.t
 
 - Tests use `tempfile` for workspace isolation.
 
+## analyze command architecture
+
+### Element hierarchy
+`root → repository → folder(s) → file → symbol → method/constructor`
+
+### Parser approach
+- All parsers in `src/analyzer/parsers/` use `tree_sitter::Query` (S-expression patterns), not manual node walking.
+- **`QueryMatches` is NOT `std::iter::Iterator`** — it implements `StreamingIterator` (tree-sitter 0.26.x).
+  Use `while let Some(m) = matches.next()` after importing `use tree_sitter::StreamingIterator;`.
+- All parser `parse()` signatures take `(node, source, path, language: &Language, result)`.
+
+### workspace_builder placement rules
+- TypeScript/JavaScript/Java/Python: methods/constructors go under parent class element.
+- Go/Rust: all symbols go under the file element.
+- C++: constructors/destructors go under parent class; regular methods go under the file.
+- File elements are only created for files that contain at least one symbol.
+
+### Slug collision handling
+- When a symbol's `slugify(name)` collides with an existing element, use `{file_stem}-{symbol_slug}`.
+- Display name becomes `ClassName.methodName` (unless it's a destructor).
+- `workspace_builder::build()` takes `BuildContext` and returns `BuildOutput`.
+
+### Test reference outputs
+- `tests/test-codebase/*/v1.tld/` — reference YAML from the first version of analyze.
+- Test with: `tld -w /tmp/X-test analyze tests/test-codebase/X`
+- The v1 reference has some known inconsistencies (e.g. Java methods placed under file instead of class).
+
+### Files to skip in analysis
+`should_skip_file()` in `workspace_builder.rs` excludes: `lock`, `toml`, `json`, `md`, `txt`, `yaml`, `yml`, `sum`, `mod`, `gitignore`, `xml`, `gradle`, `properties`.
+
 ## CI & Release
 
 **Proto files** live in https://github.com/Mertcikla/tld-proto.git.

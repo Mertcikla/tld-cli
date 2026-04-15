@@ -1,4 +1,5 @@
 pub mod ignore;
+pub mod lsp;
 pub mod parsers;
 pub mod types;
 
@@ -84,22 +85,22 @@ impl TreeSitterService {
 
         match lang_name {
             "go" => {
-                parsers::go::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+                parsers::go::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
             }
             "rust" => {
-                parsers::rust::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+                parsers::rust::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
             }
             "cpp" => {
-                parsers::cpp::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+                parsers::cpp::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
             }
             "java" => {
-                parsers::java::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+                parsers::java::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
             }
             "python" => {
-                parsers::python::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+                parsers::python::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
             }
             "typescript" | "javascript" | "tsx" => {
-                parsers::typescript::parse(&tree.root_node(), source.as_bytes(), path, &mut result);
+                parsers::typescript::parse(&tree.root_node(), source.as_bytes(), path, &language, &mut result);
             }
             _ => {
                 // Guarded above by is_parser_implemented; this branch should not be reached.
@@ -142,7 +143,9 @@ impl Service for TreeSitterService {
             if let Some(cb) = on_entry {
                 cb(path, false);
             }
-            self.extract_file(path)
+            let mut result = self.extract_file(path)?;
+            result.files_scanned.push(path.to_string());
+            Ok(result)
         }
     }
 }
@@ -191,7 +194,10 @@ impl TreeSitterService {
                 if let Some(cb) = on_entry {
                     cb(path.to_str().unwrap_or(""), false);
                 }
-                match self.extract_file(path.to_str().unwrap_or("")) {
+                let abs_path = path.to_str().unwrap_or("").to_string();
+                // Always record the file as scanned, regardless of parse outcome.
+                merged.files_scanned.push(abs_path.clone());
+                match self.extract_file(&abs_path) {
                     Ok(result) => merged.merge(result),
                     Err(TldError::UnsupportedLanguage(_)) => {
                         // Silently skip files in languages tld doesn't support.

@@ -86,6 +86,8 @@ pub struct Element {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub technology: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub owner: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub url: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub logo_url: String,

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot};
-use lsp_types::*;
 use serde_json::{json, Value};
 use crate::error::TldError;
 
@@ -32,8 +31,8 @@ impl Session {
         tokio::spawn(async move {
             let mut stdin = stdin;
             let mut stdout_reader = BufReader::new(stdout);
-            let mut pending_requests = HashMap::new();
-            let mut next_id = 1;
+            let mut pending_requests: HashMap<i64, oneshot::Sender<Value>> = HashMap::new();
+            let mut next_id: i64 = 1;
 
             loop {
                 tokio::select! {
@@ -42,7 +41,7 @@ impl Session {
                         next_id += 1;
                         method_params["id"] = json!(id);
                         method_params["jsonrpc"] = json!("2.0");
-                        
+
                         let body = serde_json::to_string(&method_params).unwrap();
                         let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
                         if stdin.write_all(msg.as_bytes()).await.is_err() {
@@ -50,11 +49,11 @@ impl Session {
                         }
                         pending_requests.insert(id, response_tx);
                     }
-                    line = read_line(&mut stdout_reader) => {
+                    line = read_lsp_message(&mut stdout_reader) => {
                         if let Ok(Some(content)) = line {
                             if let Ok(msg) = serde_json::from_str::<Value>(&content) {
                                 if let Some(id) = msg.get("id").and_then(|v| v.as_i64()) {
-                                    if let Some(tx) = pending_requests.remove(&(id as i32)) {
+                                    if let Some(tx) = pending_requests.remove(&id) {
                                         let _ = tx.send(msg);
                                     }
                                 }
@@ -67,49 +66,39 @@ impl Session {
             }
         });
 
-        let session = Session {
-            child,
-            request_tx,
-        };
-
-        Ok(session)
+        Ok(Session { child, request_tx })
     }
 
-    pub async fn initialize(&self, root_uri: Url) -> Result<(), TldError> {
+    pub async fn initialize(&self, root_uri: String) -> Result<(), TldError> {
         let params = json!({
             "method": "initialize",
-            "params": InitializeParams {
-                process_id: Some(std::process::id()),
-                root_uri: Some(root_uri.clone()),
-                root_path: None,
-                initialization_options: None,
-                capabilities: ClientCapabilities::default(),
-                trace: None,
-                workspace_folders: Some(vec![WorkspaceFolder {
-                    uri: root_uri,
-                    name: "root".to_string(),
-                }]),
-                client_info: None,
-                locale: None,
+            "params": {
+                "processId": std::process::id(),
+                "rootUri": root_uri,
+                "capabilities": {},
+                "workspaceFolders": [{"uri": root_uri, "name": "root"}]
             }
         });
-
         self.send_request(params).await?;
         Ok(())
     }
 
-    async fn send_request(&self, params: Value) -> Result<Value, TldError> {
+    pub async fn send_request(&self, params: Value) -> Result<Value, TldError> {
         let (tx, rx) = oneshot::channel();
         self.request_tx.send((params, tx)).await
             .map_err(|_| TldError::Generic("LSP channel closed".to_string()))?;
-        
         rx.await.map_err(|_| TldError::Generic("LSP response dropped".to_string()))
+    }
+
+    pub async fn shutdown(&self) -> Result<(), TldError> {
+        let _ = self.send_request(json!({"method": "shutdown", "params": null})).await;
+        Ok(())
     }
 }
 
-async fn read_line(reader: &mut BufReader<tokio::process::ChildStdout>) -> Result<Option<String>, std::io::Error> {
+async fn read_lsp_message(reader: &mut BufReader<tokio::process::ChildStdout>) -> Result<Option<String>, std::io::Error> {
     let mut line = String::new();
-    let mut content_length = 0;
+    let mut content_length: usize = 0;
 
     // Read headers
     loop {

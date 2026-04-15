@@ -1,7 +1,7 @@
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
-use tree_sitter::Node;
+use tree_sitter::{Language, Node};
 
-pub fn parse(node: &Node, source: &[u8], path: &str, result: &mut AnalysisResult) {
+pub fn parse(node: &Node, source: &[u8], path: &str, _language: &Language, result: &mut AnalysisResult) {
     walk_node(node, source, path, None, result);
 }
 

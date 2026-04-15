@@ -5,6 +5,7 @@ pub mod merger;
 pub mod mutations;
 pub mod types;
 pub mod validator;
+pub mod workspace_builder;
 pub use git::*;
 pub use lockfile::*;
 pub use types::*;

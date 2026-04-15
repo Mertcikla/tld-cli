@@ -53,6 +53,7 @@ pub fn from_export_response(
                 kind,
                 description: e.description.unwrap_or_default(),
                 technology: e.technology.unwrap_or_default(),
+                owner: String::new(),
                 url: e.url.unwrap_or_default(),
                 logo_url: e.logo_url.unwrap_or_default(),
                 repo: e.repo.unwrap_or_default(),

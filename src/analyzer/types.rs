@@ -42,11 +42,15 @@ pub struct Ref {
 pub struct AnalysisResult {
     pub symbols: Vec<Symbol>,
     pub refs: Vec<Ref>,
+    /// Absolute paths of every file visited during directory walks (including unsupported files).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files_scanned: Vec<String>,
 }
 
 impl AnalysisResult {
     pub fn merge(&mut self, other: AnalysisResult) {
         self.symbols.extend(other.symbols);
         self.refs.extend(other.refs);
+        self.files_scanned.extend(other.files_scanned);
     }
 }
