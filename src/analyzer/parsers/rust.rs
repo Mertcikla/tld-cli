@@ -1,4 +1,8 @@
-#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::map_unwrap_or)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::map_unwrap_or
+)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node};
 

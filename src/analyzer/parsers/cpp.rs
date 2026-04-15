@@ -1,4 +1,8 @@
-#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::too_many_arguments)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::too_many_arguments
+)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -36,7 +40,9 @@ fn parse_declarations(
   declarator: _ @fn_declarator) @fn_def
 ";
 
-    let Ok(query) = Query::new(language, decl_query_src) else { return };
+    let Ok(query) = Query::new(language, decl_query_src) else {
+        return;
+    };
 
     let class_name_idx = query
         .capture_index_for_name("class_name")
@@ -184,7 +190,9 @@ fn parse_type_members(
     declarator: _ @ctor_decl_member))
 ";
 
-    let Ok(query) = Query::new(language, method_query_src) else { return };
+    let Ok(query) = Query::new(language, method_query_src) else {
+        return;
+    };
 
     let decl_idx = query
         .capture_index_for_name("method_declarator")
@@ -327,7 +335,9 @@ fn parse_refs(
 (call_expression function: _ @callee)
 ";
 
-    let Ok(query) = Query::new(language, ref_query_src) else { return };
+    let Ok(query) = Query::new(language, ref_query_src) else {
+        return;
+    };
 
     let include_idx = query
         .capture_index_for_name("include_path")

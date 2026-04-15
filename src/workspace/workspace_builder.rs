@@ -1,5 +1,8 @@
 use crate::analyzer::types::AnalysisResult;
-use crate::workspace::{slugify, types::{Connector, Element, ViewPlacement}};
+use crate::workspace::{
+    slugify,
+    types::{Connector, Element, ViewPlacement},
+};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
@@ -421,9 +424,10 @@ fn rel_from_base(abs: &str, base: &str) -> String {
         return abs.to_string();
     }
     let base_path = Path::new(base);
-    Path::new(abs)
-        .strip_prefix(base_path)
-        .map_or_else(|_| abs.to_string(), |p| p.to_str().unwrap_or(abs).to_string())
+    Path::new(abs).strip_prefix(base_path).map_or_else(
+        |_| abs.to_string(),
+        |p| p.to_str().unwrap_or(abs).to_string(),
+    )
 }
 
 fn should_skip_file(rel: &str) -> bool {

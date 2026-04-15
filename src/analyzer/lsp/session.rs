@@ -13,11 +13,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn start(
-        executable: &str,
-        args: &[String],
-        root_dir: &str,
-    ) -> Result<Self, TldError> {
+    pub fn start(executable: &str, args: &[String], root_dir: &str) -> Result<Self, TldError> {
         let mut child = Command::new(executable)
             .args(args)
             .current_dir(root_dir)

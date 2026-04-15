@@ -44,7 +44,9 @@ pub fn exec(args: RemoveArgs, wdir: String) -> Result<(), TldError> {
             let count = ws.remove_connector(&view, &from, &to);
             if count > 0 {
                 workspace::save(&ws)?;
-                output::print_ok(&format!("Removed {count} connector(s) matching coordinates"));
+                output::print_ok(&format!(
+                    "Removed {count} connector(s) matching coordinates"
+                ));
             } else {
                 output::print_warn("No matching connectors found - nothing removed.");
             }

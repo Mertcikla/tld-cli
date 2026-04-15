@@ -89,7 +89,9 @@ pub fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
     let ref_name = ws.upsert_connector(connector)?;
     workspace::save(&ws)?;
 
-    output::print_ok(&format!("Processed connector '{ref_name}' in connectors.yaml"));
+    output::print_ok(&format!(
+        "Processed connector '{ref_name}' in connectors.yaml"
+    ));
     output::print_info("Run 'tld apply' to push changes to the server.");
 
     Ok(())

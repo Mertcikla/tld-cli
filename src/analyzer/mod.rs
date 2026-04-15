@@ -199,8 +199,6 @@ impl TreeSitterService {
         Ok(merged)
     }
 
-
-    
     fn walk_dir(
         dir: &Path,
         root: &str,

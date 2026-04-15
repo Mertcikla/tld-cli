@@ -76,7 +76,9 @@ pub fn from_export_response(
                 ref_name,
                 ResourceMetadata {
                     id: e.id,
-                    updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos.cast_unsigned()).unwrap(),
+                    updated_at: Utc
+                        .timestamp_opt(ts.seconds, ts.nanos.cast_unsigned())
+                        .unwrap(),
                     conflict: false,
                 },
             );
@@ -109,7 +111,9 @@ pub fn from_export_response(
                     owner_ref,
                     ResourceMetadata {
                         id: d.id,
-                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos.cast_unsigned()).unwrap(),
+                        updated_at: Utc
+                            .timestamp_opt(ts.seconds, ts.nanos.cast_unsigned())
+                            .unwrap(),
                         conflict: false,
                     },
                 );
@@ -167,7 +171,9 @@ pub fn from_export_response(
                     key,
                     ResourceMetadata {
                         id: c.id,
-                        updated_at: Utc.timestamp_opt(ts.seconds, ts.nanos.cast_unsigned()).unwrap(),
+                        updated_at: Utc
+                            .timestamp_opt(ts.seconds, ts.nanos.cast_unsigned())
+                            .unwrap(),
                         conflict: false,
                     },
                 );

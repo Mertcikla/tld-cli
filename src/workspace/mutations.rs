@@ -4,11 +4,7 @@ use std::collections::HashMap;
 
 impl Workspace {
     /// Upserts an element in the workspace.
-    pub fn upsert_element(
-        &mut self,
-        ref_name: String,
-        mut element: Element,
-    ) {
+    pub fn upsert_element(&mut self, ref_name: String, mut element: Element) {
         // Enforce some defaults if missing
         if element.kind.is_empty() {
             element.kind = "service".to_string();
@@ -162,12 +158,14 @@ impl Workspace {
 
     /// Infers the shared parent view for two elements.
     fn infer_connector_view(&self, source_ref: &str, target_ref: &str) -> Result<String, TldError> {
-        let source = self.elements.get(source_ref).ok_or_else(|| {
-            TldError::Generic(format!("Source element '{source_ref}' not found"))
-        })?;
-        let target = self.elements.get(target_ref).ok_or_else(|| {
-            TldError::Generic(format!("Target element '{target_ref}' not found"))
-        })?;
+        let source = self
+            .elements
+            .get(source_ref)
+            .ok_or_else(|| TldError::Generic(format!("Source element '{source_ref}' not found")))?;
+        let target = self
+            .elements
+            .get(target_ref)
+            .ok_or_else(|| TldError::Generic(format!("Target element '{target_ref}' not found")))?;
 
         let source_parents: Vec<_> = source
             .placements
@@ -274,12 +272,7 @@ impl Workspace {
     }
 
     /// Removes a connector matching coordinates. Returns count of removed items.
-    pub fn remove_connector(
-        &mut self,
-        view: &str,
-        source: &str,
-        target: &str,
-    ) -> usize {
+    pub fn remove_connector(&mut self, view: &str, source: &str, target: &str) -> usize {
         let before = self.connectors.len();
         let mut removed_refs = Vec::new();
 

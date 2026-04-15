@@ -1,4 +1,8 @@
-#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::map_unwrap_or)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::map_unwrap_or
+)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -48,7 +52,9 @@ fn parse_declarations(
   name: (type_identifier) @alias_name) @alias_decl
 ";
 
-    let Ok(query) = Query::new(language, query_src) else { return };
+    let Ok(query) = Query::new(language, query_src) else {
+        return;
+    };
 
     let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
     let method_idx = query
@@ -186,7 +192,9 @@ fn parse_refs(
 (call_expression function: _ @callee)
 ";
 
-    let Ok(query) = Query::new(language, query_src) else { return };
+    let Ok(query) = Query::new(language, query_src) else {
+        return;
+    };
 
     let import_idx = query
         .capture_index_for_name("import_path")

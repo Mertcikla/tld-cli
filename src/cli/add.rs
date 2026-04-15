@@ -99,7 +99,9 @@ pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
     ws.upsert_element(ref_name.clone(), element);
     workspace::save(&ws)?;
 
-    output::print_ok(&format!("Added/updated element '{ref_name}' in elements.yaml"));
+    output::print_ok(&format!(
+        "Added/updated element '{ref_name}' in elements.yaml"
+    ));
     output::print_info("Run 'tld apply' to push changes to the server.");
 
     Ok(())

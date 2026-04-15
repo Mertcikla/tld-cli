@@ -32,10 +32,14 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
 
     let auth = device_client.authorize(req).await?.into_inner();
 
-    println!("\nOpen the following URL to log in:\n\n  {uri}\n\n", uri = auth.verification_uri_complete);
+    println!(
+        "\nOpen the following URL to log in:\n\n  {uri}\n\n",
+        uri = auth.verification_uri_complete
+    );
     println!(
         "Or navigate to {uri} and enter the code:\n\n  {code}\n\n",
-        uri = auth.verification_uri, code = auth.user_code
+        uri = auth.verification_uri,
+        code = auth.user_code
     );
     println!("Waiting for authorisation… (press Ctrl+C to cancel)");
 

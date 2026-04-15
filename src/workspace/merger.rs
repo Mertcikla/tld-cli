@@ -107,9 +107,8 @@ fn merge_file<T: serde::Serialize>(
                     conflicts += 1;
                     let server_yaml_str = serde_yaml::to_string(server_item).unwrap_or_default();
                     let local_yaml_str = format!("{val:?}"); // Simplified local capture
-                    let conflict_val = format!(
-                        "<<< LOCAL\n{local_yaml_str}\n===\n{server_yaml_str}>>> SERVER"
-                    );
+                    let conflict_val =
+                        format!("<<< LOCAL\n{local_yaml_str}\n===\n{server_yaml_str}>>> SERVER");
                     *val = Yaml::String(conflict_val);
                 } else if server_changed {
                     // Update from server

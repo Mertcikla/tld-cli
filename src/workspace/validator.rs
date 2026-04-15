@@ -66,7 +66,10 @@ impl Workspace {
                 {
                     errs.push(ValidationError {
                         location: ploc,
-                        message: format!("parent ref \"{parent_ref}\" not found", parent_ref = placement.parent_ref),
+                        message: format!(
+                            "parent ref \"{parent_ref}\" not found",
+                            parent_ref = placement.parent_ref
+                        ),
                     });
                 }
             }
@@ -95,7 +98,10 @@ impl Workspace {
             } else if !self.elements.contains_key(&connector.source) {
                 errs.push(ValidationError {
                     location: loc.clone(),
-                    message: format!("source ref \"{source}\" not found", source = connector.source),
+                    message: format!(
+                        "source ref \"{source}\" not found",
+                        source = connector.source
+                    ),
                 });
             }
 
@@ -107,7 +113,10 @@ impl Workspace {
             } else if !self.elements.contains_key(&connector.target) {
                 errs.push(ValidationError {
                     location: loc.clone(),
-                    message: format!("target ref \"{target}\" not found", target = connector.target),
+                    message: format!(
+                        "target ref \"{target}\" not found",
+                        target = connector.target
+                    ),
                 });
             }
         }

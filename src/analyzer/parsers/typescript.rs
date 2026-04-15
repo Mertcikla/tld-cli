@@ -1,4 +1,9 @@
-#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::too_many_arguments, clippy::map_unwrap_or)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::too_many_arguments,
+    clippy::map_unwrap_or
+)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -35,7 +40,9 @@ fn parse_declarations(
   name: (identifier) @fn_name) @fn_decl
 ";
 
-    let Ok(query) = Query::new(language, decl_query_src) else { return };
+    let Ok(query) = Query::new(language, decl_query_src) else {
+        return;
+    };
 
     let class_name_idx = query
         .capture_index_for_name("class_name")
@@ -167,7 +174,9 @@ fn parse_class_members(
   name: (property_identifier) @method_name) @method_def
 ";
 
-    let Ok(query) = Query::new(language, method_query_src) else { return };
+    let Ok(query) = Query::new(language, method_query_src) else {
+        return;
+    };
 
     let method_idx = query
         .capture_index_for_name("method_name")
@@ -217,7 +226,9 @@ fn parse_refs(
   function: _ @callee)
 ";
 
-    let Ok(query) = Query::new(language, ref_query_src) else { return };
+    let Ok(query) = Query::new(language, ref_query_src) else {
+        return;
+    };
 
     let import_idx = query
         .capture_index_for_name("import_src")

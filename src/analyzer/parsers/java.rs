@@ -1,4 +1,9 @@
-#![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::too_many_arguments, clippy::map_unwrap_or)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::too_many_arguments,
+    clippy::map_unwrap_or
+)]
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -30,7 +35,9 @@ fn parse_declarations(
   body: (interface_body) @iface_body) @iface_decl
 ";
 
-    let Ok(query) = Query::new(language, decl_query_src) else { return };
+    let Ok(query) = Query::new(language, decl_query_src) else {
+        return;
+    };
 
     let class_name_idx = query
         .capture_index_for_name("class_name")
@@ -118,7 +125,9 @@ fn parse_class_members(
   name: (identifier) @ctor_name) @ctor_decl
 ";
 
-    let Ok(query) = Query::new(language, member_query_src) else { return };
+    let Ok(query) = Query::new(language, member_query_src) else {
+        return;
+    };
 
     let method_idx = query
         .capture_index_for_name("method_name")
@@ -192,7 +201,9 @@ fn parse_interface_members(
   name: (identifier) @method_name) @method_decl
 ";
 
-    let Ok(query) = Query::new(language, method_query_src) else { return };
+    let Ok(query) = Query::new(language, method_query_src) else {
+        return;
+    };
 
     let method_idx = query
         .capture_index_for_name("method_name")
@@ -235,7 +246,9 @@ fn parse_refs(
   name: (identifier) @call_name)
 ";
 
-    let Ok(query) = Query::new(language, ref_query_src) else { return };
+    let Ok(query) = Query::new(language, ref_query_src) else {
+        return;
+    };
 
     let import_idx = query.capture_index_for_name("import").unwrap_or(u32::MAX);
     let call_idx = query

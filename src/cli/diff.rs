@@ -40,7 +40,10 @@ pub async fn exec(_args: DiffArgs, wdir: String) -> Result<(), TldError> {
 
     let resp = client.export_workspace(req).await?.into_inner();
 
-    let server_ws_dir = temp_dir.to_str().expect("temp path should be valid utf8").to_string();
+    let server_ws_dir = temp_dir
+        .to_str()
+        .expect("temp path should be valid utf8")
+        .to_string();
     let server_ws = workspace::conversion::from_export_response(
         &server_ws_dir,
         ws.config.clone(),
