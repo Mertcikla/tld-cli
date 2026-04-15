@@ -1,5 +1,5 @@
 # tld - CLI for diagrams as code
-[![Go Version](https://img.shields.io/github/go-mod/go-version/mertcikla/tld-cli)](https://go.dev/) [![License](https://img.shields.io/github/license/mertcikla/tld-cli)](./LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/mertcikla/tld-cli/test.yml?branch=main)](https://github.com/mertcikla/tld-cli/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/mertcikla/tld-cli)](https://goreportcard.com/report/github.com/mertcikla/tld-cli)
+[![License](https://img.shields.io/github/license/mertcikla/tld-cli)](./LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/mertcikla/tld-cli/test.yml?branch=main)](https://github.com/mertcikla/tld-cli/actions) 
 
 tld is a command-line interface for managing software architecture diagrams as code. It is a companion app designed for use with [tlDiagram.com](http://tldiagram.com/). It lets you define your architecture in YAML, validate the consistency of your definitions, and sync them to [tlDiagram.com](http://tldiagram.com/).
 

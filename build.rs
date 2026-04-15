@@ -2,10 +2,15 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let proto_dir = "/Users/mertcikla/apps/diag/backend/proto/diag/v1";
-    let include_dir = "/Users/mertcikla/apps/diag/backend/proto";
+    // In CI, set TLD_PROTO_PATH to the cloned tld-proto repo root.
+    // Locally, defaults to the sibling backend/proto directory.
+    let include_dir = PathBuf::from(
+        env::var("TLD_PROTO_PATH")
+            .unwrap_or_else(|_| "/Users/mertcikla/apps/diag/backend/proto".to_string()),
+    );
+    let proto_dir = include_dir.join("diag/v1");
 
-    let protos: Vec<String> = [
+    let proto_files = [
         "auth_service.proto",
         "billing_service.proto",
         "dependency_service.proto",
@@ -17,12 +22,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "user_service.proto",
         "workspace_service.proto",
         "workspace_version_service.proto",
-    ]
-    .iter()
-    .map(|f| format!("{}/{}", proto_dir, f))
-    .collect();
+    ];
 
-    // Inform Cargo to rebuild when any proto file changes.
+    let protos: Vec<String> = proto_files
+        .iter()
+        .map(|f| proto_dir.join(f).to_string_lossy().into_owned())
+        .collect();
+
     for proto in &protos {
         println!("cargo:rerun-if-changed={}", proto);
     }
@@ -34,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_client(true)
         .file_descriptor_set_path(out_dir.join("diag_v1_descriptor.bin"))
         .out_dir(&out_dir)
-        .compile_protos(&protos, &[include_dir.to_string()])?;
+        .compile_protos(&protos, &[include_dir.to_string_lossy().into_owned()])?;
 
     Ok(())
 }

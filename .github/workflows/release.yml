@@ -7,28 +7,137 @@ on:
 
 permissions:
   contents: write
-  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: tld
 
 jobs:
-  goreleaser:
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: false
+            archive: tar.gz
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+            archive: tar.gz
+
+          - target: x86_64-apple-darwin
+            os: macos-13
+            use_cross: false
+            archive: tar.gz
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            use_cross: false
+            archive: tar.gz
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            use_cross: false
+            archive: zip
+
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            use_cross: false
+            archive: zip
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - name: Clone proto definitions
+        run: git clone --depth 1 https://github.com/Mertcikla/tld-proto.git proto-repo
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-release-
+
+      - name: Install protoc (Linux / macOS)
+        if: runner.os != 'Windows'
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $url = "https://github.com/protocolbuffers/protobuf/releases/download/v28.3/protoc-28.3-win64.zip"
+          Invoke-WebRequest -Uri $url -OutFile protoc.zip
+          Expand-Archive -Path protoc.zip -DestinationPath protoc-dist
+          echo "${{ github.workspace }}\protoc-dist\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build (cross)
+        if: matrix.use_cross
         env:
-          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TLD_PROTO_PATH: ${{ github.workspace }}/proto-repo
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build (cargo)
+        if: '!matrix.use_cross'
+        env:
+          TLD_PROTO_PATH: ${{ github.workspace }}/proto-repo
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          BIN=target/${{ matrix.target }}/release/${BINARY_NAME}
+          ASSET=${BINARY_NAME}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          tar -czf "${ASSET}" -C "$(dirname ${BIN})" "$(basename ${BIN})"
+          echo "ASSET=${ASSET}" >> $GITHUB_ENV
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $bin = "target\${{ matrix.target }}\release\${env:BINARY_NAME}.exe"
+          $asset = "${env:BINARY_NAME}-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          Compress-Archive -Path $bin -DestinationPath $asset
+          echo "ASSET=$asset" >> $env:GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ASSET }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
