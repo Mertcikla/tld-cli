@@ -2,6 +2,7 @@ use crate::client::diagv1::{ApplyPlanRequest, PlanConnector, PlanElement, PlanVi
 use crate::error::TldError;
 use crate::workspace::Workspace;
 use prost_types::Timestamp;
+use std::collections::HashSet;
 
 pub struct Plan {
     pub request: ApplyPlanRequest,
@@ -18,8 +19,26 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
 
     let synth_root = "root".to_string();
 
+    // Any element used as a placement parent or connector view must have a
+    // canonical view in the plan, otherwise backend apply fails.
+    let mut required_views: HashSet<String> = HashSet::new();
+    for element in ws.elements.values() {
+        for placement in &element.placements {
+            if !placement.parent_ref.is_empty() && placement.parent_ref != synth_root {
+                required_views.insert(placement.parent_ref.clone());
+            }
+        }
+    }
+    for connector in ws.connectors.values() {
+        if !connector.view.is_empty() && connector.view != synth_root {
+            required_views.insert(connector.view.clone());
+        }
+    }
+
     // Elements
     for (ref_name, element) in &ws.elements {
+        let has_view = element.has_view || required_views.contains(ref_name);
+
         let mut plan_el = PlanElement {
             r#ref: ref_name.clone(),
             name: element.name.clone(),
@@ -33,7 +52,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             language: some_if_not_empty(&element.language),
             file_path: some_if_not_empty(&element.file_path),
             view_label: some_if_not_empty(&element.view_label),
-            has_view: element.has_view,
+            has_view,
             tags: element.tags.clone(),
             ..Default::default()
         };
@@ -64,7 +83,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
                     nanos: m.updated_at.timestamp_subsec_nanos().cast_signed(),
                 });
             }
-            if element.has_view
+            if has_view
                 && let Some(m) = meta.views.get(ref_name)
             {
                 plan_el.view_id = Some(m.id);
@@ -120,5 +139,127 @@ fn some_if_not_empty(s: &str) -> Option<String> {
         None
     } else {
         Some(s.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build;
+    use crate::workspace::{
+        Config, Connector, Element, ViewPlacement, Workspace,
+    };
+    use std::collections::HashMap;
+
+    #[test]
+    fn auto_enables_views_for_referenced_parents() {
+        let mut elements = HashMap::new();
+        elements.insert(
+            "parent".to_string(),
+            Element {
+                name: "Parent".to_string(),
+                kind: "file".to_string(),
+                has_view: false,
+                ..Default::default()
+            },
+        );
+        elements.insert(
+            "child".to_string(),
+            Element {
+                name: "Child".to_string(),
+                kind: "function".to_string(),
+                placements: vec![ViewPlacement {
+                    parent_ref: "parent".to_string(),
+                    position_x: 0.0,
+                    position_y: 0.0,
+                }],
+                ..Default::default()
+            },
+        );
+
+        let ws = Workspace {
+            dir: ".".to_string(),
+            config: Config {
+                org_id: "org-id".to_string(),
+                ..Default::default()
+            },
+            ws_config: None,
+            elements,
+            connectors: HashMap::<String, Connector>::new(),
+            meta: None,
+        };
+
+        let plan = build(&ws, false).expect("build plan");
+        let parent = plan
+            .request
+            .elements
+            .iter()
+            .find(|e| e.r#ref == "parent")
+            .expect("parent element in plan");
+
+        assert!(parent.has_view);
+    }
+
+    #[test]
+    fn auto_enables_views_for_connector_view_refs() {
+        let mut elements = HashMap::new();
+        elements.insert(
+            "view-owner".to_string(),
+            Element {
+                name: "View Owner".to_string(),
+                kind: "service".to_string(),
+                has_view: false,
+                ..Default::default()
+            },
+        );
+        elements.insert(
+            "source".to_string(),
+            Element {
+                name: "Source".to_string(),
+                kind: "service".to_string(),
+                ..Default::default()
+            },
+        );
+        elements.insert(
+            "target".to_string(),
+            Element {
+                name: "Target".to_string(),
+                kind: "service".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let mut connectors = HashMap::new();
+        connectors.insert(
+            "view-owner:source:target:uses".to_string(),
+            Connector {
+                view: "view-owner".to_string(),
+                source: "source".to_string(),
+                target: "target".to_string(),
+                label: "uses".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let ws = Workspace {
+            dir: ".".to_string(),
+            config: Config {
+                org_id: "org-id".to_string(),
+                ..Default::default()
+            },
+            ws_config: None,
+            elements,
+            connectors,
+            meta: None,
+        };
+
+        let plan = build(&ws, false).expect("build plan");
+        let owner = plan
+            .request
+            .elements
+            .iter()
+            .find(|e| e.r#ref == "view-owner")
+            .expect("view owner element in plan");
+
+        assert!(owner.has_view);
     }
 }
