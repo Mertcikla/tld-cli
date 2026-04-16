@@ -359,6 +359,110 @@ fn test_data_flow_view_typescript() {
     assert!(elements_path.exists(), "elements.yaml must exist");
 }
 
+// ── dry-run behavior ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_dry_run_does_not_write_workspace_files() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let wdir = dir.path().to_str().unwrap();
+
+    let output = Command::cargo_bin("tld")
+        .unwrap()
+        .args([
+            "-w",
+            wdir,
+            "analyze",
+            "--dry-run",
+            "tests/test-codebase/typescript",
+        ])
+        .output()
+        .expect("Failed to execute");
+
+    assert!(
+        output.status.success(),
+        "dry-run failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !dir.path().join("elements.yaml").exists(),
+        "dry-run must not write elements.yaml"
+    );
+    assert!(
+        !dir.path().join("connectors.yaml").exists(),
+        "dry-run must not write connectors.yaml"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stderr.contains("Dry run:"), "dry-run should report summary");
+    assert!(
+        stderr.contains("effective root") || stdout.contains("types"),
+        "dry-run output should include the new scope-aware summary"
+    );
+}
+
+// ── noise-threshold behavior ─────────────────────────────────────────────────
+
+#[test]
+fn test_business_view_noise_threshold_reduces_output() {
+    let low_dir = tempdir().expect("Failed to create temp dir");
+    let low_wdir = low_dir.path().to_str().unwrap();
+
+    let low_output = Command::cargo_bin("tld")
+        .unwrap()
+        .args([
+            "-w",
+            low_wdir,
+            "analyze",
+            "--view",
+            "business",
+            "tests/test-codebase/typescript",
+        ])
+        .output()
+        .expect("Failed to execute low-threshold run");
+
+    assert!(
+        low_output.status.success(),
+        "default business view failed: {}",
+        String::from_utf8_lossy(&low_output.stderr)
+    );
+
+    let low_elements = fs::read_to_string(low_dir.path().join("elements.yaml")).unwrap();
+    let low_count = low_elements.matches("  name:").count();
+
+    let high_dir = tempdir().expect("Failed to create temp dir");
+    let high_wdir = high_dir.path().to_str().unwrap();
+
+    let high_output = Command::cargo_bin("tld")
+        .unwrap()
+        .args([
+            "-w",
+            high_wdir,
+            "analyze",
+            "--view",
+            "business",
+            "--noise-threshold",
+            "3",
+            "tests/test-codebase/typescript",
+        ])
+        .output()
+        .expect("Failed to execute high-threshold run");
+
+    assert!(
+        high_output.status.success(),
+        "high-threshold business view failed: {}",
+        String::from_utf8_lossy(&high_output.stderr)
+    );
+
+    let high_elements = fs::read_to_string(high_dir.path().join("elements.yaml")).unwrap();
+    let high_count = high_elements.matches("  name:").count();
+
+    assert!(
+        high_count <= low_count,
+        "higher noise threshold should not increase symbol count ({high_count} > {low_count})"
+    );
+}
+
 // ── --changed-since with no changes ─────────────────────────────────────────
 
 /// --changed-since with a ref that produces no changed files should still succeed.
@@ -417,5 +521,35 @@ fn test_include_low_signal_flag() {
         output.status.success(),
         "include-low-signal failed: {}",
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn test_lsp_flag_gracefully_falls_back() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let wdir = dir.path().to_str().unwrap();
+
+    let output = Command::cargo_bin("tld")
+        .unwrap()
+        .args([
+            "-w",
+            wdir,
+            "analyze",
+            "--lsp",
+            "tests/test-codebase/typescript",
+        ])
+        .output()
+        .expect("Failed to execute");
+
+    assert!(
+        output.status.success(),
+        "--lsp analyze should not fail even when language servers are unavailable: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("LSP enrichment complete") || stderr.contains("Analysis complete"),
+        "expected analyze to finish cleanly with or without available LSP servers"
     );
 }

@@ -183,9 +183,16 @@ impl Workspace {
                 continue;
             }
 
-            match TreeSitterService::extract_file(abs_path.to_str().unwrap_or("")) {
-                Ok(result) => {
-                    let found = result.symbols.iter().any(|s| s.name == element.symbol);
+            match TreeSitterService::extract_file_syntax(
+                abs_path.to_str().unwrap_or(""),
+                "validation",
+            ) {
+                Ok(syntax) => {
+                    let found = syntax
+                        .files
+                        .iter()
+                        .flat_map(|file| file.decls.iter())
+                        .any(|decl| decl.name == element.symbol);
                     if !found {
                         errs.push(ValidationError {
                             location: format!("elements.yaml[{ref_name}]"),

@@ -13,6 +13,7 @@ use std::fs;
 use std::path::Path;
 use ts_pack_core::{detect_language_from_path, get_language};
 pub use types::*;
+use crate::analyzer::syntax::types::SyntaxBundle;
 
 /// Callback invoked for each file or directory visited during analysis.
 /// Arguments: (path, is_dir).
@@ -153,6 +154,23 @@ impl TreeSitterService {
 
         Ok(result)
     }
+
+    pub fn extract_file_syntax(path: &str, repo_name: &str) -> Result<SyntaxBundle, TldError> {
+        let result = Self::extract_file(path)?;
+        Ok(syntax::from_analysis_result(&result, repo_name))
+    }
+
+    #[allow(dead_code)]
+    pub fn extract_path_syntax(
+        &self,
+        path: &str,
+        rules: &Rules,
+        repo_name: &str,
+        on_entry: OnEntry<'_>,
+    ) -> Result<SyntaxBundle, TldError> {
+        let result = self.extract_path(path, rules, on_entry)?;
+        Ok(syntax::from_analysis_result(&result, repo_name))
+    }
 }
 
 /// Returns true when tld has an AST-walk implementation for the language.
@@ -190,6 +208,7 @@ impl Service for TreeSitterService {
             Ok(result)
         }
     }
+
 }
 
 impl TreeSitterService {
@@ -259,5 +278,35 @@ impl TreeSitterService {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Rules, TreeSitterService};
+
+    #[test]
+    fn extract_path_syntax_returns_files_and_decls() {
+        let service = TreeSitterService::new();
+        let rules = Rules::new(Vec::new());
+
+        let syntax = service
+            .extract_path_syntax(
+                "tests/test-codebase/typescript",
+                &rules,
+                "typescript",
+                None,
+            )
+            .expect("syntax extraction should succeed");
+
+        assert!(!syntax.files.is_empty(), "syntax bundle should contain files");
+        assert!(
+            syntax.files.iter().any(|file| !file.decls.is_empty()),
+            "syntax bundle should contain declarations"
+        );
+        assert!(
+            syntax.files.iter().any(|file| !file.refs.is_empty()),
+            "syntax bundle should contain refs"
+        );
     }
 }

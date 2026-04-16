@@ -1,5 +1,6 @@
 use crate::analyzer::projection::{self, ViewMode};
 use crate::analyzer::scope;
+use crate::analyzer::syntax;
 use crate::analyzer::{Rules, Service, TreeSitterService};
 use crate::error::TldError;
 use crate::output;
@@ -118,68 +119,85 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     // ── Build scan plan (scope) ───────────────────────────────────────────────
     let scan_scope = scope::plan(
         abs_scan_path.to_str().unwrap_or(""),
+        &ws.dir,
+        ws.ws_config.as_ref(),
         &derive_repo_name(&ws, &abs_scan_path),
         args.deep,
         args.changed_since.as_deref(),
         &exclude,
     )?;
 
+    output::print_info(&format!(
+        "Scope: root={}, repositories={}, constrained_files={}",
+        scan_scope.root_dir,
+        scan_scope.repositories.len(),
+        scan_scope.files.len()
+    ));
+
     // The effective root may have been expanded to the git repo root by --deep.
     let effective_scan_root = scan_scope.root_dir.clone();
 
     // ── Run tree-sitter analysis ──────────────────────────────────────────────
-    let rules = Rules::new(exclude);
     let analyzer_service = TreeSitterService::new();
 
     let spinner = output::new_spinner("Scanning files...");
 
     let mut result = if scan_scope.files.is_empty() {
-        // Full directory walk (normal case, or --deep expanded root).
-        match analyzer_service.extract_path(
-            &effective_scan_root,
-            &rules,
-            Some(&|path, _is_dir| {
-                spinner.set_message(format!("Scanning {path}"));
-            }),
-        ) {
-            Ok(r) => r,
-            Err(TldError::ParserDownloadRequired { ref lang, .. }) => {
-                spinner.finish_and_clear();
-                eprintln!(
-                    "{}",
-                    TldError::ParserDownloadRequired {
-                        lang: lang.clone(),
-                        reason: "grammar not in local cache".to_string(),
-                    }
-                );
-                eprintln!();
-                eprint!("Download the '{lang}' parser now? [y/N]: ");
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input).ok();
-                if input.trim().eq_ignore_ascii_case("y") {
-                    let lang_clone = lang.clone();
-                    let dl_spinner =
-                        output::new_spinner(&format!("Downloading '{lang_clone}' parser..."));
-                    match ts_pack_core::download(&[lang_clone.as_str()]) {
-                        Ok(_) => {
-                            dl_spinner.finish_and_clear();
-                            output::print_ok("Download complete. Re-running analysis...");
-                            analyzer_service.extract_path(&effective_scan_root, &rules, None)?
+        let mut merged = crate::analyzer::types::AnalysisResult::default();
+        for repo in &scan_scope.repositories {
+            let repo_rules = Rules::new(repo.exclude.clone());
+            match analyzer_service.extract_path(
+                &repo.root_dir,
+                &repo_rules,
+                Some(&|path, _is_dir| {
+                    spinner.set_message(format!("Scanning {path}"));
+                }),
+            ) {
+                Ok(r) => merged.merge(r),
+                Err(TldError::ParserDownloadRequired { ref lang, .. }) => {
+                    spinner.finish_and_clear();
+                    eprintln!(
+                        "{}",
+                        TldError::ParserDownloadRequired {
+                            lang: lang.clone(),
+                            reason: "grammar not in local cache".to_string(),
                         }
-                        Err(e) => {
-                            dl_spinner.finish_and_clear();
-                            return Err(TldError::Generic(format!("Download failed: {e}")));
+                    );
+                    eprintln!();
+                    eprint!("Download the '{lang}' parser now? [y/N]: ");
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input).ok();
+                    if input.trim().eq_ignore_ascii_case("y") {
+                        let lang_clone = lang.clone();
+                        let dl_spinner =
+                            output::new_spinner(&format!("Downloading '{lang_clone}' parser..."));
+                        match ts_pack_core::download(&[lang_clone.as_str()]) {
+                            Ok(_) => {
+                                dl_spinner.finish_and_clear();
+                                output::print_ok("Download complete. Re-running analysis...");
+                                let retry = analyzer_service.extract_path(
+                                    &repo.root_dir,
+                                    &repo_rules,
+                                    None,
+                                )?;
+                                merged.merge(retry);
+                            }
+                            Err(e) => {
+                                dl_spinner.finish_and_clear();
+                                return Err(TldError::Generic(format!("Download failed: {e}")));
+                            }
                         }
+                    } else {
+                        return Err(TldError::Generic("Analysis aborted.".to_string()));
                     }
-                } else {
-                    return Err(TldError::Generic("Analysis aborted.".to_string()));
+                }
+                Err(e) => {
+                    spinner.finish_and_clear();
+                    return Err(e);
                 }
             }
-            Err(e) => {
-                spinner.finish_and_clear();
-                return Err(e);
-            }
         }
+        merged
     } else {
         // --changed-since: analyze only the listed files.
         let mut merged = crate::analyzer::types::AnalysisResult::default();
@@ -205,9 +223,10 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     // ── Dry-run reporting ─────────────────────────────────────────────────────
     if args.dry_run {
         output::print_info(&format!(
-            "Dry run: {} files scanned, {} symbols found",
+            "Dry run: {} files scanned, {} symbols found, effective root {}",
             result.files_scanned.len(),
-            result.symbols.len()
+            result.symbols.len(),
+            effective_scan_root
         ));
         for sym in &result.symbols {
             println!(
@@ -275,6 +294,13 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         }
     }
 
+    let syntax_bundle = match view_mode {
+        ViewMode::Structural => None,
+        ViewMode::Business | ViewMode::DataFlow => {
+            Some(syntax::from_analysis_result(&result, &repo_name_hint(&ws, &abs_scan_path)))
+        }
+    };
+
     // ── Build workspace output via the chosen projection ──────────────────────
     let scan_root = effective_scan_root.clone();
     let repo_name = derive_repo_name(&ws, &abs_scan_path);
@@ -305,21 +331,39 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             (out, msg)
         }
         ViewMode::Business => {
-            let (out, stats) = projection::business::project(&result, &ctx, noise_threshold);
+            let (out, stats) = projection::business::project(
+                syntax_bundle
+                    .as_ref()
+                    .expect("semantic views should build a syntax bundle"),
+                &ctx,
+                noise_threshold,
+            );
             let msg = format!(
-                "{} elements written, {} connectors created, {} low-signal symbols hidden (business view).",
+                "{} elements written, {} connectors created, {} low-signal symbols hidden, {} unresolved refs, {} resolved call edges ({} via LSP) (business view).",
                 out.elements.len(),
                 out.connectors.len(),
                 stats.symbols_hidden,
+                stats.unresolved_refs,
+                stats.resolved_call_edges,
+                stats.lsp_resolved_edges,
             );
             (out, msg)
         }
         ViewMode::DataFlow => {
-            let out = projection::data_flow::project(&result, &ctx, noise_threshold);
+            let (out, stats) = projection::data_flow::project(
+                syntax_bundle
+                    .as_ref()
+                    .expect("semantic views should build a syntax bundle"),
+                &ctx,
+                noise_threshold,
+            );
             let msg = format!(
-                "{} elements written, {} connectors created (data-flow view).",
+                "{} elements written, {} connectors created, {} flows synthesized, {} low-signal symbols hidden, {} unresolved refs (data-flow view).",
                 out.elements.len(),
-                out.connectors.len()
+                out.connectors.len(),
+                stats.flow_count,
+                stats.symbols_hidden,
+                stats.unresolved_refs,
             );
             (out, msg)
         }
@@ -338,6 +382,10 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     output::print_ok(&format!("Analysis complete. {stats_msg}"));
 
     Ok(())
+}
+
+fn repo_name_hint(ws: &workspace::Workspace, scan_path: &Path) -> String {
+    derive_repo_name(ws, scan_path)
 }
 
 fn derive_repo_name(ws: &workspace::Workspace, scan_path: &Path) -> String {

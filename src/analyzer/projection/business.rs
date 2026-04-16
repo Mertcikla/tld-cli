@@ -13,8 +13,7 @@ use crate::analyzer::semantic::{
     prune, resolver, roles, salience,
     types::{EdgeKind, SemanticBundle},
 };
-use crate::analyzer::syntax::types::DeclKind;
-use crate::analyzer::types::AnalysisResult;
+use crate::analyzer::syntax::{types::{DeclKind, SyntaxBundle}};
 use crate::workspace::{
     slugify,
     types::{Connector, Element, ViewPlacement},
@@ -27,12 +26,15 @@ pub struct ProjectionStats {
     pub symbols_total: usize,
     pub symbols_hidden: usize,
     pub connectors_emitted: usize,
+    pub unresolved_refs: usize,
+    pub resolved_call_edges: usize,
+    pub lsp_resolved_edges: usize,
 }
 
-/// Project an `AnalysisResult` using the semantic pipeline, emitting only
+/// Project a `SyntaxBundle` using the semantic pipeline, emitting only
 /// high-salience architectural symbols and their resolved connections.
 pub fn project(
-    result: &AnalysisResult,
+    syntax: &SyntaxBundle,
     ctx: &BuildContext,
     noise_threshold: i32,
 ) -> (BuildOutput, ProjectionStats) {
@@ -42,7 +44,7 @@ pub fn project(
         .map_or("", |p| p.to_str().unwrap_or(""))
         .to_string();
 
-    let bundle: SemanticBundle = resolver::resolve(result, &ctx.repo_name, &scan_parent);
+    let bundle: SemanticBundle = resolver::resolve_syntax(syntax, &scan_parent);
 
     // ── 2. Graph + roles + salience ───────────────────────────────────────────
     let graph = SemanticGraph::build(&bundle);
@@ -152,6 +154,17 @@ pub fn project(
         symbols_total: bundle.symbols.len(),
         symbols_hidden: pruned.hidden_count,
         connectors_emitted: connectors.len(),
+        unresolved_refs: bundle.unresolved_refs.len(),
+        resolved_call_edges: bundle
+            .edges
+            .iter()
+            .filter(|e| matches!(e.kind, EdgeKind::Calls) && e.target.is_resolved())
+            .count(),
+        lsp_resolved_edges: bundle
+            .edges
+            .iter()
+            .filter(|e| matches!(e.kind, EdgeKind::Calls) && e.origin == crate::analyzer::semantic::types::EdgeOrigin::Lsp)
+            .count(),
     };
 
     (

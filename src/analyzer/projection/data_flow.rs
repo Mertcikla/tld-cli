@@ -6,7 +6,7 @@
 use crate::analyzer::semantic::{
     flows, graph::SemanticGraph, prune, resolver, roles, salience, types::SemanticBundle,
 };
-use crate::analyzer::types::AnalysisResult;
+use crate::analyzer::syntax::types::SyntaxBundle;
 use crate::workspace::{
     slugify,
     types::{Connector, Element, ViewPlacement},
@@ -14,16 +14,26 @@ use crate::workspace::{
 };
 use std::collections::{HashMap, HashSet};
 
-/// Project an `AnalysisResult` as a data-flow diagram.
+pub struct ProjectionStats {
+    pub flow_count: usize,
+    pub symbols_hidden: usize,
+    pub unresolved_refs: usize,
+}
+
+/// Project a `SyntaxBundle` as a data-flow diagram.
 /// Emits one connector per resolved flow step; flow sources/targets are the
 /// high-salience symbols on the traced path.
-pub fn project(result: &AnalysisResult, ctx: &BuildContext, noise_threshold: i32) -> BuildOutput {
+pub fn project(
+    syntax: &SyntaxBundle,
+    ctx: &BuildContext,
+    noise_threshold: i32,
+) -> (BuildOutput, ProjectionStats) {
     let scan_parent = std::path::Path::new(&ctx.scan_root)
         .parent()
         .map_or("", |p| p.to_str().unwrap_or(""))
         .to_string();
 
-    let bundle: SemanticBundle = resolver::resolve(result, &ctx.repo_name, &scan_parent);
+    let bundle: SemanticBundle = resolver::resolve_syntax(syntax, &scan_parent);
     let graph = SemanticGraph::build(&bundle);
     let role_map = roles::infer_roles(&graph);
     let score_map = salience::score_all(&graph, &role_map);
@@ -129,8 +139,17 @@ pub fn project(result: &AnalysisResult, ctx: &BuildContext, noise_threshold: i32
         }
     }
 
-    BuildOutput {
-        elements,
-        connectors,
-    }
+    let stats = ProjectionStats {
+        flow_count: flow_list.len(),
+        symbols_hidden: pruned.hidden_count,
+        unresolved_refs: bundle.unresolved_refs.len(),
+    };
+
+    (
+        BuildOutput {
+            elements,
+            connectors,
+        },
+        stats,
+    )
 }

@@ -108,7 +108,6 @@ pub async fn resolve_calls_with_lsp(
     unique_langs: &[&str],
 ) -> Result<(), crate::error::TldError> {
     use crate::analyzer::lsp::session::Session;
-    use serde_json::json;
 
     let root_uri = format!("file://{}", root_dir.trim_end_matches('/'));
 
@@ -132,6 +131,7 @@ pub async fn resolve_calls_with_lsp(
         // duplicate call sites are looked up only once per session.
         let mut cache: std::collections::HashMap<(String, i32, i32), String> =
             std::collections::HashMap::new();
+        let mut opened_files = std::collections::HashSet::new();
 
         for r in refs.iter_mut() {
             if r.kind != "call" || !r.target_path.is_empty() {
@@ -164,40 +164,52 @@ pub async fn resolve_calls_with_lsp(
             }
 
             let file_uri = format!("file://{}", r.file_path);
-            let request = json!({
-                "method": "textDocument/definition",
-                "params": {
-                    "textDocument": {"uri": file_uri},
-                    "position": {"line": r.line - 1, "character": r.column - 1}
-                }
-            });
-
-            if let Ok(response) = session.send_request(request).await {
-                // The result can be Location, Location[], or LocationLink[]
-                let result = &response["result"];
-                let loc = if result.is_array() {
-                    result.get(0)
-                } else {
-                    Some(result)
-                };
-
-                if let Some(loc) = loc {
-                    let resolved = loc
-                        .get("uri")
-                        .or_else(|| loc.get("targetUri"))
-                        .and_then(|u| u.as_str())
-                        .map(|uri| uri.trim_start_matches("file://").to_string());
-
-                    if let Some(path) = resolved {
-                        cache.insert(cache_key, path.clone());
-                        r.target_path = path;
-                    }
-                }
+            if opened_files.insert(r.file_path.clone())
+                && let Ok(text) = std::fs::read_to_string(&r.file_path)
+            {
+                let _ = session.did_open(&file_uri, lang, &text).await;
+                let _ = session.document_symbols(&file_uri).await;
             }
+
+            let response = match session.definition(&file_uri, r.line, r.column).await {
+                Ok(resp) => Some(resp),
+                Err(_) => None,
+            };
+            let response = if response.is_some() {
+                response
+            } else {
+                session.implementation(&file_uri, r.line, r.column).await.ok()
+            };
+
+            if let Some(path) = response.and_then(|resp| extract_location_path(&resp)) {
+                cache.insert(cache_key, path.clone());
+                r.target_path = path;
+            }
+        }
+
+        for file_path in opened_files {
+            let file_uri = format!("file://{}", file_path);
+            let _ = session.did_close(&file_uri).await;
         }
 
         let _ = session.shutdown().await;
     }
 
     Ok(())
+}
+
+fn extract_location_path(response: &serde_json::Value) -> Option<String> {
+    let result = &response["result"];
+    let loc = if result.is_array() {
+        result.get(0)
+    } else {
+        Some(result)
+    };
+
+    loc.and_then(|loc| {
+        loc.get("uri")
+            .or_else(|| loc.get("targetUri"))
+            .and_then(|u| u.as_str())
+            .map(|uri| uri.trim_start_matches("file://").to_string())
+    })
 }

@@ -72,6 +72,15 @@ pub struct SymbolSpans {
     pub sig_line: u32,
 }
 
+/// Per-symbol control-flow counts derived from syntax blocks.
+#[derive(Debug, Clone, Default)]
+pub struct ControlMetrics {
+    pub branch_regions: u32,
+    pub loop_regions: u32,
+    pub try_regions: u32,
+    pub early_return_regions: u32,
+}
+
 /// A fully-resolved semantic symbol.
 #[derive(Debug, Clone)]
 pub struct SemanticSymbol {
@@ -86,6 +95,7 @@ pub struct SemanticSymbol {
     pub external: bool,
     pub description: String,
     pub spans: SymbolSpans,
+    pub control: ControlMetrics,
 }
 
 /// A directed edge in the semantic graph.

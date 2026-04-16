@@ -1,6 +1,7 @@
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
 
@@ -218,4 +219,69 @@ fn test_tld_analyze_empty() {
     cmd.assert().success().stderr(predicate::str::contains(
         "No symbols or architectural elements were found",
     ));
+}
+
+#[test]
+fn test_tld_analyze_workspace_root_uses_configured_repositories() {
+    let dir = tempdir().unwrap();
+    let wdir = dir.path();
+
+    fs::create_dir_all(wdir.join("repo-a")).unwrap();
+    fs::create_dir_all(wdir.join("repo-b/internal")).unwrap();
+    fs::create_dir_all(wdir.join("scratch")).unwrap();
+
+    fs::write(
+        wdir.join(".tld.yaml"),
+        r#"project_name: Multi Repo
+exclude: []
+repositories:
+  repo-a:
+    localDir: repo-a
+  repo-b:
+    localDir: repo-b
+    exclude:
+      - internal/
+"#,
+    )
+    .unwrap();
+
+    write_typescript_fixture(
+        &wdir.join("repo-a/order.ts"),
+        "function placeOrder() { return charge(); }\nfunction charge() { return 1; }\n",
+    );
+    write_typescript_fixture(
+        &wdir.join("repo-b/inventory.ts"),
+        "function reserveStock() { return currentStock(); }\nfunction currentStock() { return 2; }\n",
+    );
+    write_typescript_fixture(
+        &wdir.join("repo-b/internal/ignored.ts"),
+        "function internalOnly() { return 3; }\n",
+    );
+    write_typescript_fixture(
+        &wdir.join("scratch/debug.ts"),
+        "function debugOnly() { return 4; }\n",
+    );
+
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("-w")
+        .arg(wdir)
+        .arg("analyze")
+        .arg(wdir);
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("repositories=2"));
+
+    let elements = fs::read_to_string(wdir.join("elements.yaml")).unwrap();
+    assert!(elements.contains("placeOrder"));
+    assert!(elements.contains("reserveStock"));
+    assert!(!elements.contains("internalOnly"));
+    assert!(!elements.contains("debugOnly"));
+}
+
+fn write_typescript_fixture(path: &Path, source: &str) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(path, source).unwrap();
 }

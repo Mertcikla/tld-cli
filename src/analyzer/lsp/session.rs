@@ -1,15 +1,20 @@
 #![expect(clippy::expect_used)]
 use crate::error::TldError;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot};
 
+enum OutboundMessage {
+    Request(Value, oneshot::Sender<Value>),
+    Notification(Value),
+}
+
 pub struct Session {
     _child: Child,
-    request_tx: mpsc::Sender<(Value, oneshot::Sender<Value>)>,
+    message_tx: mpsc::Sender<OutboundMessage>,
 }
 
 impl Session {
@@ -32,9 +37,8 @@ impl Session {
             .take()
             .ok_or_else(|| TldError::Generic("No stdout".to_string()))?;
 
-        let (request_tx, mut request_rx) = mpsc::channel::<(Value, oneshot::Sender<Value>)>(100);
+        let (message_tx, mut message_rx) = mpsc::channel::<OutboundMessage>(100);
 
-        // Spawn IO loops
         tokio::spawn(async move {
             let mut stdin = stdin;
             let mut stdout_reader = BufReader::new(stdout);
@@ -43,19 +47,26 @@ impl Session {
 
             loop {
                 tokio::select! {
-                    Some((mut method_params, response_tx)) = request_rx.recv() => {
-                        let id = next_id;
-                        next_id += 1;
-                        method_params["id"] = json!(id);
-                        method_params["jsonrpc"] = json!("2.0");
+                    Some(message) = message_rx.recv() => {
+                        let mut payload = match message {
+                            OutboundMessage::Request(mut params, response_tx) => {
+                                let id = next_id;
+                                next_id += 1;
+                                params["id"] = json!(id);
+                                pending_requests.insert(id, response_tx);
+                                params
+                            }
+                            OutboundMessage::Notification(params) => params,
+                        };
 
-                        let body = serde_json::to_string(&method_params)
+                        payload["jsonrpc"] = json!("2.0");
+
+                        let body = serde_json::to_string(&payload)
                             .expect("LSP params must be serializable");
                         let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
                         if stdin.write_all(msg.as_bytes()).await.is_err() {
                             break;
                         }
-                        pending_requests.insert(id, response_tx);
                     }
                     line = read_lsp_message(&mut stdout_reader) => {
                         match line {
@@ -74,10 +85,7 @@ impl Session {
             }
         });
 
-        Ok(Session {
-            _child: child,
-            request_tx,
-        })
+        Ok(Session { _child: child, message_tx })
     }
 
     pub async fn initialize(&self, root_uri: String) -> Result<(), TldError> {
@@ -91,22 +99,110 @@ impl Session {
             }
         });
         self.send_request(params).await?;
-        Ok(())
+        self.send_notification(json!({
+            "method": "initialized",
+            "params": {}
+        }))
+        .await
     }
 
     pub async fn send_request(&self, params: Value) -> Result<Value, TldError> {
         let (tx, rx) = oneshot::channel();
-        self.request_tx
-            .send((params, tx))
+        self.message_tx
+            .send(OutboundMessage::Request(params, tx))
             .await
             .map_err(|_| TldError::Generic("LSP channel closed".to_string()))?;
         rx.await
             .map_err(|_| TldError::Generic("LSP response dropped".to_string()))
     }
 
+    pub async fn send_notification(&self, params: Value) -> Result<(), TldError> {
+        self.message_tx
+            .send(OutboundMessage::Notification(params))
+            .await
+            .map_err(|_| TldError::Generic("LSP channel closed".to_string()))
+    }
+
+    pub async fn did_open(
+        &self,
+        file_uri: &str,
+        language_id: &str,
+        text: &str,
+    ) -> Result<(), TldError> {
+        self.send_notification(json!({
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": file_uri,
+                    "languageId": language_id,
+                    "version": 1,
+                    "text": text,
+                }
+            }
+        }))
+        .await
+    }
+
+    pub async fn did_close(&self, file_uri: &str) -> Result<(), TldError> {
+        self.send_notification(json!({
+            "method": "textDocument/didClose",
+            "params": {
+                "textDocument": {
+                    "uri": file_uri,
+                }
+            }
+        }))
+        .await
+    }
+
+    pub async fn definition(
+        &self,
+        file_uri: &str,
+        line: i32,
+        column: i32,
+    ) -> Result<Value, TldError> {
+        self.send_request(json!({
+            "method": "textDocument/definition",
+            "params": {
+                "textDocument": {"uri": file_uri},
+                "position": {"line": line - 1, "character": column - 1}
+            }
+        }))
+        .await
+    }
+
+    pub async fn implementation(
+        &self,
+        file_uri: &str,
+        line: i32,
+        column: i32,
+    ) -> Result<Value, TldError> {
+        self.send_request(json!({
+            "method": "textDocument/implementation",
+            "params": {
+                "textDocument": {"uri": file_uri},
+                "position": {"line": line - 1, "character": column - 1}
+            }
+        }))
+        .await
+    }
+
+    pub async fn document_symbols(&self, file_uri: &str) -> Result<Value, TldError> {
+        self.send_request(json!({
+            "method": "textDocument/documentSymbol",
+            "params": {
+                "textDocument": {"uri": file_uri}
+            }
+        }))
+        .await
+    }
+
     pub async fn shutdown(&self) -> Result<(), TldError> {
         let _ = self
             .send_request(json!({"method": "shutdown", "params": null}))
+            .await;
+        let _ = self
+            .send_notification(json!({"method": "exit", "params": null}))
             .await;
         Ok(())
     }
@@ -118,7 +214,6 @@ async fn read_lsp_message(
     let mut line = String::new();
     let mut content_length: usize = 0;
 
-    // Read headers
     loop {
         line.clear();
         if reader.read_line(&mut line).await? == 0 {

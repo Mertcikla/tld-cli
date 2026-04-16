@@ -20,6 +20,14 @@ pub struct NodeMetrics {
     pub cross_file_in: usize,
     /// True when any outgoing edge has origin == Lsp (reliable resolution).
     pub has_lsp_edges: bool,
+    /// Best-effort cyclomatic complexity signal.
+    ///
+    /// Phase 2 uses a language-agnostic heuristic derived from body span length
+    /// and interaction count. Phase 3 can replace this with parser-populated
+    /// control-region counts without changing downstream salience consumers.
+    pub cyclomatic_complexity: u32,
+    /// Best-effort cognitive complexity signal.
+    pub cognitive_complexity: u32,
 }
 
 /// The fully-materialized graph.
@@ -74,6 +82,8 @@ impl SemanticGraph {
             let has_lsp_edges = out_edges
                 .iter()
                 .any(|&i| bundle.edges[i].origin == EdgeOrigin::Lsp);
+            let (cyclomatic_complexity, cognitive_complexity) =
+                estimate_complexity(sym, fan_out);
 
             metrics.insert(
                 id.clone(),
@@ -83,6 +93,8 @@ impl SemanticGraph {
                     cross_file_out,
                     cross_file_in,
                     has_lsp_edges,
+                    cyclomatic_complexity,
+                    cognitive_complexity,
                 },
             );
         }
@@ -103,6 +115,8 @@ impl SemanticGraph {
             cross_file_out: 0,
             cross_file_in: 0,
             has_lsp_edges: false,
+            cyclomatic_complexity: 0,
+            cognitive_complexity: 0,
         };
         self.metrics.get(id).unwrap_or(&EMPTY)
     }
@@ -139,5 +153,143 @@ impl SemanticGraph {
         }
         visited.remove(start);
         visited
+    }
+}
+
+fn estimate_complexity(sym: &SemanticSymbol, fan_out: usize) -> (u32, u32) {
+    use crate::analyzer::syntax::types::DeclKind;
+
+    if !matches!(
+        sym.kind,
+        DeclKind::Function | DeclKind::Method | DeclKind::Constructor | DeclKind::Destructor
+    ) {
+        return (0, 0);
+    }
+
+    let control_regions = sym.control.branch_regions
+        + sym.control.loop_regions
+        + sym.control.try_regions;
+    if control_regions > 0 || sym.control.early_return_regions > 0 {
+        let interaction_branches = fan_out.saturating_sub(1) as u32;
+        let cyclomatic_complexity = 1 + control_regions + interaction_branches;
+        let cognitive_complexity = cyclomatic_complexity
+            + sym.control.branch_regions
+            + sym.control.loop_regions
+            + sym.control.early_return_regions;
+        return (cyclomatic_complexity, cognitive_complexity);
+    }
+
+    let body_lines = sym.spans.body_end.saturating_sub(sym.spans.body_start);
+    let structural_branches = body_lines / 12;
+    let interaction_branches = fan_out.saturating_sub(1) as u32;
+    let cyclomatic_complexity = 1 + structural_branches + interaction_branches;
+    let cognitive_complexity = cyclomatic_complexity + (body_lines / 20);
+
+    (cyclomatic_complexity, cognitive_complexity)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analyzer::semantic::types::{
+        ControlMetrics, EdgeKind, EdgeOrigin, EdgeTarget, SemanticBundle, SemanticEdge,
+        SemanticSymbol, SymbolSpans, Visibility,
+    };
+    use crate::analyzer::syntax::types::DeclKind;
+
+    fn make_symbol(id: &str, name: &str, kind: DeclKind, start: u32, end: u32) -> SemanticSymbol {
+        SemanticSymbol {
+            symbol_id: id.to_string(),
+            repo_name: "repo".to_string(),
+            file_path: "src/file.ts".to_string(),
+            name: name.to_string(),
+            kind,
+            owner: None,
+            visibility: Visibility::Unknown,
+            external: false,
+            description: String::new(),
+            spans: SymbolSpans {
+                body_start: start,
+                body_end: end,
+                sig_line: start,
+            },
+            control: ControlMetrics::default(),
+        }
+    }
+
+    #[test]
+    fn graph_metrics_estimate_complexity_for_behavioral_symbols() {
+        let bundle = SemanticBundle {
+            symbols: vec![
+                make_symbol("repo:src/file.ts:orchestrate", "orchestrate", DeclKind::Function, 1, 48),
+                make_symbol("repo:src/file.ts:step1", "step1", DeclKind::Function, 50, 52),
+                make_symbol("repo:src/file.ts:step2", "step2", DeclKind::Function, 54, 56),
+                make_symbol("repo:src/file.ts:OrderService", "OrderService", DeclKind::Class, 60, 120),
+            ],
+            edges: vec![
+                SemanticEdge {
+                    source: "repo:src/file.ts:orchestrate".to_string(),
+                    target: EdgeTarget::Resolved("repo:src/file.ts:step1".to_string()),
+                    kind: EdgeKind::Calls,
+                    origin: EdgeOrigin::BareName,
+                    order_index: 0,
+                    cross_boundary: false,
+                },
+                SemanticEdge {
+                    source: "repo:src/file.ts:orchestrate".to_string(),
+                    target: EdgeTarget::Resolved("repo:src/file.ts:step2".to_string()),
+                    kind: EdgeKind::Calls,
+                    origin: EdgeOrigin::BareName,
+                    order_index: 1,
+                    cross_boundary: false,
+                },
+            ],
+            unresolved_refs: vec![],
+        };
+
+        let graph = SemanticGraph::build(&bundle);
+        let orchestrate = graph.metrics_for("repo:src/file.ts:orchestrate");
+        let container = graph.metrics_for("repo:src/file.ts:OrderService");
+
+        assert!(orchestrate.cyclomatic_complexity >= 5);
+        assert!(orchestrate.cognitive_complexity >= orchestrate.cyclomatic_complexity);
+        assert_eq!(container.cyclomatic_complexity, 0);
+        assert_eq!(container.cognitive_complexity, 0);
+    }
+
+    #[test]
+    fn graph_metrics_prefer_parser_backed_control_counts() {
+        let bundle = SemanticBundle {
+            symbols: vec![SemanticSymbol {
+                symbol_id: "repo:src/file.ts:orchestrate".to_string(),
+                repo_name: "repo".to_string(),
+                file_path: "src/file.ts".to_string(),
+                name: "orchestrate".to_string(),
+                kind: DeclKind::Function,
+                owner: None,
+                visibility: Visibility::Unknown,
+                external: false,
+                description: String::new(),
+                spans: SymbolSpans {
+                    body_start: 1,
+                    body_end: 6,
+                    sig_line: 1,
+                },
+                control: ControlMetrics {
+                    branch_regions: 2,
+                    loop_regions: 1,
+                    try_regions: 1,
+                    early_return_regions: 2,
+                },
+            }],
+            edges: vec![],
+            unresolved_refs: vec![],
+        };
+
+        let graph = SemanticGraph::build(&bundle);
+        let metrics = graph.metrics_for("repo:src/file.ts:orchestrate");
+
+        assert_eq!(metrics.cyclomatic_complexity, 5);
+        assert_eq!(metrics.cognitive_complexity, 10);
     }
 }
