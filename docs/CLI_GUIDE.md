@@ -71,8 +71,14 @@ Extract code symbols from one repo or from a workspace root and write them into 
 **Flags:**
 - `--deep`: Scan the entire git repository for cross-file references.
 - `--dry-run`: Show what would be written without modifying the workspace.
+- `--changed-since <ref>`: Only analyze files changed relative to a git ref.
+- `--download <langs>`: Download missing tree-sitter parsers before scanning, for example `--download rust,python`.
+- `--lsp`: Ask available language servers for definition lookups to improve cross-file call resolution.
+- `--view <mode>`: Choose `structural`, `business`, or `data-flow` output.
+- `--noise-threshold <score>`: Hide low-salience nodes in semantic views.
+- `--include-low-signal`: Disable pruning in business view and keep low-salience nodes.
 
-`analyze` uses the workspace `repositories` registry to discover which repositories belong to the product. When run against the workspace root, it can scan and label each configured repository explicitly.
+`analyze` currently plans a scan around the requested path and can expand that scope to the enclosing git root with `--deep`. Business and data-flow views use the semantic projection pipeline, so they intentionally hide low-signal symbols unless you lower the threshold or opt into `--include-low-signal`.
 
 #### `tld check [flags]`
 Validate the workspace YAML and verify linked code symbols in the active repository.
