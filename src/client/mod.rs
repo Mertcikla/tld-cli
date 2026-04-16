@@ -29,7 +29,11 @@ pub fn normalize_url(server_url: &str) -> String {
 
 /// Build a gRPC channel to the given base URL.
 pub async fn connect_channel(server_url: &str) -> Result<Channel, TldError> {
-    let endpoint = format!("https://{}", server_url.trim_start_matches("https://"));
+    let endpoint = if server_url.starts_with("http://") || server_url.starts_with("https://") {
+        server_url.to_string()
+    } else {
+        format!("https://{server_url}")
+    };
     let channel = Channel::from_shared(endpoint)
         .map_err(|e| TldError::Generic(e.to_string()))?
         .connect()
@@ -84,4 +88,24 @@ pub async fn new_org_client(
     let interceptor = AuthInterceptor { token };
     let client = OrgServiceClient::with_interceptor(channel, interceptor);
     Ok(client)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_url;
+
+    #[test]
+    fn normalize_url_preserves_explicit_http_scheme() {
+        assert_eq!(normalize_url("http://localhost:808"), "http://localhost:808/api");
+    }
+
+    #[test]
+    fn normalize_url_preserves_explicit_https_scheme() {
+        assert_eq!(normalize_url("https://example.com"), "https://example.com/api");
+    }
+
+    #[test]
+    fn normalize_url_adds_api_to_scheme_less_urls() {
+        assert_eq!(normalize_url("example.com"), "example.com/api");
+    }
 }
