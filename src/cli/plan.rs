@@ -23,10 +23,18 @@ pub struct PlanArgs {
 pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
 
+    // Check for server URL
+    if ws.config.server_url.is_empty() {
+        return Err(TldError::Generic(
+            "No server URL configured. Run 'tld login' first, or set TLD_SERVER_URL environment variable.".to_string(),
+        ));
+    }
+
     // Check for API key
     if ws.config.api_key.is_empty() {
         return Err(TldError::Generic(
-            "No API key found. Run 'tld login' first.".to_string(),
+            "No API key found. Run 'tld login' first, or set TLD_API_KEY environment variable."
+                .to_string(),
         ));
     }
 

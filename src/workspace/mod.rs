@@ -45,13 +45,36 @@ pub fn config_path() -> Result<PathBuf, TldError> {
 
 /// Loads the global user config. Returns a default `Config` if the file
 /// does not exist yet (e.g. before first `tld login`).
+/// Falls back to TLD_SERVER_URL and TLD_API_KEY environment variables.
 pub fn load_config() -> Result<Config, TldError> {
     let path = config_path()?;
-    if !path.exists() {
-        return Ok(Config::default());
+    let mut cfg = if path.exists() {
+        let data = fs::read_to_string(&path)?;
+        serde_yaml::from_str::<Config>(&data).map_err(|e| TldError::Yaml(e.to_string()))?
+    } else {
+        Config::default()
+    };
+
+    // Apply environment variable overrides
+    if cfg.server_url.is_empty()
+        && let Some(server_url) = std::env::var_os("TLD_SERVER_URL")
+        && let Some(s) = server_url.to_str()
+    {
+        cfg.server_url = s.to_string();
     }
-    let data = fs::read_to_string(&path)?;
-    let cfg: Config = serde_yaml::from_str(&data).map_err(|e| TldError::Yaml(e.to_string()))?;
+    if cfg.api_key.is_empty()
+        && let Some(api_key) = std::env::var_os("TLD_API_KEY")
+        && let Some(k) = api_key.to_str()
+    {
+        cfg.api_key = k.to_string();
+    }
+    if cfg.org_id.is_empty()
+        && let Some(org_id) = std::env::var_os("TLD_ORG_ID")
+        && let Some(o) = org_id.to_str()
+    {
+        cfg.org_id = o.to_string();
+    }
+
     Ok(cfg)
 }
 
