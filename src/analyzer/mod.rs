@@ -160,7 +160,10 @@ impl TreeSitterService {
         Ok(syntax::from_analysis_result(&result, repo_name))
     }
 
-    #[expect(dead_code, reason = "Used by tests while syntax-first path migration is in progress")]
+    #[expect(
+        dead_code,
+        reason = "Used by tests while syntax-first path migration is in progress"
+    )]
     pub fn extract_path_syntax(
         &self,
         path: &str,

@@ -22,6 +22,9 @@ pub struct AddArgs {
     /// Parent element ref to nest this element under
     #[arg(long)]
     pub parent: Option<String>,
+    /// Tag to apply to this element (can be specified multiple times)
+    #[arg(long = "tag")]
+    pub tags: Vec<String>,
 }
 
 #[expect(clippy::needless_pass_by_value)]
@@ -94,6 +97,14 @@ pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
         return Err(TldError::Generic(
             "Element name cannot be empty".to_string(),
         ));
+    }
+
+    // Apply tags (upsert: add if not already present)
+    for tag in &args.tags {
+        let tag = tag.trim().to_string();
+        if !tag.is_empty() && !element.tags.contains(&tag) {
+            element.tags.push(tag);
+        }
     }
 
     ws.upsert_element(ref_name.clone(), element);

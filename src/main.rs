@@ -80,6 +80,10 @@ async fn main() -> Result<(), TldError> {
             let wdir = cli.workspace_dir();
             cli::analyze::exec(args.clone(), wdir).await?;
         }
+        Commands::Tag(ref args) => {
+            let wdir = cli.workspace_dir();
+            cli::tag::exec(args.clone(), wdir).await?;
+        }
         Commands::Version => {
             println!("tld {}", env!("CARGO_PKG_VERSION"));
         }

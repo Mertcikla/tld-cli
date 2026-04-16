@@ -34,6 +34,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             file_path: some_if_not_empty(&element.file_path),
             view_label: some_if_not_empty(&element.view_label),
             has_view: element.has_view,
+            tags: element.tags.clone(),
             ..Default::default()
         };
 

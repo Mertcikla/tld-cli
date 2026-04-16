@@ -63,6 +63,7 @@ pub fn from_export_response(
                 language: e.language.unwrap_or_default(),
                 file_path: e.file_path.unwrap_or_default(),
                 symbol: String::new(), // Protobuf Element doesn't have symbol yet?
+                tags: e.tags,
                 has_view: e.has_view,
                 view_label: e.view_label.unwrap_or_default(),
                 placements: Vec::new(),

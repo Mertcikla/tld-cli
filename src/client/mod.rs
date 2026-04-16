@@ -13,7 +13,8 @@ use tonic::{
 };
 
 use diagv1::{
-    device_service_client::DeviceServiceClient, workspace_service_client::WorkspaceServiceClient,
+    device_service_client::DeviceServiceClient, org_service_client::OrgServiceClient,
+    workspace_service_client::WorkspaceServiceClient,
 };
 
 /// Normalises a server URL to include the `/api` suffix.
@@ -68,5 +69,19 @@ pub async fn new_workspace_client(
 pub async fn new_device_client(server_url: &str) -> Result<DeviceServiceClient<Channel>, TldError> {
     let channel = connect_channel(&normalize_url(server_url)).await?;
     let client = DeviceServiceClient::new(channel);
+    Ok(client)
+}
+
+/// Creates an OrgServiceClient with bearer-token authentication.
+pub async fn new_org_client(
+    server_url: &str,
+    api_key: &str,
+) -> Result<OrgServiceClient<InterceptedService<Channel, AuthInterceptor>>, TldError> {
+    let channel = connect_channel(&normalize_url(server_url)).await?;
+    let token = MetadataValue::from_str(&format!("Bearer {api_key}"))
+        .map_err(|e| TldError::Generic(e.to_string()))?;
+
+    let interceptor = AuthInterceptor { token };
+    let client = OrgServiceClient::with_interceptor(channel, interceptor);
     Ok(client)
 }

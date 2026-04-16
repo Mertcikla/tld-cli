@@ -24,6 +24,15 @@ fn test_tld_add_help() {
 }
 
 #[test]
+fn test_tld_analyze_help_no_longer_exposes_lsp_flag() {
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("analyze").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("--lsp").not());
+}
+
+#[test]
 fn test_tld_analyze_idempotency_simple() {
     let dir = tempdir().unwrap();
     let wdir = dir.path().to_str().unwrap();

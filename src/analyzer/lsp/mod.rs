@@ -1,4 +1,5 @@
 pub mod session;
+use crate::output;
 use std::collections::HashMap;
 
 pub struct ServerCommand {
@@ -100,8 +101,8 @@ pub fn resolve_command(language: &str) -> Option<ResolvedCommand> {
 /// For each `Ref` with `kind == "call"` and no `target_path`, issue a
 /// `textDocument/definition` request to the appropriate language server.
 /// Resolved paths are cached by `(file, line, column)` to avoid duplicate
-/// requests for the same call site. Silently skips languages where no LSP
-/// server is found in PATH.
+/// requests for the same call site. Warns and continues when a language server
+/// cannot be found, started, or initialized.
 pub async fn resolve_calls_with_lsp(
     refs: &mut [crate::analyzer::types::Ref],
     root_dir: &str,
@@ -113,14 +114,23 @@ pub async fn resolve_calls_with_lsp(
 
     for lang in unique_langs {
         let Some(cmd) = resolve_command(lang) else {
+            output::print_warn(&format!(
+                "No LSP server found for '{lang}'; analysis accuracy may drop."
+            ));
             continue;
         };
 
         let Ok(session) = Session::start(&cmd.path, &cmd.args, root_dir) else {
+            output::print_warn(&format!(
+                "Could not start the '{lang}' LSP server; analysis accuracy may drop."
+            ));
             continue;
         };
 
         if session.initialize(root_uri.clone()).await.is_err() {
+            output::print_warn(&format!(
+                "Could not initialize the '{lang}' LSP server; analysis accuracy may drop."
+            ));
             continue;
         }
 

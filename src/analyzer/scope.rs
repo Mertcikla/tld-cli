@@ -61,12 +61,14 @@ pub fn plan(path: &str, options: &PlanOptions<'_>) -> Result<AnalyzeScope, TldEr
         .map_err(|e| TldError::Generic(format!("Cannot resolve path '{path}': {e}")))?;
     let abs_str = abs_path.to_str().unwrap_or(path).to_string();
 
-    let abs_workspace_dir = Path::new(options.workspace_dir).canonicalize().map_err(|e| {
-        TldError::Generic(format!(
-            "Cannot resolve workspace dir '{}': {e}",
-            options.workspace_dir
-        ))
-    })?;
+    let abs_workspace_dir = Path::new(options.workspace_dir)
+        .canonicalize()
+        .map_err(|e| {
+            TldError::Generic(format!(
+                "Cannot resolve workspace dir '{}': {e}",
+                options.workspace_dir
+            ))
+        })?;
     let workspace_root = abs_workspace_dir
         .to_str()
         .unwrap_or(options.workspace_dir)
@@ -106,9 +108,7 @@ fn should_use_workspace_repositories(
     workspace_root: &str,
     ws_config: Option<&WorkspaceConfig>,
 ) -> bool {
-    scan_path == workspace_root
-        && ws_config
-            .is_some_and(|cfg| !cfg.repositories.is_empty())
+    scan_path == workspace_root && ws_config.is_some_and(|cfg| !cfg.repositories.is_empty())
 }
 
 fn plan_workspace_repositories(

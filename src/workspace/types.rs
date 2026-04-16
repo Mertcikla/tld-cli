@@ -103,6 +103,8 @@ pub struct Element {
     /// Named code symbol within `file_path` (e.g. "MyFunc").
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub symbol: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub has_view: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]

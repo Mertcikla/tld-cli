@@ -9,7 +9,6 @@ use crate::workspace::workspace_builder::BuildContext;
 use clap::Args;
 use std::path::Path;
 
-#[expect(clippy::struct_excessive_bools)]
 #[derive(Args, Debug, Clone)]
 pub struct AnalyzeArgs {
     /// Path to analyze (file or directory)
@@ -31,10 +30,6 @@ pub struct AnalyzeArgs {
     /// Accepts a comma-separated list: --download rust,python
     #[arg(long = "download")]
     pub download: Option<String>,
-
-    /// Enable LSP for enhanced cross-file call resolution (requires language server in PATH)
-    #[arg(long, default_value = "false")]
-    pub lsp: bool,
 
     /// Diagram view to generate: structural | business | data-flow
     ///
@@ -257,41 +252,41 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         return Ok(());
     }
 
-    // ── Optional LSP enrichment ───────────────────────────────────────────────
-    if args.lsp {
-        let unique_langs: Vec<&str> = {
-            let mut seen = std::collections::HashSet::new();
-            result
-                .symbols
-                .iter()
-                .map(|s| s.technology.as_str())
-                .filter(|t| !t.is_empty() && seen.insert(*t))
-                .collect()
-        };
-        if !unique_langs.is_empty() {
-            let lsp_spinner = output::new_spinner("Running LSP definition lookup...");
-            match crate::analyzer::lsp::resolve_calls_with_lsp(
-                &mut result.refs,
-                &effective_scan_root,
-                &unique_langs,
-            )
-            .await
-            {
-                Ok(()) => {
-                    lsp_spinner.finish_and_clear();
-                    let resolved = result
-                        .refs
-                        .iter()
-                        .filter(|r| !r.target_path.is_empty())
-                        .count();
-                    output::print_info(&format!(
-                        "LSP enrichment complete ({resolved} calls resolved)."
-                    ));
-                }
-                Err(e) => {
-                    lsp_spinner.finish_and_clear();
-                    output::print_info(&format!("LSP enrichment skipped: {e}"));
-                }
+    // ── LSP enrichment ───────────────────────────────────────────────────────
+    let unique_langs: Vec<&str> = {
+        let mut seen = std::collections::HashSet::new();
+        result
+            .symbols
+            .iter()
+            .map(|s| s.technology.as_str())
+            .filter(|t| !t.is_empty() && seen.insert(*t))
+            .collect()
+    };
+    if !unique_langs.is_empty() {
+        let lsp_spinner = output::new_spinner("Running LSP definition lookup...");
+        match crate::analyzer::lsp::resolve_calls_with_lsp(
+            &mut result.refs,
+            &effective_scan_root,
+            &unique_langs,
+        )
+        .await
+        {
+            Ok(()) => {
+                lsp_spinner.finish_and_clear();
+                let resolved = result
+                    .refs
+                    .iter()
+                    .filter(|r| !r.target_path.is_empty())
+                    .count();
+                output::print_info(&format!(
+                    "LSP enrichment complete ({resolved} calls resolved)."
+                ));
+            }
+            Err(e) => {
+                lsp_spinner.finish_and_clear();
+                output::print_warn(&format!(
+                    "LSP enrichment unavailable ({e}); analysis accuracy may drop, but continuing."
+                ));
             }
         }
     }
@@ -339,11 +334,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             let syntax = semantic_syntax.ok_or_else(|| {
                 TldError::Generic("semantic views should build a syntax bundle".to_string())
             })?;
-            let (out, stats) = projection::business::project(
-                syntax,
-                &ctx,
-                noise_threshold,
-            );
+            let (out, stats) = projection::business::project(syntax, &ctx, noise_threshold);
             let msg = format!(
                 "{} elements written, {} connectors created, {} low-signal symbols hidden, {} unresolved refs, {} resolved call edges ({} via LSP) (business view).",
                 out.elements.len(),
@@ -359,11 +350,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             let syntax = semantic_syntax.ok_or_else(|| {
                 TldError::Generic("semantic views should build a syntax bundle".to_string())
             })?;
-            let (out, stats) = projection::data_flow::project(
-                syntax,
-                &ctx,
-                noise_threshold,
-            );
+            let (out, stats) = projection::data_flow::project(syntax, &ctx, noise_threshold);
             let msg = format!(
                 "{} elements written, {} connectors created, {} flows synthesized, {} low-signal symbols hidden, {} unresolved refs (data-flow view).",
                 out.elements.len(),

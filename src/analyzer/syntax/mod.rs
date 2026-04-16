@@ -232,7 +232,7 @@ fn extract_ts_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
 
     let Some(control) = TS_CONTROL_QUERY
         .get_or_init(|| {
-        let query_src = r"
+            let query_src = r"
 (if_statement) @branch
 (switch_statement) @branch
 (for_statement) @loop
@@ -310,7 +310,7 @@ fn extract_py_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
 
     let Some(control) = PY_CONTROL_QUERY
         .get_or_init(|| {
-        let query_src = r"
+            let query_src = r"
 (if_statement) @branch
 (for_statement) @loop
 (while_statement) @loop
@@ -385,7 +385,7 @@ fn extract_go_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
 
     let Some(control) = GO_CONTROL_QUERY
         .get_or_init(|| {
-        let query_src = r"
+            let query_src = r"
 (if_statement) @branch
 (for_statement) @loop
 (return_statement) @return
@@ -456,7 +456,7 @@ fn extract_java_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<Control
 
     let Some(control) = JAVA_CONTROL_QUERY
         .get_or_init(|| {
-        let query_src = r"
+            let query_src = r"
 (if_statement) @branch
 (for_statement) @loop
 (enhanced_for_statement) @loop

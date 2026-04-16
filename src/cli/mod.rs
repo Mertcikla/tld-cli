@@ -13,6 +13,7 @@ pub mod plan;
 pub mod pull;
 pub mod remove;
 pub mod status;
+pub mod tag;
 pub mod update;
 pub mod validate;
 pub mod version;
@@ -112,6 +113,9 @@ pub enum Commands {
 
     /// Check workspace for architectural issues
     Check(check::CheckArgs),
+
+    /// Manage tags (colors and descriptions) in the organization
+    Tag(tag::TagArgs),
 
     /// Print the version number of tld
     Version,
