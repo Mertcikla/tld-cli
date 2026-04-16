@@ -26,13 +26,13 @@ curl -LsSf https://tldiagram.com/install.sh | sh
 
 ### From Source
 
-To build and install tld from the source directory, ensure you have Go installed and run:
+To build and install tld from the source directory, ensure you have Rust installed and run:
 
 ```bash
-go install .
+cargo install --path .
 ```
 
-This will install the `tld` binary into your `$GOPATH/bin` directory.
+This will install the `tld` binary into your `$CARGO_HOME/bin` directory.
 
 ## Getting Started
 
@@ -92,11 +92,20 @@ A tld workspace consists of the following directory structure:
 ### Resource Creation
 
 - `tld add <name>`: Define a new element. Every created element owns a canonical diagram.
+  - `--tag <name>`: Apply a tag to the element (can be specified multiple times; idempotent).
+  - Example: `tld add "Web API" --kind service --tag backend --tag api`
 - `tld connect --from <source> --to <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
 - `tld remove element <ref>`: Remove an element from the workspace.
 - `tld remove connector --view <ref> --from <source_ref> --to <target_ref>`: Remove matching connector(s).
 - `tld update element <ref> <field> <value>`: Update an element field. Use `field=ref` to rename an element reference and cascade the change through placements and connector endpoints.
 - `tld update connector <ref> <field> <value>`: Update a connector field. Use `field=ref` to rename a connector key.
+
+### Tags
+
+- `tld tag create <name>`: Create or update a tag in the organization on the server.
+  - `--color <hex>`: Tag color as a hex string (default: `#888888`).
+  - `--description <text>`: Optional description for the tag.
+  - Example: `tld tag create backend --color "#4A90E2" --description "Backend services"`
 
 ## Conflict Resolution
 
