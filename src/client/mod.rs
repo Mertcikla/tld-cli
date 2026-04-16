@@ -96,12 +96,18 @@ mod tests {
 
     #[test]
     fn normalize_url_preserves_explicit_http_scheme() {
-        assert_eq!(normalize_url("http://localhost:808"), "http://localhost:808/api");
+        assert_eq!(
+            normalize_url("http://localhost:808"),
+            "http://localhost:808/api"
+        );
     }
 
     #[test]
     fn normalize_url_preserves_explicit_https_scheme() {
-        assert_eq!(normalize_url("https://example.com"), "https://example.com/api");
+        assert_eq!(
+            normalize_url("https://example.com"),
+            "https://example.com/api"
+        );
     }
 
     #[test]

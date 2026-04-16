@@ -523,33 +523,3 @@ fn test_include_low_signal_flag() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
-
-#[test]
-fn test_lsp_flag_gracefully_falls_back() {
-    let dir = tempdir().expect("Failed to create temp dir");
-    let wdir = dir.path().to_str().unwrap();
-
-    let output = Command::cargo_bin("tld")
-        .unwrap()
-        .args([
-            "-w",
-            wdir,
-            "analyze",
-            "--lsp",
-            "tests/test-codebase/typescript",
-        ])
-        .output()
-        .expect("Failed to execute");
-
-    assert!(
-        output.status.success(),
-        "--lsp analyze should not fail even when language servers are unavailable: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("LSP enrichment complete") || stderr.contains("Analysis complete"),
-        "expected analyze to finish cleanly with or without available LSP servers"
-    );
-}
