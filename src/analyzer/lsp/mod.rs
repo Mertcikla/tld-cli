@@ -49,6 +49,21 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         }],
     );
     m.insert(
+        "java".to_string(),
+        vec![
+            // Eclipse JDT LS (most common)
+            ServerCommand {
+                executable: "jdtls".to_string(),
+                args: vec![],
+            },
+            // Palantir's java-language-server
+            ServerCommand {
+                executable: "java-language-server".to_string(),
+                args: vec![],
+            },
+        ],
+    );
+    m.insert(
         "c".to_string(),
         vec![ServerCommand {
             executable: "clangd".to_string(),
@@ -81,9 +96,12 @@ pub fn resolve_command(language: &str) -> Option<ResolvedCommand> {
 }
 
 /// Optionally enrich call refs with LSP definition lookups.
+///
 /// For each `Ref` with `kind == "call"` and no `target_path`, issue a
 /// `textDocument/definition` request to the appropriate language server.
-/// Silently skips languages where no LSP server is found.
+/// Resolved paths are cached by `(file, line, column)` to avoid duplicate
+/// requests for the same call site. Silently skips languages where no LSP
+/// server is found in PATH.
 pub async fn resolve_calls_with_lsp(
     refs: &mut [crate::analyzer::types::Ref],
     root_dir: &str,
@@ -107,8 +125,13 @@ pub async fn resolve_calls_with_lsp(
             continue;
         }
 
-        // Small delay to let the LSP server initialize.
+        // Small delay to let the LSP server index the workspace.
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        // Cache resolved target paths by (file_path, line, column) so that
+        // duplicate call sites are looked up only once per session.
+        let mut cache: std::collections::HashMap<(String, i32, i32), String> =
+            std::collections::HashMap::new();
 
         for r in refs.iter_mut() {
             if r.kind != "call" || !r.target_path.is_empty() {
@@ -134,6 +157,12 @@ pub async fn resolve_calls_with_lsp(
                 continue;
             }
 
+            let cache_key = (r.file_path.clone(), r.line, r.column);
+            if let Some(cached) = cache.get(&cache_key) {
+                r.target_path.clone_from(cached);
+                continue;
+            }
+
             let file_uri = format!("file://{}", r.file_path);
             let request = json!({
                 "method": "textDocument/definition",
@@ -153,12 +182,15 @@ pub async fn resolve_calls_with_lsp(
                 };
 
                 if let Some(loc) = loc {
-                    if let Some(uri) = loc.get("uri").and_then(|u| u.as_str()) {
-                        let def_path = uri.trim_start_matches("file://");
-                        r.target_path = def_path.to_string();
-                    } else if let Some(target_uri) = loc.get("targetUri").and_then(|u| u.as_str()) {
-                        let def_path = target_uri.trim_start_matches("file://");
-                        r.target_path = def_path.to_string();
+                    let resolved = loc
+                        .get("uri")
+                        .or_else(|| loc.get("targetUri"))
+                        .and_then(|u| u.as_str())
+                        .map(|uri| uri.trim_start_matches("file://").to_string());
+
+                    if let Some(path) = resolved {
+                        cache.insert(cache_key, path.clone());
+                        r.target_path = path;
                     }
                 }
             }

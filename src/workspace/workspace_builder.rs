@@ -349,14 +349,33 @@ impl<'a> WorkspaceBuilder<'a> {
         symbols: &[AnalyzerSymbol],
     ) -> Option<Connector> {
         let containing = find_containing_symbol(symbols, &r.file_path, r.line)?;
-        let src_slug = slugify(&containing.name);
+        // Look up source slug by file + symbol name for higher accuracy.
+        let src_slug =
+            self.find_element_slug_for_symbol(&containing.name, &containing.file_path)?;
 
-        if !self.elements.contains_key(&src_slug) {
-            return None;
-        }
+        // Priority 1: LSP gave us a resolved target_path — find the target symbol there.
+        let tgt_slug = if r.target_path.is_empty() {
+            // Fallback: bare slug name match (original behaviour).
+            let slug = slugify(&r.name);
+            if self.elements.contains_key(&slug) {
+                Some(slug)
+            } else {
+                None
+            }
+        } else {
+            let tgt_rel = rel_from_base(&r.target_path, &self.scan_parent);
+            // Try to find a symbol element in the target file with the matching name.
+            self.elements
+                .iter()
+                .find(|(_, el)| {
+                    !el.symbol.is_empty() && el.symbol == r.name && el.file_path == tgt_rel
+                })
+                .map(|(k, _)| k.clone())
+                // If we couldn't find the exact symbol, see if the file itself is an element.
+                .or_else(|| self.file_slug_by_rel.get(&tgt_rel).cloned())
+        }?;
 
-        let tgt_slug = slugify(&r.name);
-        if !self.elements.contains_key(&tgt_slug) || tgt_slug == src_slug {
+        if tgt_slug == src_slug {
             return None;
         }
 
@@ -379,6 +398,31 @@ impl<'a> WorkspaceBuilder<'a> {
             direction: "forward".to_string(),
             ..Default::default()
         })
+    }
+
+    /// Find the element slug for a declaration by matching the `symbol` field and file path.
+    fn find_element_slug_for_symbol(&self, sym_name: &str, abs_file: &str) -> Option<String> {
+        let file_rel = rel_from_base(abs_file, &self.scan_parent);
+        // Look for an element whose `symbol` field matches and whose file matches.
+        let lsp_match = self
+            .elements
+            .iter()
+            .find(|(_, el)| {
+                !el.symbol.is_empty() && el.symbol == sym_name && el.file_path == file_rel
+            })
+            .map(|(k, _)| k.clone());
+
+        if lsp_match.is_some() {
+            return lsp_match;
+        }
+
+        // Fallback: slug-based match (original behaviour).
+        let slug = slugify(sym_name);
+        if self.elements.contains_key(&slug) {
+            Some(slug)
+        } else {
+            None
+        }
     }
 
     fn folder_parent_slug(&self, folder_path: &str) -> String {

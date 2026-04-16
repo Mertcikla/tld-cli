@@ -1,6 +1,10 @@
 pub mod ignore;
 pub mod lsp;
 pub mod parsers;
+pub mod projection;
+pub mod scope;
+pub mod semantic;
+pub mod syntax;
 pub mod types;
 
 use crate::error::TldError;
