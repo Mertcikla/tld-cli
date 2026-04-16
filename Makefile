@@ -8,6 +8,9 @@ dev:
 
 test:
 	cargo test
+	
+repo-test:
+	uv run scripts/test_bench.py
 
 fmt:
 	cargo fmt
