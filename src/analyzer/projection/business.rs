@@ -13,7 +13,7 @@ use crate::analyzer::semantic::{
     prune, resolver, roles, salience,
     types::{EdgeKind, SemanticBundle},
 };
-use crate::analyzer::syntax::{types::{DeclKind, SyntaxBundle}};
+use crate::analyzer::syntax::types::{DeclKind, SyntaxBundle};
 use crate::workspace::{
     slugify,
     types::{Connector, Element, ViewPlacement},
@@ -163,7 +163,10 @@ pub fn project(
         lsp_resolved_edges: bundle
             .edges
             .iter()
-            .filter(|e| matches!(e.kind, EdgeKind::Calls) && e.origin == crate::analyzer::semantic::types::EdgeOrigin::Lsp)
+            .filter(|e| {
+                matches!(e.kind, EdgeKind::Calls)
+                    && e.origin == crate::analyzer::semantic::types::EdgeOrigin::Lsp
+            })
             .count(),
     };
 

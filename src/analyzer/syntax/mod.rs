@@ -11,6 +11,7 @@ pub mod types;
 pub use types::*;
 
 use crate::analyzer::types::{AnalysisResult, Ref as AnalyzerRef, Symbol};
+use std::path::Path;
 use std::sync::OnceLock;
 use tree_sitter::{Query, QueryCursor, StreamingIterator};
 use ts_pack_core::get_language;
@@ -166,7 +167,7 @@ struct TsControlQuery {
     return_idx: u32,
 }
 
-static TS_CONTROL_QUERY: OnceLock<TsControlQuery> = OnceLock::new();
+static TS_CONTROL_QUERY: OnceLock<Option<TsControlQuery>> = OnceLock::new();
 
 struct PyControlQuery {
     query: Query,
@@ -176,7 +177,7 @@ struct PyControlQuery {
     return_idx: u32,
 }
 
-static PY_CONTROL_QUERY: OnceLock<PyControlQuery> = OnceLock::new();
+static PY_CONTROL_QUERY: OnceLock<Option<PyControlQuery>> = OnceLock::new();
 
 struct GoControlQuery {
     query: Query,
@@ -185,7 +186,7 @@ struct GoControlQuery {
     return_idx: u32,
 }
 
-static GO_CONTROL_QUERY: OnceLock<GoControlQuery> = OnceLock::new();
+static GO_CONTROL_QUERY: OnceLock<Option<GoControlQuery>> = OnceLock::new();
 
 struct JavaControlQuery {
     query: Query,
@@ -195,7 +196,7 @@ struct JavaControlQuery {
     return_idx: u32,
 }
 
-static JAVA_CONTROL_QUERY: OnceLock<JavaControlQuery> = OnceLock::new();
+static JAVA_CONTROL_QUERY: OnceLock<Option<JavaControlQuery>> = OnceLock::new();
 
 fn extract_control_regions(path: &str, language: &str, decls: &[SyntaxDecl]) -> Vec<ControlRegion> {
     match language {
@@ -212,7 +213,7 @@ fn extract_ts_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
         return Vec::new();
     };
 
-    let lang_key = if path.ends_with(".js") || path.ends_with(".jsx") {
+    let lang_key = if has_extension(path, "js") || has_extension(path, "jsx") {
         "javascript"
     } else {
         "typescript"
@@ -229,7 +230,8 @@ fn extract_ts_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
         return Vec::new();
     };
 
-    let control = TS_CONTROL_QUERY.get_or_init(|| {
+    let Some(control) = TS_CONTROL_QUERY
+        .get_or_init(|| {
         let query_src = r"
 (if_statement) @branch
 (switch_statement) @branch
@@ -240,15 +242,21 @@ fn extract_ts_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
 (try_statement) @try
 (return_statement) @return
 ";
-        let query = Query::new(&language, query_src).expect("Failed to compile TS control query");
-        TsControlQuery {
-            branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
-            loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
-            try_idx: query.capture_index_for_name("try").unwrap_or(u32::MAX),
-            return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
-            query,
-        }
-    });
+            let Ok(query) = Query::new(&language, query_src) else {
+                return None;
+            };
+            Some(TsControlQuery {
+                branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
+                loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
+                try_idx: query.capture_index_for_name("try").unwrap_or(u32::MAX),
+                return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
+                query,
+            })
+        })
+        .as_ref()
+    else {
+        return Vec::new();
+    };
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&control.query, tree.root_node(), source.as_bytes());
@@ -268,12 +276,13 @@ fn extract_ts_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
                 _ => continue,
             };
 
+            let Some(span) = span_from_node(&capture.node) else {
+                continue;
+            };
+
             blocks.push(ControlRegion {
                 kind,
-                span: LineSpan {
-                    start: (capture.node.start_position().row + 1) as u32,
-                    end: (capture.node.end_position().row + 1) as u32,
-                },
+                span,
                 owner_local_id: Some(owner_local_id),
             });
         }
@@ -299,7 +308,8 @@ fn extract_py_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
         return Vec::new();
     };
 
-    let control = PY_CONTROL_QUERY.get_or_init(|| {
+    let Some(control) = PY_CONTROL_QUERY
+        .get_or_init(|| {
         let query_src = r"
 (if_statement) @branch
 (for_statement) @loop
@@ -307,15 +317,21 @@ fn extract_py_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
 (try_statement) @try
 (return_statement) @return
 ";
-        let query = Query::new(&language, query_src).expect("Failed to compile Python control query");
-        PyControlQuery {
-            branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
-            loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
-            try_idx: query.capture_index_for_name("try").unwrap_or(u32::MAX),
-            return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
-            query,
-        }
-    });
+            let Ok(query) = Query::new(&language, query_src) else {
+                return None;
+            };
+            Some(PyControlQuery {
+                branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
+                loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
+                try_idx: query.capture_index_for_name("try").unwrap_or(u32::MAX),
+                return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
+                query,
+            })
+        })
+        .as_ref()
+    else {
+        return Vec::new();
+    };
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&control.query, tree.root_node(), source.as_bytes());
@@ -335,12 +351,13 @@ fn extract_py_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
                 _ => continue,
             };
 
+            let Some(span) = span_from_node(&capture.node) else {
+                continue;
+            };
+
             blocks.push(ControlRegion {
                 kind,
-                span: LineSpan {
-                    start: (capture.node.start_position().row + 1) as u32,
-                    end: (capture.node.end_position().row + 1) as u32,
-                },
+                span,
                 owner_local_id: Some(owner_local_id),
             });
         }
@@ -366,20 +383,27 @@ fn extract_go_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
         return Vec::new();
     };
 
-    let control = GO_CONTROL_QUERY.get_or_init(|| {
+    let Some(control) = GO_CONTROL_QUERY
+        .get_or_init(|| {
         let query_src = r"
 (if_statement) @branch
 (for_statement) @loop
 (return_statement) @return
 ";
-        let query = Query::new(&language, query_src).expect("Failed to compile Go control query");
-        GoControlQuery {
-            branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
-            loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
-            return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
-            query,
-        }
-    });
+            let Ok(query) = Query::new(&language, query_src) else {
+                return None;
+            };
+            Some(GoControlQuery {
+                branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
+                loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
+                return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
+                query,
+            })
+        })
+        .as_ref()
+    else {
+        return Vec::new();
+    };
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&control.query, tree.root_node(), source.as_bytes());
@@ -398,12 +422,13 @@ fn extract_go_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
                 _ => continue,
             };
 
+            let Some(span) = span_from_node(&capture.node) else {
+                continue;
+            };
+
             blocks.push(ControlRegion {
                 kind,
-                span: LineSpan {
-                    start: (capture.node.start_position().row + 1) as u32,
-                    end: (capture.node.end_position().row + 1) as u32,
-                },
+                span,
                 owner_local_id: Some(owner_local_id),
             });
         }
@@ -429,7 +454,8 @@ fn extract_java_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<Control
         return Vec::new();
     };
 
-    let control = JAVA_CONTROL_QUERY.get_or_init(|| {
+    let Some(control) = JAVA_CONTROL_QUERY
+        .get_or_init(|| {
         let query_src = r"
 (if_statement) @branch
 (for_statement) @loop
@@ -439,15 +465,21 @@ fn extract_java_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<Control
 (try_statement) @try
 (return_statement) @return
 ";
-        let query = Query::new(&language, query_src).expect("Failed to compile Java control query");
-        JavaControlQuery {
-            branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
-            loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
-            try_idx: query.capture_index_for_name("try").unwrap_or(u32::MAX),
-            return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
-            query,
-        }
-    });
+            let Ok(query) = Query::new(&language, query_src) else {
+                return None;
+            };
+            Some(JavaControlQuery {
+                branch_idx: query.capture_index_for_name("branch").unwrap_or(u32::MAX),
+                loop_idx: query.capture_index_for_name("loop").unwrap_or(u32::MAX),
+                try_idx: query.capture_index_for_name("try").unwrap_or(u32::MAX),
+                return_idx: query.capture_index_for_name("return").unwrap_or(u32::MAX),
+                query,
+            })
+        })
+        .as_ref()
+    else {
+        return Vec::new();
+    };
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&control.query, tree.root_node(), source.as_bytes());
@@ -467,12 +499,13 @@ fn extract_java_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<Control
                 _ => continue,
             };
 
+            let Some(span) = span_from_node(&capture.node) else {
+                continue;
+            };
+
             blocks.push(ControlRegion {
                 kind,
-                span: LineSpan {
-                    start: (capture.node.start_position().row + 1) as u32,
-                    end: (capture.node.end_position().row + 1) as u32,
-                },
+                span,
                 owner_local_id: Some(owner_local_id),
             });
         }
@@ -481,15 +514,33 @@ fn extract_java_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<Control
     blocks
 }
 
-fn owner_local_id_for_capture(
-    decls: &[SyntaxDecl],
-    node: &tree_sitter::Node,
-) -> Option<String> {
+fn owner_local_id_for_capture(decls: &[SyntaxDecl], node: &tree_sitter::Node) -> Option<String> {
+    let line = line_from_row(node.start_position().row)?;
+
     decls
         .iter()
-        .filter(|decl| decl.contains_line((node.start_position().row + 1) as u32))
+        .filter(|decl| decl.contains_line(line))
         .min_by_key(|decl| decl.body_lines())
         .map(|decl| decl.local_id.clone())
+}
+
+fn has_extension(path: &str, ext: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case(ext))
+}
+
+fn line_from_row(row: usize) -> Option<u32> {
+    let row = u32::try_from(row).ok()?;
+    row.checked_add(1)
+}
+
+fn span_from_node(node: &tree_sitter::Node) -> Option<LineSpan> {
+    Some(LineSpan {
+        start: line_from_row(node.start_position().row)?,
+        end: line_from_row(node.end_position().row)?,
+    })
 }
 
 #[cfg(test)]
@@ -499,10 +550,9 @@ mod tests {
 
     #[test]
     fn typescript_bridge_extracts_control_regions() {
-        let result = TreeSitterService::extract_file(
-            "tests/test-codebase/typescript/src/services/order.ts",
-        )
-        .expect("typescript fixture should parse");
+        let result =
+            TreeSitterService::extract_file("tests/test-codebase/typescript/src/services/order.ts")
+                .expect("typescript fixture should parse");
 
         let syntax = from_analysis_result(&result, "typescript");
         let file = syntax
@@ -518,19 +568,27 @@ mod tests {
             .expect("placeOrder decl should exist");
 
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Loop),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Loop),
             "typescript bridge should extract loops"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Branch),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Branch),
             "typescript bridge should extract branches"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::TryCatch),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::TryCatch),
             "typescript bridge should extract try/catch regions"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::EarlyReturn),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::EarlyReturn),
             "typescript bridge should extract return regions"
         );
         assert!(
@@ -560,19 +618,27 @@ mod tests {
             .expect("place_order decl should exist");
 
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Loop),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Loop),
             "python bridge should extract loops"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Branch),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Branch),
             "python bridge should extract branches"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::TryCatch),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::TryCatch),
             "python bridge should extract try/catch regions"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::EarlyReturn),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::EarlyReturn),
             "python bridge should extract return regions"
         );
         assert!(
@@ -604,15 +670,21 @@ mod tests {
             .expect("PlaceOrder decl should exist");
 
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Loop),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Loop),
             "go bridge should extract loops"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Branch),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Branch),
             "go bridge should extract branches"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::EarlyReturn),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::EarlyReturn),
             "go bridge should extract return regions"
         );
         assert!(
@@ -635,7 +707,8 @@ mod tests {
             .files
             .iter()
             .find(|file| {
-                file.path.ends_with("src/main/java/com/example/ecommerce/service/OrderService.java")
+                file.path
+                    .ends_with("src/main/java/com/example/ecommerce/service/OrderService.java")
             })
             .expect("OrderService.java syntax file should exist");
         let place_order_local_id = file
@@ -646,19 +719,27 @@ mod tests {
             .expect("placeOrder decl should exist");
 
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Loop),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Loop),
             "java bridge should extract loops"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::Branch),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::Branch),
             "java bridge should extract branches"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::TryCatch),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::TryCatch),
             "java bridge should extract try/catch regions"
         );
         assert!(
-            file.blocks.iter().any(|block| block.kind == ControlKind::EarlyReturn),
+            file.blocks
+                .iter()
+                .any(|block| block.kind == ControlKind::EarlyReturn),
             "java bridge should extract return regions"
         );
         assert!(

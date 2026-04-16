@@ -201,10 +201,34 @@ mod tests {
     fn salience_rewards_complex_orchestration_more_than_trivial_wrapper() {
         let bundle = SemanticBundle {
             symbols: vec![
-                make_symbol("repo:src/file.ts:orchestrate", "orchestrate", DeclKind::Function, 1, 48),
-                make_symbol("repo:src/file.ts:step1", "step1", DeclKind::Function, 50, 52),
-                make_symbol("repo:src/file.ts:step2", "step2", DeclKind::Function, 54, 56),
-                make_symbol("repo:src/file.ts:wrapper", "wrapper", DeclKind::Function, 60, 63),
+                make_symbol(
+                    "repo:src/file.ts:orchestrate",
+                    "orchestrate",
+                    DeclKind::Function,
+                    1,
+                    48,
+                ),
+                make_symbol(
+                    "repo:src/file.ts:step1",
+                    "step1",
+                    DeclKind::Function,
+                    50,
+                    52,
+                ),
+                make_symbol(
+                    "repo:src/file.ts:step2",
+                    "step2",
+                    DeclKind::Function,
+                    54,
+                    56,
+                ),
+                make_symbol(
+                    "repo:src/file.ts:wrapper",
+                    "wrapper",
+                    DeclKind::Function,
+                    60,
+                    63,
+                ),
                 make_symbol("repo:src/file.ts:leaf", "leaf", DeclKind::Function, 65, 66),
             ],
             edges: vec![
@@ -241,6 +265,11 @@ mod tests {
         let scores = score_all(&graph, &roles);
 
         assert!(scores["repo:src/file.ts:orchestrate"] > scores["repo:src/file.ts:wrapper"]);
-        assert!(graph.metrics_for("repo:src/file.ts:orchestrate").cyclomatic_complexity >= 5);
+        assert!(
+            graph
+                .metrics_for("repo:src/file.ts:orchestrate")
+                .cyclomatic_complexity
+                >= 5
+        );
     }
 }

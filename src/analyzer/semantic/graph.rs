@@ -82,8 +82,7 @@ impl SemanticGraph {
             let has_lsp_edges = out_edges
                 .iter()
                 .any(|&i| bundle.edges[i].origin == EdgeOrigin::Lsp);
-            let (cyclomatic_complexity, cognitive_complexity) =
-                estimate_complexity(sym, fan_out);
+            let (cyclomatic_complexity, cognitive_complexity) = estimate_complexity(sym, fan_out);
 
             metrics.insert(
                 id.clone(),
@@ -166,22 +165,20 @@ fn estimate_complexity(sym: &SemanticSymbol, fan_out: usize) -> (u32, u32) {
         return (0, 0);
     }
 
-    let control_regions = sym.control.branch_regions
-        + sym.control.loop_regions
-        + sym.control.try_regions;
-    if control_regions > 0 || sym.control.early_return_regions > 0 {
-        let interaction_branches = fan_out.saturating_sub(1) as u32;
+    let control_regions = sym.control.branches + sym.control.loops + sym.control.tries;
+    if control_regions > 0 || sym.control.early_returns > 0 {
+        let interaction_branches = u32::try_from(fan_out.saturating_sub(1)).unwrap_or(u32::MAX);
         let cyclomatic_complexity = 1 + control_regions + interaction_branches;
         let cognitive_complexity = cyclomatic_complexity
-            + sym.control.branch_regions
-            + sym.control.loop_regions
-            + sym.control.early_return_regions;
+            + sym.control.branches
+            + sym.control.loops
+            + sym.control.early_returns;
         return (cyclomatic_complexity, cognitive_complexity);
     }
 
     let body_lines = sym.spans.body_end.saturating_sub(sym.spans.body_start);
     let structural_branches = body_lines / 12;
-    let interaction_branches = fan_out.saturating_sub(1) as u32;
+    let interaction_branches = u32::try_from(fan_out.saturating_sub(1)).unwrap_or(u32::MAX);
     let cyclomatic_complexity = 1 + structural_branches + interaction_branches;
     let cognitive_complexity = cyclomatic_complexity + (body_lines / 20);
 
@@ -221,10 +218,34 @@ mod tests {
     fn graph_metrics_estimate_complexity_for_behavioral_symbols() {
         let bundle = SemanticBundle {
             symbols: vec![
-                make_symbol("repo:src/file.ts:orchestrate", "orchestrate", DeclKind::Function, 1, 48),
-                make_symbol("repo:src/file.ts:step1", "step1", DeclKind::Function, 50, 52),
-                make_symbol("repo:src/file.ts:step2", "step2", DeclKind::Function, 54, 56),
-                make_symbol("repo:src/file.ts:OrderService", "OrderService", DeclKind::Class, 60, 120),
+                make_symbol(
+                    "repo:src/file.ts:orchestrate",
+                    "orchestrate",
+                    DeclKind::Function,
+                    1,
+                    48,
+                ),
+                make_symbol(
+                    "repo:src/file.ts:step1",
+                    "step1",
+                    DeclKind::Function,
+                    50,
+                    52,
+                ),
+                make_symbol(
+                    "repo:src/file.ts:step2",
+                    "step2",
+                    DeclKind::Function,
+                    54,
+                    56,
+                ),
+                make_symbol(
+                    "repo:src/file.ts:OrderService",
+                    "OrderService",
+                    DeclKind::Class,
+                    60,
+                    120,
+                ),
             ],
             edges: vec![
                 SemanticEdge {
@@ -276,10 +297,10 @@ mod tests {
                     sig_line: 1,
                 },
                 control: ControlMetrics {
-                    branch_regions: 2,
-                    loop_regions: 1,
-                    try_regions: 1,
-                    early_return_regions: 2,
+                    branches: 2,
+                    loops: 1,
+                    tries: 1,
+                    early_returns: 2,
                 },
             }],
             edges: vec![],

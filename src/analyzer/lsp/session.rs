@@ -1,6 +1,6 @@
 #![expect(clippy::expect_used)]
 use crate::error::TldError;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -85,7 +85,10 @@ impl Session {
             }
         });
 
-        Ok(Session { _child: child, message_tx })
+        Ok(Session {
+            _child: child,
+            message_tx,
+        })
     }
 
     pub async fn initialize(&self, root_uri: String) -> Result<(), TldError> {

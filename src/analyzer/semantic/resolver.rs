@@ -5,8 +5,8 @@
 //! and falls back to bare-name matching. Unresolved refs are kept explicitly.
 
 use super::types::{
-    ControlMetrics, EdgeKind, EdgeOrigin, EdgeTarget, SemanticBundle, SemanticEdge,
-    SemanticSymbol, SymbolId, SymbolSpans, UnresolvedRef, Visibility,
+    ControlMetrics, EdgeKind, EdgeOrigin, EdgeTarget, SemanticBundle, SemanticEdge, SemanticSymbol,
+    SymbolId, SymbolSpans, UnresolvedRef, Visibility,
 };
 use crate::analyzer::syntax::{
     self,
@@ -43,10 +43,10 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
                 .entry((file_rel.clone(), owner_local_id.clone()))
                 .or_default();
             match block.kind {
-                ControlKind::Branch => metrics.branch_regions += 1,
-                ControlKind::Loop => metrics.loop_regions += 1,
-                ControlKind::TryCatch => metrics.try_regions += 1,
-                ControlKind::EarlyReturn => metrics.early_return_regions += 1,
+                ControlKind::Branch => metrics.branches += 1,
+                ControlKind::Loop => metrics.loops += 1,
+                ControlKind::TryCatch => metrics.tries += 1,
+                ControlKind::EarlyReturn => metrics.early_returns += 1,
             }
         }
     }
@@ -56,7 +56,9 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
         .iter()
         .flat_map(|file| {
             let file_rel = rel_from_base(&file.path, scan_parent);
-            file.decls.iter().map(move |decl| (file, file_rel.clone(), decl))
+            file.decls
+                .iter()
+                .map(move |decl| (file, file_rel.clone(), decl))
         })
         .map(|(file, file_rel, decl)| {
             let sym_id = make_symbol_id_from_decl(&file.repo_name, &file_rel, decl, &file.decls);
@@ -148,11 +150,15 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
         .enumerate()
     {
         let src_rel = rel_from_base(&file.path, scan_parent);
-        let source_id = r.owner_local_id.as_ref().and_then(|owner_local_id| {
-            local_id_to_symbol_id
-                .get(&(src_rel.clone(), owner_local_id.clone()))
-                .cloned()
-        }).or_else(|| find_containing_symbol_id(&sym_by_file_rel, &src_rel, r.span.start_line));
+        let source_id = r
+            .owner_local_id
+            .as_ref()
+            .and_then(|owner_local_id| {
+                local_id_to_symbol_id
+                    .get(&(src_rel.clone(), owner_local_id.clone()))
+                    .cloned()
+            })
+            .or_else(|| find_containing_symbol_id(&sym_by_file_rel, &src_rel, r.span.start_line));
         let Some(source_id) = source_id else { continue };
 
         let edge_kind = match r.kind {
@@ -265,11 +271,12 @@ fn make_symbol_id_from_decl(
     decl: &SyntaxDecl,
     decls: &[SyntaxDecl],
 ) -> SymbolId {
-    if let Some(parent_local_id) = &decl.parent_local_id {
-        if let Some(parent_decl) = decls.iter().find(|candidate| &candidate.local_id == parent_local_id)
-        {
-            return format!("{repo_name}:{file_rel}:{}::{}", parent_decl.name, decl.name);
-        }
+    if let Some(parent_local_id) = &decl.parent_local_id
+        && let Some(parent_decl) = decls
+            .iter()
+            .find(|candidate| &candidate.local_id == parent_local_id)
+    {
+        return format!("{repo_name}:{file_rel}:{}::{}", parent_decl.name, decl.name);
     }
     format!("{repo_name}:{file_rel}:{}", decl.name)
 }
@@ -413,8 +420,8 @@ mod tests {
             place_order.owner.as_deref(),
             Some("repo:src/order.ts:OrderService")
         );
-        assert_eq!(place_order.control.loop_regions, 1);
-        assert_eq!(place_order.control.branch_regions, 1);
+        assert_eq!(place_order.control.loops, 1);
+        assert_eq!(place_order.control.branches, 1);
         assert!(semantic.unresolved_refs.is_empty());
         assert!(semantic.edges.iter().any(|edge| {
             edge.source == place_order.symbol_id

@@ -11,6 +11,15 @@
 use crate::{error::TldError, workspace::types::WorkspaceConfig};
 use std::path::Path;
 
+pub struct PlanOptions<'a> {
+    pub workspace_dir: &'a str,
+    pub ws_config: Option<&'a WorkspaceConfig>,
+    pub repo_name: &'a str,
+    pub deep: bool,
+    pub changed_since: Option<&'a str>,
+    pub exclude: &'a [String],
+}
+
 /// The full scope of what will be analyzed.
 pub struct AnalyzeScope {
     /// The effective root directory of analysis (may be git root when --deep is used).
@@ -46,49 +55,49 @@ pub struct FileScope {
 ///
 /// When `deep` is `true`, the effective scan root is expanded to the git repository root so
 /// that cross-file call resolution can follow edges beyond the user-specified path.
-pub fn plan(
-    path: &str,
-    workspace_dir: &str,
-    ws_config: Option<&WorkspaceConfig>,
-    repo_name: &str,
-    deep: bool,
-    changed_since: Option<&str>,
-    exclude: &[String],
-) -> Result<AnalyzeScope, TldError> {
+pub fn plan(path: &str, options: &PlanOptions<'_>) -> Result<AnalyzeScope, TldError> {
     let abs_path = Path::new(path)
         .canonicalize()
         .map_err(|e| TldError::Generic(format!("Cannot resolve path '{path}': {e}")))?;
     let abs_str = abs_path.to_str().unwrap_or(path).to_string();
 
-    let abs_workspace_dir = Path::new(workspace_dir)
-        .canonicalize()
-        .map_err(|e| TldError::Generic(format!("Cannot resolve workspace dir '{workspace_dir}': {e}")))?;
-    let workspace_root = abs_workspace_dir.to_str().unwrap_or(workspace_dir).to_string();
+    let abs_workspace_dir = Path::new(options.workspace_dir).canonicalize().map_err(|e| {
+        TldError::Generic(format!(
+            "Cannot resolve workspace dir '{}': {e}",
+            options.workspace_dir
+        ))
+    })?;
+    let workspace_root = abs_workspace_dir
+        .to_str()
+        .unwrap_or(options.workspace_dir)
+        .to_string();
 
-    if should_use_workspace_repositories(&abs_str, &workspace_root, ws_config) {
+    if should_use_workspace_repositories(&abs_str, &workspace_root, options.ws_config)
+        && let Some(ws_config) = options.ws_config
+    {
         return plan_workspace_repositories(
             &workspace_root,
-            ws_config.expect("workspace repositories checked above"),
-            deep,
-            changed_since,
-            exclude,
+            ws_config,
+            options.deep,
+            options.changed_since,
+            options.exclude,
         );
     }
 
     let (repo_scope, files) = build_repository_scope(
-        repo_name.to_string(),
-        abs_str.clone(),
-        deep,
-        changed_since,
-        exclude.to_vec(),
+        options.repo_name.to_string(),
+        &abs_str,
+        options.deep,
+        options.changed_since,
+        options.exclude.to_vec(),
     )?;
 
     Ok(AnalyzeScope {
         root_dir: repo_scope.root_dir.clone(),
         repositories: vec![repo_scope],
         files,
-        deep,
-        changed_since: changed_since.map(ToString::to_string),
+        deep: options.deep,
+        changed_since: options.changed_since.map(ToString::to_string),
     })
 }
 
@@ -99,8 +108,7 @@ fn should_use_workspace_repositories(
 ) -> bool {
     scan_path == workspace_root
         && ws_config
-            .map(|cfg| !cfg.repositories.is_empty())
-            .unwrap_or(false)
+            .is_some_and(|cfg| !cfg.repositories.is_empty())
 }
 
 fn plan_workspace_repositories(
@@ -142,7 +150,7 @@ fn plan_workspace_repositories(
 
         let (repo_scope, repo_files) = build_repository_scope(
             name.clone(),
-            repo_abs.to_string_lossy().into_owned(),
+            repo_abs.to_string_lossy().as_ref(),
             deep,
             changed_since,
             repo_exclude,
@@ -162,15 +170,15 @@ fn plan_workspace_repositories(
 
 fn build_repository_scope(
     repo_name: String,
-    repo_path: String,
+    repo_path: &str,
     deep: bool,
     changed_since: Option<&str>,
     exclude: Vec<String>,
 ) -> Result<(RepositoryScope, Vec<FileScope>), TldError> {
     let effective_root = if deep {
-        detect_git_root(&repo_path).unwrap_or_else(|| repo_path.clone())
+        detect_git_root(repo_path).unwrap_or_else(|| repo_path.to_string())
     } else {
-        repo_path.clone()
+        repo_path.to_string()
     };
 
     let mut files = Vec::new();

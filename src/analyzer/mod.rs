@@ -7,13 +7,13 @@ pub mod semantic;
 pub mod syntax;
 pub mod types;
 
+use crate::analyzer::syntax::types::SyntaxBundle;
 use crate::error::TldError;
 pub use ignore::Rules;
 use std::fs;
 use std::path::Path;
 use ts_pack_core::{detect_language_from_path, get_language};
 pub use types::*;
-use crate::analyzer::syntax::types::SyntaxBundle;
 
 /// Callback invoked for each file or directory visited during analysis.
 /// Arguments: (path, is_dir).
@@ -160,7 +160,7 @@ impl TreeSitterService {
         Ok(syntax::from_analysis_result(&result, repo_name))
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Used by tests while syntax-first path migration is in progress")]
     pub fn extract_path_syntax(
         &self,
         path: &str,
@@ -208,7 +208,6 @@ impl Service for TreeSitterService {
             Ok(result)
         }
     }
-
 }
 
 impl TreeSitterService {
@@ -291,15 +290,13 @@ mod tests {
         let rules = Rules::new(Vec::new());
 
         let syntax = service
-            .extract_path_syntax(
-                "tests/test-codebase/typescript",
-                &rules,
-                "typescript",
-                None,
-            )
+            .extract_path_syntax("tests/test-codebase/typescript", &rules, "typescript", None)
             .expect("syntax extraction should succeed");
 
-        assert!(!syntax.files.is_empty(), "syntax bundle should contain files");
+        assert!(
+            !syntax.files.is_empty(),
+            "syntax bundle should contain files"
+        );
         assert!(
             syntax.files.iter().any(|file| !file.decls.is_empty()),
             "syntax bundle should contain declarations"

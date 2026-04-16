@@ -75,10 +75,10 @@ pub struct SymbolSpans {
 /// Per-symbol control-flow counts derived from syntax blocks.
 #[derive(Debug, Clone, Default)]
 pub struct ControlMetrics {
-    pub branch_regions: u32,
-    pub loop_regions: u32,
-    pub try_regions: u32,
-    pub early_return_regions: u32,
+    pub branches: u32,
+    pub loops: u32,
+    pub tries: u32,
+    pub early_returns: u32,
 }
 
 /// A fully-resolved semantic symbol.

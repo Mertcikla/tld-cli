@@ -263,10 +263,7 @@ repositories:
     );
 
     let mut cmd = Command::cargo_bin("tld").unwrap();
-    cmd.arg("-w")
-        .arg(wdir)
-        .arg("analyze")
-        .arg(wdir);
+    cmd.arg("-w").arg(wdir).arg("analyze").arg(wdir);
 
     cmd.assert()
         .success()

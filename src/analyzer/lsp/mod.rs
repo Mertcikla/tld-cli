@@ -171,14 +171,14 @@ pub async fn resolve_calls_with_lsp(
                 let _ = session.document_symbols(&file_uri).await;
             }
 
-            let response = match session.definition(&file_uri, r.line, r.column).await {
-                Ok(resp) => Some(resp),
-                Err(_) => None,
-            };
+            let response = session.definition(&file_uri, r.line, r.column).await.ok();
             let response = if response.is_some() {
                 response
             } else {
-                session.implementation(&file_uri, r.line, r.column).await.ok()
+                session
+                    .implementation(&file_uri, r.line, r.column)
+                    .await
+                    .ok()
             };
 
             if let Some(path) = response.and_then(|resp| extract_location_path(&resp)) {
@@ -188,7 +188,7 @@ pub async fn resolve_calls_with_lsp(
         }
 
         for file_path in opened_files {
-            let file_uri = format!("file://{}", file_path);
+            let file_uri = format!("file://{file_path}");
             let _ = session.did_close(&file_uri).await;
         }
 

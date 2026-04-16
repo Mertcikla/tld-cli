@@ -119,12 +119,14 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     // ── Build scan plan (scope) ───────────────────────────────────────────────
     let scan_scope = scope::plan(
         abs_scan_path.to_str().unwrap_or(""),
-        &ws.dir,
-        ws.ws_config.as_ref(),
-        &derive_repo_name(&ws, &abs_scan_path),
-        args.deep,
-        args.changed_since.as_deref(),
-        &exclude,
+        &scope::PlanOptions {
+            workspace_dir: &ws.dir,
+            ws_config: ws.ws_config.as_ref(),
+            repo_name: &derive_repo_name(&ws, &abs_scan_path),
+            deep: args.deep,
+            changed_since: args.changed_since.as_deref(),
+            exclude: &exclude,
+        },
     )?;
 
     output::print_info(&format!(
@@ -296,9 +298,10 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     let syntax_bundle = match view_mode {
         ViewMode::Structural => None,
-        ViewMode::Business | ViewMode::DataFlow => {
-            Some(syntax::from_analysis_result(&result, &repo_name_hint(&ws, &abs_scan_path)))
-        }
+        ViewMode::Business | ViewMode::DataFlow => Some(syntax::from_analysis_result(
+            &result,
+            &repo_name_hint(&ws, &abs_scan_path),
+        )),
     };
 
     // ── Build workspace output via the chosen projection ──────────────────────
@@ -320,6 +323,8 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         args.noise_threshold
     };
 
+    let semantic_syntax = syntax_bundle.as_ref();
+
     let (build_output, stats_msg) = match view_mode {
         ViewMode::Structural => {
             let out = projection::structural::project(&result, &ctx);
@@ -331,10 +336,11 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             (out, msg)
         }
         ViewMode::Business => {
+            let syntax = semantic_syntax.ok_or_else(|| {
+                TldError::Generic("semantic views should build a syntax bundle".to_string())
+            })?;
             let (out, stats) = projection::business::project(
-                syntax_bundle
-                    .as_ref()
-                    .expect("semantic views should build a syntax bundle"),
+                syntax,
                 &ctx,
                 noise_threshold,
             );
@@ -350,10 +356,11 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             (out, msg)
         }
         ViewMode::DataFlow => {
+            let syntax = semantic_syntax.ok_or_else(|| {
+                TldError::Generic("semantic views should build a syntax bundle".to_string())
+            })?;
             let (out, stats) = projection::data_flow::project(
-                syntax_bundle
-                    .as_ref()
-                    .expect("semantic views should build a syntax bundle"),
+                syntax,
                 &ctx,
                 noise_threshold,
             );
