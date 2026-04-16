@@ -13,6 +13,8 @@ pub struct BuildContext {
     pub branch: String,
     /// Owner — same as repo_name for local workspaces.
     pub owner: String,
+    /// Remote URL for the analyzed git repository, when available.
+    pub repo_url: Option<String>,
     /// Absolute path of the directory that was analyzed.
     pub scan_root: String,
 }
@@ -45,10 +47,9 @@ struct WorkspaceBuilder<'a> {
 
 impl<'a> WorkspaceBuilder<'a> {
     fn new(result: &'a AnalysisResult, ctx: &'a BuildContext) -> Self {
-        let scan_parent = Path::new(&ctx.scan_root)
-            .parent()
-            .map_or("", |p| p.to_str().unwrap_or(""))
-            .to_string();
+        // Keep paths relative to the analyzed root itself to avoid creating a
+        // synthetic top-level folder that can collide with the repository slug.
+        let scan_parent = ctx.scan_root.clone();
 
         Self {
             result,
@@ -125,6 +126,7 @@ impl<'a> WorkspaceBuilder<'a> {
                 name: self.ctx.repo_name.clone(),
                 kind: "repository".to_string(),
                 technology: "Git Repository".to_string(),
+                repo: self.ctx.repo_url.clone().unwrap_or_default(),
                 owner: self.ctx.owner.clone(),
                 branch: self.ctx.branch.clone(),
                 has_view: true,

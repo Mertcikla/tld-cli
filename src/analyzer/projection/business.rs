@@ -66,6 +66,7 @@ pub fn project(
             name: ctx.repo_name.clone(),
             kind: "repository".to_string(),
             technology: "Git Repository".to_string(),
+            repo: ctx.repo_url.clone().unwrap_or_default(),
             owner: ctx.owner.clone(),
             branch: ctx.branch.clone(),
             has_view: true,

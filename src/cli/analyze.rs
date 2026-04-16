@@ -7,7 +7,7 @@ use crate::output;
 use crate::workspace;
 use crate::workspace::workspace_builder::BuildContext;
 use clap::Args;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Args, Debug, Clone)]
 pub struct AnalyzeArgs {
@@ -112,12 +112,14 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     }
 
     // ── Build scan plan (scope) ───────────────────────────────────────────────
+    let initial_repo_name = derive_repo_identity(&ws, &abs_scan_path, None).name;
+
     let scan_scope = scope::plan(
         abs_scan_path.to_str().unwrap_or(""),
         &scope::PlanOptions {
             workspace_dir: &ws.dir,
             ws_config: ws.ws_config.as_ref(),
-            repo_name: &derive_repo_name(&ws, &abs_scan_path),
+            repo_name: &initial_repo_name,
             deep: args.deep,
             changed_since: args.changed_since.as_deref(),
             exclude: &exclude,
@@ -296,20 +298,21 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         ViewMode::Structural => None,
         ViewMode::Business | ViewMode::DataFlow => Some(syntax::from_analysis_result(
             &result,
-            &repo_name_hint(&ws, &abs_scan_path),
+            &repo_name_hint(&ws, &abs_scan_path, Some(&effective_scan_root)),
         )),
     };
 
     // ── Build workspace output via the chosen projection ──────────────────────
     let scan_root = effective_scan_root.clone();
-    let repo_name = derive_repo_name(&ws, &abs_scan_path);
+    let repo_identity = derive_repo_identity(&ws, &abs_scan_path, Some(&effective_scan_root));
     let branch =
         detect_git_branch(Path::new(&effective_scan_root)).unwrap_or_else(|| "main".to_string());
 
     let ctx = BuildContext {
-        repo_name: repo_name.clone(),
+        repo_name: repo_identity.name,
         branch,
-        owner: repo_name.clone(),
+        owner: repo_identity.owner,
+        repo_url: repo_identity.remote_url,
         scan_root,
     };
 
@@ -379,28 +382,105 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     Ok(())
 }
 
-fn repo_name_hint(ws: &workspace::Workspace, scan_path: &Path) -> String {
-    derive_repo_name(ws, scan_path)
+fn repo_name_hint(ws: &workspace::Workspace, scan_path: &Path, effective_root: Option<&str>) -> String {
+    derive_repo_identity(ws, scan_path, effective_root).name
 }
 
-fn derive_repo_name(ws: &workspace::Workspace, scan_path: &Path) -> String {
-    ws.ws_config
+#[derive(Debug, Clone)]
+struct RepoIdentity {
+    name: String,
+    owner: String,
+    remote_url: Option<String>,
+}
+
+fn derive_repo_identity(
+    ws: &workspace::Workspace,
+    scan_path: &Path,
+    effective_root: Option<&str>,
+) -> RepoIdentity {
+    let configured_name = ws
+        .ws_config
         .as_ref()
-        .map(|c| c.project_name.clone())
-        .filter(|s: &String| !s.is_empty())
-        .unwrap_or_else(|| {
-            scan_path
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .unwrap_or_else(|| {
-                    scan_path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("codebase")
-                })
-                .to_string()
-        })
+        .map(|c| c.project_name.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let git_root = find_git_root_from(scan_path).or_else(|| {
+        effective_root
+            .map(Path::new)
+            .and_then(find_git_root_from)
+    });
+
+    let fallback_name = if scan_path.is_dir() {
+        scan_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("codebase")
+            .to_string()
+    } else {
+        scan_path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .unwrap_or_else(|| {
+                scan_path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("codebase")
+            })
+            .to_string()
+    };
+
+    let git_root_name = git_root
+        .as_ref()
+        .and_then(|root| root.file_name())
+        .and_then(|s| s.to_str())
+        .map(ToString::to_string);
+
+    let name = configured_name
+        .or(git_root_name)
+        .unwrap_or(fallback_name);
+
+    let remote_url = git_root.as_ref().and_then(|root| detect_git_remote_url(root));
+
+    RepoIdentity {
+        owner: name.clone(),
+        name,
+        remote_url,
+    }
+}
+
+fn find_git_root_from(path: &Path) -> Option<PathBuf> {
+    let dir = if path.is_file() {
+        path.parent()?
+    } else {
+        path
+    };
+
+    let marker = dir.join(".git");
+    if marker.exists() {
+        Some(dir.to_path_buf())
+    } else {
+        None
+    }
+}
+
+fn detect_git_remote_url(path: &Path) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["config", "--get", "remote.origin.url"])
+        .current_dir(path)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let remote = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if remote.is_empty() {
+        None
+    } else {
+        Some(remote)
+    }
 }
 
 fn detect_git_branch(path: &Path) -> Option<String> {
@@ -416,4 +496,38 @@ fn detect_git_branch(path: &Path) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{derive_repo_identity, find_git_root_from};
+    use crate::workspace::types::Workspace;
+
+    #[test]
+    fn repo_identity_uses_directory_name_when_not_git() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let project_dir = dir.path().join("digitaltwin-poc");
+        std::fs::create_dir_all(&project_dir).expect("create project dir");
+
+        let ws = Workspace::default();
+        let identity = derive_repo_identity(&ws, &project_dir, None);
+
+        assert_eq!(identity.name, "digitaltwin-poc");
+        assert_eq!(identity.owner, "digitaltwin-poc");
+    }
+
+    #[test]
+    fn find_git_root_respects_nearest_git_marker() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let repo = dir.path().join("digitaltwin-poc");
+        let nested = repo.join("src/ui");
+        std::fs::create_dir_all(&nested).expect("create nested");
+        std::fs::create_dir_all(repo.join(".git")).expect("create git marker");
+
+        let detected_nested = find_git_root_from(&nested);
+        assert!(detected_nested.is_none());
+
+        let detected_repo = find_git_root_from(&repo).expect("git root should be found");
+        assert_eq!(detected_repo, repo);
+    }
 }
