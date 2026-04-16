@@ -323,9 +323,7 @@ impl<'a> WorkspaceBuilder<'a> {
                     format!("{file_stem_str}.{}", sym.name)
                 };
                 // Resolve any residual name collision with a numeric suffix.
-                let cname = if !self.used_names.contains_key(&base_cname) {
-                    base_cname
-                } else {
+                let cname = if self.used_names.contains_key(&base_cname) {
                     let mut n = 2;
                     loop {
                         let candidate = format!("{base_cname}-{n}");
@@ -334,6 +332,8 @@ impl<'a> WorkspaceBuilder<'a> {
                         }
                         n += 1;
                     }
+                } else {
+                    base_cname
                 };
 
                 let final_slug = if self.elements.contains_key(&compound_slug) {

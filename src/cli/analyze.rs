@@ -268,6 +268,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             &mut result.refs,
             &effective_scan_root,
             &unique_langs,
+            &lsp_spinner,
         )
         .await
         {

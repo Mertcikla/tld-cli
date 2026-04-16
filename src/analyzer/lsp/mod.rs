@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub struct ServerCommand {
     pub executable: String,
     pub args: Vec<String>,
+    pub install_cmd: String,
 }
 
 pub struct ResolvedCommand {
@@ -19,6 +20,7 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         vec![ServerCommand {
             executable: "gopls".to_string(),
             args: vec![],
+            install_cmd: "go install golang.org/x/tools/gopls@latest".to_string(),
         }],
     );
     m.insert(
@@ -26,6 +28,7 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         vec![ServerCommand {
             executable: "pyright-langserver".to_string(),
             args: vec!["--stdio".to_string()],
+            install_cmd: "npm install -g pyright".to_string(),
         }],
     );
     m.insert(
@@ -33,6 +36,7 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         vec![ServerCommand {
             executable: "rust-analyzer".to_string(),
             args: vec![],
+            install_cmd: "rustup component add rust-analyzer".to_string(),
         }],
     );
     m.insert(
@@ -40,6 +44,7 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         vec![ServerCommand {
             executable: "typescript-language-server".to_string(),
             args: vec!["--stdio".to_string()],
+            install_cmd: "npm install -g typescript typescript-language-server".to_string(),
         }],
     );
     m.insert(
@@ -47,6 +52,7 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         vec![ServerCommand {
             executable: "typescript-language-server".to_string(),
             args: vec!["--stdio".to_string()],
+            install_cmd: "npm install -g typescript typescript-language-server".to_string(),
         }],
     );
     m.insert(
@@ -56,11 +62,7 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
             ServerCommand {
                 executable: "jdtls".to_string(),
                 args: vec![],
-            },
-            // Palantir's java-language-server
-            ServerCommand {
-                executable: "java-language-server".to_string(),
-                args: vec![],
+                install_cmd: "brew install jdtls".to_string(),
             },
         ],
     );
@@ -69,6 +71,7 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         vec![ServerCommand {
             executable: "clangd".to_string(),
             args: vec![],
+            install_cmd: "brew install llvm".to_string(),
         }],
     );
     m.insert(
@@ -76,24 +79,33 @@ pub fn get_default_commands() -> HashMap<String, Vec<ServerCommand>> {
         vec![ServerCommand {
             executable: "clangd".to_string(),
             args: vec![],
+            install_cmd: "brew install llvm".to_string(),
         }],
     );
     m
 }
 
-pub fn resolve_command(language: &str) -> Option<ResolvedCommand> {
+pub fn resolve_command(language: &str) -> Result<ResolvedCommand, crate::error::TldError> {
     let defaults = get_default_commands();
-    let commands = defaults.get(language)?;
+    let commands = defaults.get(language).ok_or_else(|| {
+        crate::error::TldError::Generic(format!("No LSP configured for {language}"))
+    })?;
 
     for cmd in commands {
         if let Ok(path) = which::which(&cmd.executable) {
-            return Some(ResolvedCommand {
+            return Ok(ResolvedCommand {
                 path: path.to_string_lossy().to_string(),
                 args: cmd.args.clone(),
             });
         }
     }
-    None
+
+    let first = &commands[0];
+    Err(crate::error::TldError::LspInstallRequired {
+        lang: language.to_string(),
+        executable: first.executable.clone(),
+        install_cmd: first.install_cmd.clone(),
+    })
 }
 
 /// Optionally enrich call refs with LSP definition lookups.
@@ -107,30 +119,52 @@ pub async fn resolve_calls_with_lsp(
     refs: &mut [crate::analyzer::types::Ref],
     root_dir: &str,
     unique_langs: &[&str],
+    spinner: &indicatif::ProgressBar,
 ) -> Result<(), crate::error::TldError> {
     use crate::analyzer::lsp::session::Session;
+    use crate::error::TldError;
 
     let root_uri = format!("file://{}", root_dir.trim_end_matches('/'));
 
     for lang in unique_langs {
-        let Some(cmd) = resolve_command(lang) else {
-            output::print_warn(&format!(
-                "No LSP server found for '{lang}'; analysis accuracy may drop."
-            ));
-            continue;
+        let cmd = match resolve_command(lang) {
+            Ok(c) => c,
+            Err(TldError::LspInstallRequired {
+                lang: l,
+                executable,
+                install_cmd,
+            }) => {
+                match prompt_install(&l, &executable, &install_cmd, spinner)? {
+                    Some(c) => c,
+                    None => continue, // Continue without LSP
+                }
+            }
+            Err(e) => {
+                spinner.suspend(|| {
+                    output::print_warn(&format!(
+                        "No LSP server found for '{lang}' ({e}); analysis accuracy may drop."
+                    ));
+                });
+                continue;
+            }
         };
 
-        let Ok(session) = Session::start(&cmd.path, &cmd.args, root_dir) else {
-            output::print_warn(&format!(
-                "Could not start the '{lang}' LSP server; analysis accuracy may drop."
-            ));
+        let session_res = Session::start(&cmd.path, &cmd.args, root_dir);
+        let Ok(session) = session_res else {
+            spinner.suspend(|| {
+                output::print_warn(&format!(
+                    "Could not start the '{lang}' LSP server; analysis accuracy may drop."
+                ));
+            });
             continue;
         };
 
         if session.initialize(root_uri.clone()).await.is_err() {
-            output::print_warn(&format!(
-                "Could not initialize the '{lang}' LSP server; analysis accuracy may drop."
-            ));
+            spinner.suspend(|| {
+                output::print_warn(&format!(
+                    "Could not initialize the '{lang}' LSP server; analysis accuracy may drop."
+                ));
+            });
             continue;
         }
 
@@ -221,5 +255,56 @@ fn extract_location_path(response: &serde_json::Value) -> Option<String> {
             .or_else(|| loc.get("targetUri"))
             .and_then(|u| u.as_str())
             .map(|uri| uri.trim_start_matches("file://").to_string())
+    })
+}
+
+#[expect(clippy::print_stdout)]
+fn prompt_install(
+    lang: &str,
+    executable: &str,
+    install_cmd: &str,
+    spinner: &indicatif::ProgressBar,
+) -> Result<Option<ResolvedCommand>, crate::error::TldError> {
+    use std::io::{Write, stdin, stdout};
+
+    spinner.suspend(|| {
+        println!("\nThe '{lang}' LSP server ({executable}) is not installed.");
+        print!("Would you like to install it now using `{install_cmd}`? [y/N]: ");
+        stdout().flush().ok();
+
+        let mut input = String::new();
+        stdin().read_line(&mut input).ok();
+
+        if input.trim().eq_ignore_ascii_case("y") {
+            output::print_info(&format!("Installing {executable}..."));
+            let status = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(install_cmd)
+                .status()
+                .map_err(|e| {
+                    crate::error::TldError::Generic(format!("Failed to run install command: {e}"))
+                })?;
+
+            if status.success() {
+                output::print_ok(&format!("{executable} installed successfully."));
+                // Try to resolve again
+                return resolve_command(lang).map(Some);
+            }
+            output::print_warn(&format!("Installation of {executable} failed."));
+        }
+
+        // If not installed or failed, ask Abort or Continue
+        print!("Abort analysis or Continue without LSP enrichment? [a/C]: ");
+        stdout().flush().ok();
+        input.clear();
+        stdin().read_line(&mut input).ok();
+
+        if input.trim().eq_ignore_ascii_case("a") {
+            return Err(crate::error::TldError::Generic(
+                "Analysis aborted.".to_string(),
+            ));
+        }
+
+        Ok(None)
     })
 }

@@ -20,6 +20,12 @@ pub enum TldError {
     /// The tree-sitter grammar loaded fine but tld has no AST-walk
     /// implementation for this language yet.
     ParserNotImplemented(String),
+    /// The language server for this language is not installed.
+    LspInstallRequired {
+        lang: String,
+        executable: String,
+        install_cmd: String,
+    },
 }
 
 impl fmt::Display for TldError {
@@ -47,6 +53,15 @@ impl fmt::Display for TldError {
                 f,
                 "tld does not yet have an analyzer for '{lang}'. \
                  See adding-new-languages.md to add support."
+            ),
+            TldError::LspInstallRequired {
+                lang,
+                executable,
+                install_cmd,
+            } => write!(
+                f,
+                "The '{lang}' LSP server ({executable}) is not installed.\n\n\
+                 To install it, run:\n  {install_cmd}"
             ),
         }
     }
