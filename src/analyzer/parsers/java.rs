@@ -5,6 +5,7 @@
     clippy::expect_used,
     clippy::collapsible_if
 )]
+use crate::analyzer::queries;
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
@@ -38,15 +39,7 @@ fn parse_declarations(
     result: &mut AnalysisResult,
 ) {
     let decl = DECL_QUERY.get_or_init(|| {
-        let decl_query_src = r"
-(class_declaration
-  name: (identifier) @class_name
-  body: (class_body) @class_body) @class_decl
-
-(interface_declaration
-  name: (identifier) @iface_name
-  body: (interface_body) @iface_body) @iface_decl
-";
+        let decl_query_src = queries::java_declarations();
         let query =
             Query::new(language, decl_query_src).expect("Failed to compile Java decl query");
         let class_name_idx = query
@@ -145,13 +138,7 @@ fn parse_class_members(
     result: &mut AnalysisResult,
 ) {
     let mq = MEMBER_QUERY.get_or_init(|| {
-        let member_query_src = r"
-(method_declaration
-  name: (identifier) @method_name) @method_decl
-
-(constructor_declaration
-  name: (identifier) @ctor_name) @ctor_decl
-";
+        let member_query_src = queries::java_class_members();
         let query =
             Query::new(language, member_query_src).expect("Failed to compile Java member query");
         let method_idx = query
@@ -227,10 +214,7 @@ fn parse_interface_members(
     result: &mut AnalysisResult,
 ) {
     let imq = INTERFACE_MEMBER_QUERY.get_or_init(|| {
-        let method_query_src = r"
-(method_declaration
-  name: (identifier) @method_name) @method_decl
-";
+        let method_query_src = queries::java_interface_members();
         let query = Query::new(language, method_query_src)
             .expect("Failed to compile Java interface member query");
         let method_idx = query
@@ -278,12 +262,7 @@ fn parse_refs(
     result: &mut AnalysisResult,
 ) {
     let rq = REF_QUERY.get_or_init(|| {
-        let ref_query_src = r"
-(import_declaration) @import
-
-(method_invocation
-  name: (identifier) @call_name)
-";
+        let ref_query_src = queries::java_references();
         let query = Query::new(language, ref_query_src).expect("Failed to compile Java ref query");
         let import_idx = query.capture_index_for_name("import").unwrap_or(u32::MAX);
         let call_idx = query

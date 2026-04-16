@@ -39,6 +39,8 @@ struct WorkspaceBuilder<'a> {
     folder_slug_by_path: HashMap<String, String>,
     file_slug_by_rel: HashMap<String, String>,
     repo_slug: String,
+    /// Tracks element names that have been assigned, to enforce uniqueness.
+    used_names: HashMap<String, String>, // name → ref slug
 }
 
 impl<'a> WorkspaceBuilder<'a> {
@@ -59,6 +61,7 @@ impl<'a> WorkspaceBuilder<'a> {
             folder_slug_by_path: HashMap::new(),
             file_slug_by_rel: HashMap::new(),
             repo_slug: String::new(),
+            used_names: HashMap::new(),
         }
     }
 
@@ -114,6 +117,8 @@ impl<'a> WorkspaceBuilder<'a> {
 
     fn add_repository_element(&mut self) {
         self.repo_slug = slugify(&self.ctx.repo_name);
+        self.used_names
+            .insert(self.ctx.repo_name.clone(), self.repo_slug.clone());
         self.elements.insert(
             self.repo_slug.clone(),
             Element {
@@ -147,10 +152,45 @@ impl<'a> WorkspaceBuilder<'a> {
             let slug = self.folder_slug_by_path[folder_path.as_str()].clone();
             let parent_slug = self.folder_parent_slug(folder_path);
 
+            // Qualify the display name with its parent directory segment when the
+            // plain folder name is already taken (e.g. repo named "java" and a
+            // src/main/java/ directory both produce name "java").
+            let display_name = if self.used_names.contains_key(&folder_name) {
+                let parent_dir = Path::new(folder_path.as_str())
+                    .parent()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("");
+                let qualifier = if parent_dir.is_empty() {
+                    folder_name.clone()
+                } else {
+                    Path::new(parent_dir)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(parent_dir)
+                        .to_string()
+                };
+                let base = format!("{qualifier}/{folder_name}");
+                if self.used_names.contains_key(&base) {
+                    let mut n = 2;
+                    loop {
+                        let candidate = format!("{base}-{n}");
+                        if !self.used_names.contains_key(&candidate) {
+                            break candidate;
+                        }
+                        n += 1;
+                    }
+                } else {
+                    base
+                }
+            } else {
+                folder_name
+            };
+
+            self.used_names.insert(display_name.clone(), slug.clone());
             self.elements.insert(
                 slug,
                 Element {
-                    name: folder_name,
+                    name: display_name,
                     kind: "folder".to_string(),
                     technology: "Folder".to_string(),
                     owner: self.ctx.owner.clone(),
@@ -198,16 +238,51 @@ impl<'a> WorkspaceBuilder<'a> {
                         .unwrap_or_else(|| self.repo_slug.clone())
                 };
 
+                // Qualify the display name with its immediate parent directory when
+                // another file with the same base name has already been registered.
+                let display_name = if self.used_names.contains_key(file_name) {
+                    let qualifier = if parent_dir.is_empty() {
+                        Path::new(&self.ctx.repo_name)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(&self.ctx.repo_name)
+                            .to_string()
+                    } else {
+                        Path::new(parent_dir)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(parent_dir)
+                            .to_string()
+                    };
+                    let base = format!("{qualifier}/{file_name}");
+                    // Guard against the qualified name also conflicting.
+                    if self.used_names.contains_key(&base) {
+                        let mut n = 2;
+                        loop {
+                            let candidate = format!("{base}-{n}");
+                            if !self.used_names.contains_key(&candidate) {
+                                break candidate;
+                            }
+                            n += 1;
+                        }
+                    } else {
+                        base
+                    }
+                } else {
+                    file_name.to_string()
+                };
+
+                self.used_names.insert(display_name.clone(), slug.clone());
                 self.elements.insert(
                     slug,
                     Element {
-                        name: file_name.to_string(),
+                        name: display_name.clone(),
                         kind: "file".to_string(),
                         technology: detect_file_technology(rel_path),
                         owner: self.ctx.owner.clone(),
                         branch: self.ctx.branch.clone(),
                         file_path: rel_path.clone(),
-                        view_label: file_name.to_string(),
+                        view_label: display_name,
                         placements: vec![ViewPlacement {
                             parent_ref: parent_slug,
                             ..Default::default()
@@ -234,15 +309,31 @@ impl<'a> WorkspaceBuilder<'a> {
             let base_sym_slug = slugify(&sym.name);
 
             let (sym_slug, compound_name) = if self.elements.contains_key(&base_sym_slug) {
-                let file_base = Path::new(&rel)
+                let file_stem_str = Path::new(&rel)
                     .file_stem()
                     .and_then(|s| s.to_str())
-                    .map_or_else(|| file_slug.clone(), slugify);
+                    .unwrap_or(&file_slug)
+                    .to_string();
+                let file_base = slugify(&file_stem_str);
                 let compound_slug = format!("{file_base}-{base_sym_slug}");
-                let cname = if !sym.parent.is_empty() && !sym.name.starts_with('~') {
+                // Qualify the display name with the file stem so it is globally unique.
+                let base_cname = if !sym.parent.is_empty() && !sym.name.starts_with('~') {
                     format!("{}.{}", sym.parent, sym.name)
                 } else {
-                    sym.name.clone()
+                    format!("{file_stem_str}.{}", sym.name)
+                };
+                // Resolve any residual name collision with a numeric suffix.
+                let cname = if !self.used_names.contains_key(&base_cname) {
+                    base_cname
+                } else {
+                    let mut n = 2;
+                    loop {
+                        let candidate = format!("{base_cname}-{n}");
+                        if !self.used_names.contains_key(&candidate) {
+                            break candidate;
+                        }
+                        n += 1;
+                    }
                 };
 
                 let final_slug = if self.elements.contains_key(&compound_slug) {
@@ -262,6 +353,8 @@ impl<'a> WorkspaceBuilder<'a> {
                 (base_sym_slug, sym.name.clone())
             };
 
+            self.used_names
+                .insert(compound_name.clone(), sym_slug.clone());
             self.elements.insert(
                 sym_slug,
                 Element {
@@ -308,6 +401,12 @@ impl<'a> WorkspaceBuilder<'a> {
     fn build_import_connector(&self, r: &crate::analyzer::types::Ref) -> Option<Connector> {
         let src_rel = rel_from_base(&r.file_path, &self.scan_parent);
         let src_file_slug = self.file_slug_by_rel.get(&src_rel)?.clone();
+        // Guard: only create the connector when the source file has a real element.
+        // Files without symbols are not added to self.elements; emitting a connector
+        // for them would produce a dangling source ref that fails validation.
+        if !self.elements.contains_key(&src_file_slug) {
+            return None;
+        }
 
         let target_slug = resolve_import_target(
             &r.target_path,
@@ -372,7 +471,12 @@ impl<'a> WorkspaceBuilder<'a> {
                 })
                 .map(|(k, _)| k.clone())
                 // If we couldn't find the exact symbol, see if the file itself is an element.
-                .or_else(|| self.file_slug_by_rel.get(&tgt_rel).cloned())
+                // Guard: only use the file slug when it corresponds to an actual element;
+                // files without symbols are skipped by add_file_elements.
+                .or_else(|| {
+                    let slug = self.file_slug_by_rel.get(&tgt_rel).cloned()?;
+                    self.elements.contains_key(&slug).then_some(slug)
+                })
         }?;
 
         if tgt_slug == src_slug {

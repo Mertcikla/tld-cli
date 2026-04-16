@@ -4,6 +4,7 @@
     clippy::too_many_arguments,
     clippy::expect_used
 )]
+use crate::analyzer::queries;
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
@@ -39,21 +40,7 @@ fn parse_declarations(
     result: &mut AnalysisResult,
 ) {
     let decl = DECL_QUERY.get_or_init(|| {
-        let decl_query_src = r"
-(class_specifier
-  name: (type_identifier) @class_name
-  body: (field_declaration_list) @class_body) @class_decl
-
-(struct_specifier
-  name: (type_identifier) @struct_name
-  body: (field_declaration_list) @struct_body) @struct_decl
-
-(enum_specifier
-  name: (type_identifier) @enum_name) @enum_decl
-
-(function_definition
-  declarator: _ @fn_declarator) @fn_def
-";
+        let decl_query_src = queries::cpp_declarations();
         let query = Query::new(language, decl_query_src).expect("Failed to compile CPP decl query");
         let class_name_idx = query
             .capture_index_for_name("class_name")
@@ -205,18 +192,7 @@ fn parse_type_members(
     result: &mut AnalysisResult,
 ) {
     let mq = MEMBER_QUERY.get_or_init(|| {
-        let method_query_src = r"
-(function_definition
-  declarator: _ @method_declarator) @method_def
-
-(field_declaration
-  declarator: (function_declarator
-    declarator: _ @decl_member))
-
-(declaration
-  declarator: (function_declarator
-    declarator: _ @ctor_decl_member))
-";
+        let method_query_src = queries::cpp_members();
         let query =
             Query::new(language, method_query_src).expect("Failed to compile CPP member query");
         let decl_idx = query
@@ -355,10 +331,7 @@ fn parse_refs(
     result: &mut AnalysisResult,
 ) {
     let rq = REF_QUERY.get_or_init(|| {
-        let ref_query_src = r"
-(preproc_include path: _ @include_path)
-(call_expression function: _ @callee)
-";
+        let ref_query_src = queries::cpp_references();
         let query = Query::new(language, ref_query_src).expect("Failed to compile CPP ref query");
         let include_idx = query
             .capture_index_for_name("include_path")

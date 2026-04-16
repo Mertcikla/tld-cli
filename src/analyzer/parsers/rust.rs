@@ -4,6 +4,7 @@
     clippy::too_many_arguments,
     clippy::expect_used
 )]
+use crate::analyzer::queries;
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
@@ -41,15 +42,7 @@ fn parse_declarations(
     result: &mut AnalysisResult,
 ) {
     let decl = DECL_QUERY.get_or_init(|| {
-        let decl_query_src = r"
-(function_item name: (identifier) @fn_name) @fn
-(struct_item name: (type_identifier) @struct_name) @struct
-(enum_item name: (type_identifier) @enum_name) @enum
-(trait_item name: (type_identifier) @trait_name) @trait
-(type_item name: (type_identifier) @type_name) @type
-(impl_item type: _ @impl_type) @impl
-(use_declaration argument: _ @use_arg) @use
-";
+        let decl_query_src = queries::rust_declarations();
         let query =
             Query::new(language, decl_query_src).expect("Failed to compile Rust decl query");
         let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
@@ -213,7 +206,7 @@ fn parse_impl_members(
     result: &mut AnalysisResult,
 ) {
     let imq = IMPL_MEMBER_QUERY.get_or_init(|| {
-        let query_src = r"(function_item name: (identifier) @fn_name) @fn";
+        let query_src = queries::rust_impl_members();
         let query =
             Query::new(language, query_src).expect("Failed to compile Rust impl member query");
         let name_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
@@ -258,10 +251,7 @@ fn parse_refs(
     result: &mut AnalysisResult,
 ) {
     let rq = REF_QUERY.get_or_init(|| {
-        let query_src = r"
-(call_expression function: _ @callee)
-(method_call_expression method: (field_identifier) @method_name)
-";
+        let query_src = queries::rust_references();
         let query = Query::new(language, query_src).expect("Failed to compile Rust ref query");
         let call_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
         let method_idx = query

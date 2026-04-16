@@ -4,6 +4,7 @@
     clippy::too_many_arguments,
     clippy::expect_used
 )]
+use crate::analyzer::queries;
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
@@ -17,7 +18,8 @@ struct DeclQuery {
     fn_idx: u32,
 }
 
-static DECL_QUERY: OnceLock<DeclQuery> = OnceLock::new();
+static TS_DECL_QUERY: OnceLock<DeclQuery> = OnceLock::new();
+static JS_DECL_QUERY: OnceLock<DeclQuery> = OnceLock::new();
 
 pub fn parse(
     node: &Node,
@@ -37,45 +39,7 @@ fn parse_declarations(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let decl = DECL_QUERY.get_or_init(|| {
-        let decl_query_src = r"
-(class_declaration
-  name: (type_identifier) @class_name
-  body: (class_body) @class_body) @class_decl
-
-(interface_declaration
-  name: (type_identifier) @iface_name) @iface_decl
-
-(type_alias_declaration
-  name: (type_identifier) @alias_name) @alias_decl
-
-(function_declaration
-  name: (identifier) @fn_name) @fn_decl
-";
-        let query = Query::new(language, decl_query_src).expect("Failed to compile TS decl query");
-        let class_name_idx = query
-            .capture_index_for_name("class_name")
-            .unwrap_or(u32::MAX);
-        let class_body_idx = query
-            .capture_index_for_name("class_body")
-            .unwrap_or(u32::MAX);
-        let iface_idx = query
-            .capture_index_for_name("iface_name")
-            .unwrap_or(u32::MAX);
-        let alias_idx = query
-            .capture_index_for_name("alias_name")
-            .unwrap_or(u32::MAX);
-        let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
-
-        DeclQuery {
-            query,
-            class_name_idx,
-            class_body_idx,
-            iface_idx,
-            alias_idx,
-            fn_idx,
-        }
-    });
+    let decl = decl_query(language, path);
 
     // Collect all classes first so we can process methods with parent context.
     let mut classes: Vec<(String, Node, i32, i32)> = Vec::new();
@@ -185,7 +149,8 @@ struct MemberQuery {
     method_idx: u32,
 }
 
-static MEMBER_QUERY: OnceLock<MemberQuery> = OnceLock::new();
+static TS_MEMBER_QUERY: OnceLock<MemberQuery> = OnceLock::new();
+static JS_MEMBER_QUERY: OnceLock<MemberQuery> = OnceLock::new();
 
 fn parse_class_members(
     body_node: &Node,
@@ -195,18 +160,7 @@ fn parse_class_members(
     class_name: &str,
     result: &mut AnalysisResult,
 ) {
-    let mq = MEMBER_QUERY.get_or_init(|| {
-        let method_query_src = r"
-(method_definition
-  name: (property_identifier) @method_name) @method_def
-";
-        let query =
-            Query::new(language, method_query_src).expect("Failed to compile TS member query");
-        let method_idx = query
-            .capture_index_for_name("method_name")
-            .unwrap_or(u32::MAX);
-        MemberQuery { query, method_idx }
-    });
+    let mq = member_query(language, path);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&mq.query, *body_node, source);
@@ -243,7 +197,88 @@ struct RefQuery {
     callee_idx: u32,
 }
 
-static REF_QUERY: OnceLock<RefQuery> = OnceLock::new();
+static TS_REF_QUERY: OnceLock<RefQuery> = OnceLock::new();
+static JS_REF_QUERY: OnceLock<RefQuery> = OnceLock::new();
+
+fn is_javascript_path(path: &str) -> bool {
+    matches!(
+        std::path::Path::new(path)
+            .extension()
+            .and_then(|ext| ext.to_str()),
+        Some("js" | "jsx")
+    )
+}
+
+fn build_decl_query(language: &Language, decl_query_src: &str) -> DeclQuery {
+    let query = Query::new(language, decl_query_src).expect("Failed to compile TS decl query");
+    let class_name_idx = query
+        .capture_index_for_name("class_name")
+        .unwrap_or(u32::MAX);
+    let class_body_idx = query
+        .capture_index_for_name("class_body")
+        .unwrap_or(u32::MAX);
+    let iface_idx = query
+        .capture_index_for_name("iface_name")
+        .unwrap_or(u32::MAX);
+    let alias_idx = query
+        .capture_index_for_name("alias_name")
+        .unwrap_or(u32::MAX);
+    let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
+
+    DeclQuery {
+        query,
+        class_name_idx,
+        class_body_idx,
+        iface_idx,
+        alias_idx,
+        fn_idx,
+    }
+}
+
+fn build_member_query(language: &Language, member_query_src: &str) -> MemberQuery {
+    let query = Query::new(language, member_query_src).expect("Failed to compile TS member query");
+    let method_idx = query
+        .capture_index_for_name("method_name")
+        .unwrap_or(u32::MAX);
+    MemberQuery { query, method_idx }
+}
+
+fn build_ref_query(language: &Language, ref_query_src: &str) -> RefQuery {
+    let query = Query::new(language, ref_query_src).expect("Failed to compile TS ref query");
+    let import_idx = query
+        .capture_index_for_name("import_src")
+        .unwrap_or(u32::MAX);
+    let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
+    RefQuery {
+        query,
+        import_idx,
+        callee_idx,
+    }
+}
+
+fn decl_query(language: &Language, path: &str) -> &'static DeclQuery {
+    if is_javascript_path(path) {
+        JS_DECL_QUERY.get_or_init(|| build_decl_query(language, queries::javascript_declarations()))
+    } else {
+        TS_DECL_QUERY.get_or_init(|| build_decl_query(language, queries::typescript_declarations()))
+    }
+}
+
+fn member_query(language: &Language, path: &str) -> &'static MemberQuery {
+    if is_javascript_path(path) {
+        JS_MEMBER_QUERY.get_or_init(|| build_member_query(language, queries::javascript_members()))
+    } else {
+        TS_MEMBER_QUERY.get_or_init(|| build_member_query(language, queries::typescript_members()))
+    }
+}
+
+fn ref_query(language: &Language, path: &str) -> &'static RefQuery {
+    if is_javascript_path(path) {
+        JS_REF_QUERY.get_or_init(|| build_ref_query(language, queries::javascript_references()))
+    } else {
+        TS_REF_QUERY.get_or_init(|| build_ref_query(language, queries::typescript_references()))
+    }
+}
 
 fn parse_refs(
     node: &Node,
@@ -252,25 +287,7 @@ fn parse_refs(
     language: &Language,
     result: &mut AnalysisResult,
 ) {
-    let rq = REF_QUERY.get_or_init(|| {
-        let ref_query_src = r"
-(import_statement
-  source: (string (string_fragment) @import_src))
-
-(call_expression
-  function: _ @callee)
-";
-        let query = Query::new(language, ref_query_src).expect("Failed to compile TS ref query");
-        let import_idx = query
-            .capture_index_for_name("import_src")
-            .unwrap_or(u32::MAX);
-        let callee_idx = query.capture_index_for_name("callee").unwrap_or(u32::MAX);
-        RefQuery {
-            query,
-            import_idx,
-            callee_idx,
-        }
-    });
+    let rq = ref_query(language, path);
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&rq.query, *node, source);

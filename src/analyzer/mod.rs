@@ -2,10 +2,11 @@ pub mod ignore;
 pub mod lsp;
 pub mod parsers;
 pub mod projection;
+pub mod queries;
 pub mod scope;
 pub mod semantic;
 pub mod syntax;
-pub mod types;
+pub mod types; // Added queries module
 
 use crate::analyzer::syntax::types::SyntaxBundle;
 use crate::error::TldError;

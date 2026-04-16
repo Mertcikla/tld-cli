@@ -4,6 +4,7 @@
     clippy::expect_used,
     clippy::collapsible_if
 )]
+use crate::analyzer::queries;
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
@@ -40,33 +41,7 @@ fn parse_declarations(
     result: &mut AnalysisResult,
 ) {
     let decl = DECL_QUERY.get_or_init(|| {
-        let query_src = r"
-(function_declaration
-  name: (identifier) @fn_name) @fn
-
-(method_declaration
-  receiver: (parameter_list
-    (parameter_declaration
-      type: [
-        (type_identifier) @recv_type
-        (pointer_type (type_identifier) @recv_type)
-      ]))
-  name: (field_identifier) @method_name) @method
-
-(type_spec
-  name: (type_identifier) @struct_name
-  type: (struct_type)) @struct_decl
-
-(type_spec
-  name: (type_identifier) @iface_name
-  type: (interface_type)) @iface_decl
-
-(type_spec
-  name: (type_identifier) @type_name) @type_decl
-
-(type_alias
-  name: (type_identifier) @alias_name) @alias_decl
-";
+        let query_src = queries::go_declarations();
         let query = Query::new(language, query_src).expect("Failed to compile Go decl query");
         let fn_idx = query.capture_index_for_name("fn_name").unwrap_or(u32::MAX);
         let method_idx = query
@@ -219,10 +194,7 @@ fn parse_refs(
     result: &mut AnalysisResult,
 ) {
     let rq = REF_QUERY.get_or_init(|| {
-        let query_src = r"
-(import_spec path: (interpreted_string_literal) @import_path)
-(call_expression function: _ @callee)
-";
+        let query_src = queries::go_references();
         let query = Query::new(language, query_src).expect("Failed to compile Go ref query");
         let import_idx = query
             .capture_index_for_name("import_path")

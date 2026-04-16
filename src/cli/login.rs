@@ -6,6 +6,7 @@ use crate::workspace;
 use clap::Args;
 use std::time::Duration;
 use tokio::time::sleep;
+use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
 pub struct LoginArgs {
@@ -26,7 +27,7 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
 
     let mut device_client = client::new_device_client(&server_url).await?;
 
-    let req = tonic::Request::new(diagv1::DeviceAuthorizeRequest {
+    let req = Request::new(diagv1::DeviceAuthorizeRequest {
         client_name: "tld CLI (Rust)".to_string(),
     });
 
@@ -56,7 +57,7 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
     // Poll for token
     let (api_key, org_id) = loop {
         sleep(interval).await;
-        let poll_req = tonic::Request::new(diagv1::DevicePollTokenRequest {
+        let poll_req = Request::new(diagv1::DevicePollTokenRequest {
             device_code: auth.device_code.clone(),
         });
 
@@ -87,7 +88,6 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
                 break (token.api_key, token.org_id);
             }
             Err(status) => {
-                // Keep polling on transient errors
                 if status.code() == tonic::Code::Unavailable {
                     continue;
                 }

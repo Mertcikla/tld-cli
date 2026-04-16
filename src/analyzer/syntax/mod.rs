@@ -10,6 +10,7 @@
 pub mod types;
 pub use types::*;
 
+use crate::analyzer::queries;
 use crate::analyzer::types::{AnalysisResult, Ref as AnalyzerRef, Symbol};
 use std::path::Path;
 use std::sync::OnceLock;
@@ -168,6 +169,7 @@ struct TsControlQuery {
 }
 
 static TS_CONTROL_QUERY: OnceLock<Option<TsControlQuery>> = OnceLock::new();
+static JS_CONTROL_QUERY: OnceLock<Option<TsControlQuery>> = OnceLock::new();
 
 struct PyControlQuery {
     query: Query,
@@ -230,19 +232,21 @@ fn extract_ts_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
         return Vec::new();
     };
 
-    let Some(control) = TS_CONTROL_QUERY
+    let control_store = if lang_key == "javascript" {
+        &JS_CONTROL_QUERY
+    } else {
+        &TS_CONTROL_QUERY
+    };
+
+    let control_src = if lang_key == "javascript" {
+        queries::javascript_control()
+    } else {
+        queries::typescript_control()
+    };
+
+    let Some(control) = control_store
         .get_or_init(|| {
-            let query_src = r"
-(if_statement) @branch
-(switch_statement) @branch
-(for_statement) @loop
-(for_in_statement) @loop
-(while_statement) @loop
-(do_statement) @loop
-(try_statement) @try
-(return_statement) @return
-";
-            let Ok(query) = Query::new(&language, query_src) else {
+            let Ok(query) = Query::new(&language, control_src) else {
                 return None;
             };
             Some(TsControlQuery {
@@ -310,13 +314,7 @@ fn extract_py_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
 
     let Some(control) = PY_CONTROL_QUERY
         .get_or_init(|| {
-            let query_src = r"
-(if_statement) @branch
-(for_statement) @loop
-(while_statement) @loop
-(try_statement) @try
-(return_statement) @return
-";
+            let query_src = queries::python_control();
             let Ok(query) = Query::new(&language, query_src) else {
                 return None;
             };
@@ -385,11 +383,7 @@ fn extract_go_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<ControlRe
 
     let Some(control) = GO_CONTROL_QUERY
         .get_or_init(|| {
-            let query_src = r"
-(if_statement) @branch
-(for_statement) @loop
-(return_statement) @return
-";
+            let query_src = queries::go_control();
             let Ok(query) = Query::new(&language, query_src) else {
                 return None;
             };
@@ -456,15 +450,7 @@ fn extract_java_control_regions(path: &str, decls: &[SyntaxDecl]) -> Vec<Control
 
     let Some(control) = JAVA_CONTROL_QUERY
         .get_or_init(|| {
-            let query_src = r"
-(if_statement) @branch
-(for_statement) @loop
-(enhanced_for_statement) @loop
-(while_statement) @loop
-(do_statement) @loop
-(try_statement) @try
-(return_statement) @return
-";
+            let query_src = queries::java_control();
             let Ok(query) = Query::new(&language, query_src) else {
                 return None;
             };

@@ -5,6 +5,7 @@
     clippy::expect_used,
     clippy::collapsible_if
 )]
+use crate::analyzer::queries;
 use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
@@ -37,14 +38,7 @@ fn parse_declarations(
     result: &mut AnalysisResult,
 ) {
     let decl = DECL_QUERY.get_or_init(|| {
-        let decl_query_src = r"
-(class_definition
-  name: (identifier) @class_name
-  body: (block) @class_body) @class_def
-
-(function_definition
-  name: (identifier) @fn_name) @fn_def
-";
+        let decl_query_src = queries::python_declarations();
         let query =
             Query::new(language, decl_query_src).expect("Failed to compile Python decl query");
         let class_name_idx = query
@@ -146,10 +140,7 @@ fn parse_class_methods(
     result: &mut AnalysisResult,
 ) {
     let mq = METHOD_QUERY.get_or_init(|| {
-        let method_query_src = r"
-(function_definition
-  name: (identifier) @method_name) @method_def
-";
+        let method_query_src = queries::python_members();
         let query =
             Query::new(language, method_query_src).expect("Failed to compile Python method query");
         let method_idx = query
@@ -243,16 +234,7 @@ fn parse_refs(
     result: &mut AnalysisResult,
 ) {
     let rq = REF_QUERY.get_or_init(|| {
-        let ref_query_src = r"
-(import_from_statement
-  module_name: _ @module)
-
-(import_statement
-  name: (dotted_name) @import_name)
-
-(call
-  function: _ @callee)
-";
+        let ref_query_src = queries::python_references();
         let query =
             Query::new(language, ref_query_src).expect("Failed to compile Python ref query");
         let module_idx = query.capture_index_for_name("module").unwrap_or(u32::MAX);
