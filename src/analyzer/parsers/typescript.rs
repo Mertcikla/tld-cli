@@ -304,21 +304,21 @@ fn extract_ts_annotations(decl_node: &Node, source: &[u8]) -> Vec<Annotation> {
         }
     }
     // Decorators can also live on the parent export_statement.
-    if let Some(parent) = decl_node.parent() {
-        if parent.kind() == "export_statement" {
-            let mut cursor = parent.walk();
-            for child in parent.named_children(&mut cursor) {
-                if child.kind() != "decorator" {
-                    continue;
-                }
-                let mut dc = child.walk();
-                let Some(expr) = child.named_children(&mut dc).next() else {
-                    continue;
-                };
-                let (name, args) = parse_ts_decorator_expr(&expr, source);
-                if !name.is_empty() {
-                    out.push(Annotation { name, args });
-                }
+    if let Some(parent) = decl_node.parent()
+        && parent.kind() == "export_statement"
+    {
+        let mut cursor = parent.walk();
+        for child in parent.named_children(&mut cursor) {
+            if child.kind() != "decorator" {
+                continue;
+            }
+            let mut dc = child.walk();
+            let Some(expr) = child.named_children(&mut dc).next() else {
+                continue;
+            };
+            let (name, args) = parse_ts_decorator_expr(&expr, source);
+            if !name.is_empty() {
+                out.push(Annotation { name, args });
             }
         }
     }

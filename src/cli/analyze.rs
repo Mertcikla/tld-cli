@@ -418,7 +418,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     let (build_output, stats_msg) = match view_mode {
         ViewMode::Structural => {
-            let out = projection::structural::project(&result, &ctx, &auto_tag_opts);
+            let out = projection::structural::project(&result, &ctx, auto_tag_opts);
             let msg = format!(
                 "{} elements written, {} connectors created (structural view).",
                 out.elements.len(),
@@ -431,7 +431,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 TldError::Generic("semantic views should build a syntax bundle".to_string())
             })?;
             let (out, stats) =
-                projection::business::project(syntax, &ctx, noise_threshold, &auto_tag_opts);
+                projection::business::project(syntax, &ctx, noise_threshold, auto_tag_opts);
             let msg = format!(
                 "{} elements written, {} connectors created, {} low-signal symbols hidden, {} unresolved refs, {} resolved call edges ({} via LSP) (business view).",
                 out.elements.len(),
@@ -448,7 +448,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 TldError::Generic("semantic views should build a syntax bundle".to_string())
             })?;
             let (out, stats) =
-                projection::data_flow::project(syntax, &ctx, noise_threshold, &auto_tag_opts);
+                projection::data_flow::project(syntax, &ctx, noise_threshold, auto_tag_opts);
             let msg = format!(
                 "{} elements written, {} connectors created, {} flows synthesized, {} low-signal symbols hidden, {} unresolved refs (data-flow view).",
                 out.elements.len(),

@@ -107,10 +107,7 @@ pub fn score_all(
 
         // ── Negative contributions ────────────────────────────────────────────
         match role {
-            DerivedRole::LowSignal | DerivedRole::DataCarrier => {
-                s -= 4;
-            }
-            DerivedRole::Bootstrap => {
+            DerivedRole::LowSignal | DerivedRole::DataCarrier | DerivedRole::Bootstrap => {
                 s -= 4;
             }
             DerivedRole::Interface => {

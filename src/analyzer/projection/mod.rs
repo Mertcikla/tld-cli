@@ -152,8 +152,10 @@ pub fn edge_labels(kind: &EdgeKind) -> (&'static str, &'static str) {
 }
 
 pub fn collapse_connectors(connectors: Vec<Connector>) -> Vec<Connector> {
-    let mut collapsed: HashMap<(String, String, String, String), (Connector, usize)> =
-        HashMap::new();
+    type ConnectorKey = (String, String, String, String);
+    type CollapsedConnector = (Connector, usize);
+
+    let mut collapsed: HashMap<ConnectorKey, CollapsedConnector> = HashMap::new();
 
     for connector in connectors {
         let key = (

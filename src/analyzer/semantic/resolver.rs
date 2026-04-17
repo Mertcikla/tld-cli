@@ -251,13 +251,15 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
                 push_resolved_edge(
                     &mut edges,
                     &mut seen_edges,
-                    source_id.clone(),
-                    target_id.clone(),
-                    edge_kind.clone(),
-                    if matches!(r.kind, RefKind::Import) {
-                        EdgeOrigin::Import
-                    } else {
-                        EdgeOrigin::Lsp
+                    ResolvedEdgeInput {
+                        source: source_id.clone(),
+                        target: target_id.clone(),
+                        kind: edge_kind.clone(),
+                        origin: if matches!(r.kind, RefKind::Import) {
+                            EdgeOrigin::Import
+                        } else {
+                            EdgeOrigin::Lsp
+                        },
                     },
                     idx,
                 );
@@ -275,13 +277,15 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
                 push_resolved_edge(
                     &mut edges,
                     &mut seen_edges,
-                    source_id.clone(),
-                    target_sym.symbol_id.clone(),
-                    edge_kind.clone(),
-                    if matches!(r.kind, RefKind::Import) {
-                        EdgeOrigin::Import
-                    } else {
-                        EdgeOrigin::Lsp
+                    ResolvedEdgeInput {
+                        source: source_id.clone(),
+                        target: target_sym.symbol_id.clone(),
+                        kind: edge_kind.clone(),
+                        origin: if matches!(r.kind, RefKind::Import) {
+                            EdgeOrigin::Import
+                        } else {
+                            EdgeOrigin::Lsp
+                        },
                     },
                     idx,
                 );
@@ -299,10 +303,12 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
             push_resolved_edge(
                 &mut edges,
                 &mut seen_edges,
-                source_id.clone(),
-                target_id,
-                edge_kind.clone(),
-                EdgeOrigin::BareName,
+                ResolvedEdgeInput {
+                    source: source_id.clone(),
+                    target: target_id,
+                    kind: edge_kind.clone(),
+                    origin: EdgeOrigin::BareName,
+                },
                 idx,
             );
             continue;
@@ -359,10 +365,12 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
                 push_resolved_edge(
                     &mut edges,
                     &mut seen_edges,
-                    edge_source.clone(),
-                    target_id,
-                    EdgeKind::DependsOn,
-                    EdgeOrigin::BareName,
+                    ResolvedEdgeInput {
+                        source: edge_source.clone(),
+                        target: target_id,
+                        kind: EdgeKind::DependsOn,
+                        origin: EdgeOrigin::BareName,
+                    },
                     10_000 + decl.signature_span.start as usize,
                 );
             }
@@ -387,10 +395,12 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
                 push_resolved_edge(
                     &mut edges,
                     &mut seen_edges,
-                    source_id.clone(),
-                    target_id,
-                    EdgeKind::Extends,
-                    EdgeOrigin::BareName,
+                    ResolvedEdgeInput {
+                        source: source_id.clone(),
+                        target: target_id,
+                        kind: EdgeKind::Extends,
+                        origin: EdgeOrigin::BareName,
+                    },
                     20_000 + decl.signature_span.start as usize,
                 );
             }
@@ -412,10 +422,12 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
                 push_resolved_edge(
                     &mut edges,
                     &mut seen_edges,
-                    source_id.clone(),
-                    target_id,
-                    EdgeKind::Implements,
-                    EdgeOrigin::BareName,
+                    ResolvedEdgeInput {
+                        source: source_id.clone(),
+                        target: target_id,
+                        kind: EdgeKind::Implements,
+                        origin: EdgeOrigin::BareName,
+                    },
                     30_000 + decl.signature_span.start as usize,
                 );
             }
@@ -498,12 +510,15 @@ fn id_file_part(id: &str) -> &str {
 fn push_resolved_edge(
     edges: &mut Vec<SemanticEdge>,
     seen: &mut HashSet<(String, String, String)>,
-    source: SymbolId,
-    target: SymbolId,
-    kind: EdgeKind,
-    origin: EdgeOrigin,
+    edge: ResolvedEdgeInput,
     order_index: usize,
 ) {
+    let ResolvedEdgeInput {
+        source,
+        target,
+        kind,
+        origin,
+    } = edge;
     if source == target {
         return;
     }
@@ -520,6 +535,13 @@ fn push_resolved_edge(
         order_index,
         cross_boundary,
     });
+}
+
+struct ResolvedEdgeInput {
+    source: SymbolId,
+    target: SymbolId,
+    kind: EdgeKind,
+    origin: EdgeOrigin,
 }
 
 fn resolve_symbol_name(
@@ -760,7 +782,9 @@ fn decl_signature_text(lines: &[String], decl: &SyntaxDecl) -> String {
         .max(decl.span.start)
         .min(decl.span.end.max(decl.signature_span.start));
     end = end.max(decl.signature_span.start + 4);
-    let end = end.min(lines.len() as u32) as usize;
+    let end = usize::try_from(end)
+        .unwrap_or(lines.len())
+        .min(lines.len());
     if start >= end || start >= lines.len() {
         return lines.get(start).cloned().unwrap_or_default();
     }

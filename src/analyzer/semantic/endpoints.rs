@@ -85,14 +85,9 @@ pub fn detect_endpoint(annotation: &Annotation) -> Option<HttpEndpoint> {
     // all reduce to `get`. We remember the full form for disambiguation.
     let stripped = raw.trim_start_matches('@');
     let lower = stripped.to_ascii_lowercase();
-    let last_dot = lower
-        .rsplit_once('.')
-        .map(|(_, tail)| tail)
-        .unwrap_or(&lower);
-    let last_seg = last_dot
-        .rsplit_once("::")
-        .map(|(_, tail)| tail)
-        .unwrap_or(last_dot);
+    let lower = lower.as_str();
+    let last_dot = lower.rsplit_once('.').map_or(lower, |(_, tail)| tail);
+    let last_seg = last_dot.rsplit_once("::").map_or(last_dot, |(_, tail)| tail);
 
     // Case 1: direct verb annotation (e.g. "get", "post", "GetMapping").
     if let Some(method) = direct_verb(last_seg) {
@@ -134,11 +129,9 @@ pub fn detect_controller(annotation: &Annotation) -> Option<ControllerKind> {
     let raw = annotation.name.trim().trim_start_matches('@');
     let last = raw
         .rsplit_once('.')
-        .map(|(_, t)| t)
-        .unwrap_or(raw)
+        .map_or(raw, |(_, t)| t)
         .rsplit_once("::")
-        .map(|(_, t)| t)
-        .unwrap_or_else(|| raw.rsplit_once('.').map(|(_, t)| t).unwrap_or(raw));
+        .map_or_else(|| raw.rsplit_once('.').map_or(raw, |(_, t)| t), |(_, t)| t);
     match last {
         "RestController" | "Controller" => Some(ControllerKind::Controller),
         "api_view" => Some(ControllerKind::ApiView),

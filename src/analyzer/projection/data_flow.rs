@@ -45,7 +45,7 @@ pub fn project(
     syntax: &SyntaxBundle,
     ctx: &BuildContext,
     noise_threshold: i32,
-    auto_tags: &AutoTagOptions,
+    auto_tags: AutoTagOptions,
 ) -> (BuildOutput, ProjectionStats) {
     let scan_parent = std::path::Path::new(&ctx.scan_root)
         .parent()
@@ -83,14 +83,13 @@ pub fn project(
         .collect();
 
     let adjacency = build_architecture_edges(&bundle, &symbols_by_id, &visible_ids);
-    let family_chains = select_family_chains(
-        &bundle,
-        &symbols_by_id,
-        &role_map,
-        &score_map,
-        &visible_ids,
-        &adjacency,
-    )
+    let path_ctx = PathContext {
+        symbols_by_id: &symbols_by_id,
+        role_map: &role_map,
+        score_map: &score_map,
+        adjacency: &adjacency,
+    };
+    let family_chains = select_family_chains(&bundle, &visible_ids, &path_ctx)
     .into_iter()
     .take(10)
     .collect::<Vec<_>>();
@@ -272,13 +271,17 @@ fn build_architecture_edges(
     adjacency
 }
 
+struct PathContext<'a> {
+    symbols_by_id: &'a HashMap<&'a str, &'a SemanticSymbol>,
+    role_map: &'a HashMap<SymbolId, roles::DerivedRole>,
+    score_map: &'a HashMap<SymbolId, i32>,
+    adjacency: &'a HashMap<SymbolId, Vec<ArchEdge>>,
+}
+
 fn select_family_chains(
     bundle: &SemanticBundle,
-    symbols_by_id: &HashMap<&str, &SemanticSymbol>,
-    role_map: &HashMap<SymbolId, roles::DerivedRole>,
-    score_map: &HashMap<SymbolId, i32>,
     visible_ids: &HashSet<String>,
-    adjacency: &HashMap<SymbolId, Vec<ArchEdge>>,
+    ctx: &PathContext<'_>,
 ) -> Vec<FamilyChain> {
     let mut roots_by_family: HashMap<String, Vec<SymbolId>> = HashMap::new();
 
@@ -287,7 +290,7 @@ fn select_family_chains(
             continue;
         }
         let is_root = matches!(
-            role_map.get(&symbol.symbol_id),
+            ctx.role_map.get(&symbol.symbol_id),
             Some(roles::DerivedRole::Entrypoint)
         ) || symbol.annotations.iter().any(|annotation| {
             crate::analyzer::semantic::endpoints::detect_endpoint(annotation).is_some()
@@ -300,7 +303,7 @@ fn select_family_chains(
             continue;
         }
         if let Some(root_id) =
-            architectural_symbol_id(&symbol.symbol_id, symbols_by_id, visible_ids)
+            architectural_symbol_id(&symbol.symbol_id, ctx.symbols_by_id, visible_ids)
         {
             roots_by_family.entry(family).or_default().push(root_id);
         }
@@ -312,7 +315,7 @@ fn select_family_chains(
                 continue;
             }
             if !matches!(
-                role_map.get(&symbol.symbol_id),
+                ctx.role_map.get(&symbol.symbol_id),
                 Some(roles::DerivedRole::Orchestrator | roles::DerivedRole::Entrypoint)
             ) {
                 continue;
@@ -322,7 +325,7 @@ fn select_family_chains(
                 continue;
             }
             if let Some(root_id) =
-                architectural_symbol_id(&symbol.symbol_id, symbols_by_id, visible_ids)
+                architectural_symbol_id(&symbol.symbol_id, ctx.symbols_by_id, visible_ids)
             {
                 roots_by_family.entry(family).or_default().push(root_id);
             }
@@ -336,8 +339,8 @@ fn select_family_chains(
         let mut best_score = i32::MIN;
 
         for root in unique_roots {
-            let chain = best_path_from(&root, adjacency, symbols_by_id, role_map, score_map, 5);
-            let score = path_score(&chain, symbols_by_id, role_map, score_map);
+            let chain = best_path_from(&root, ctx, 5);
+            let score = path_score(&chain, ctx);
             if score > best_score {
                 best_score = score;
                 best_chain = Some(chain);
@@ -363,14 +366,7 @@ fn select_family_chains(
     families
 }
 
-fn best_path_from(
-    start: &SymbolId,
-    adjacency: &HashMap<SymbolId, Vec<ArchEdge>>,
-    symbols_by_id: &HashMap<&str, &SemanticSymbol>,
-    role_map: &HashMap<SymbolId, roles::DerivedRole>,
-    score_map: &HashMap<SymbolId, i32>,
-    max_depth: usize,
-) -> Vec<PathStep> {
+fn best_path_from(start: &SymbolId, ctx: &PathContext<'_>, max_depth: usize) -> Vec<PathStep> {
     let mut best = vec![PathStep {
         symbol_id: start.clone(),
         via_kind: None,
@@ -380,10 +376,7 @@ fn best_path_from(
 
     dfs_best_path(
         start,
-        adjacency,
-        symbols_by_id,
-        role_map,
-        score_map,
+        ctx,
         max_depth,
         &mut visited,
         &mut path,
@@ -396,17 +389,13 @@ fn best_path_from(
 #[expect(clippy::too_many_arguments)]
 fn dfs_best_path(
     current: &SymbolId,
-    adjacency: &HashMap<SymbolId, Vec<ArchEdge>>,
-    symbols_by_id: &HashMap<&str, &SemanticSymbol>,
-    role_map: &HashMap<SymbolId, roles::DerivedRole>,
-    score_map: &HashMap<SymbolId, i32>,
+    ctx: &PathContext<'_>,
     remaining_depth: usize,
     visited: &mut HashSet<SymbolId>,
     path: &mut Vec<PathStep>,
     best: &mut Vec<PathStep>,
 ) {
-    if path_score(path, symbols_by_id, role_map, score_map)
-        > path_score(best, symbols_by_id, role_map, score_map)
+    if path_score(path, ctx) > path_score(best, ctx)
     {
         *best = path.clone();
     }
@@ -415,14 +404,9 @@ fn dfs_best_path(
         return;
     }
 
-    let mut neighbors = adjacency.get(current).cloned().unwrap_or_default();
+    let mut neighbors = ctx.adjacency.get(current).cloned().unwrap_or_default();
     neighbors.sort_by_key(|edge| {
-        std::cmp::Reverse(node_priority(
-            &edge.target,
-            symbols_by_id,
-            role_map,
-            score_map,
-        ))
+        std::cmp::Reverse(node_priority(&edge.target, ctx))
     });
 
     for edge in neighbors {
@@ -436,25 +420,21 @@ fn dfs_best_path(
             via_kind: Some(edge.kind.clone()),
         });
 
-        let is_terminal = symbols_by_id
+        let is_terminal = ctx
+            .symbols_by_id
             .get(edge.target.as_str())
-            .map(|symbol| symbol.external)
-            .unwrap_or(false);
+            .is_some_and(|symbol| symbol.external);
 
         if !is_terminal {
             dfs_best_path(
                 &edge.target,
-                adjacency,
-                symbols_by_id,
-                role_map,
-                score_map,
+                ctx,
                 remaining_depth - 1,
                 visited,
                 path,
                 best,
             );
-        } else if path_score(path, symbols_by_id, role_map, score_map)
-            > path_score(best, symbols_by_id, role_map, score_map)
+        } else if path_score(path, ctx) > path_score(best, ctx)
         {
             *best = path.clone();
         }
@@ -466,14 +446,12 @@ fn dfs_best_path(
 
 fn path_score(
     path: &[PathStep],
-    symbols_by_id: &HashMap<&str, &SemanticSymbol>,
-    role_map: &HashMap<SymbolId, roles::DerivedRole>,
-    score_map: &HashMap<SymbolId, i32>,
+    ctx: &PathContext<'_>,
 ) -> i32 {
-    let mut score = (path.len() as i32) * 4;
+    let mut score = i32::try_from(path.len()).unwrap_or(i32::MAX / 4) * 4;
 
     for step in path {
-        let Some(symbol) = symbols_by_id.get(step.symbol_id.as_str()).copied() else {
+        let Some(symbol) = ctx.symbols_by_id.get(step.symbol_id.as_str()).copied() else {
             continue;
         };
         if symbol.external {
@@ -482,12 +460,13 @@ fn path_score(
                 score += 20;
             }
         }
-        score += score_map
+        score += ctx
+            .score_map
             .get(&step.symbol_id)
             .copied()
             .unwrap_or_default()
             .max(0);
-        score += match role_map.get(&step.symbol_id) {
+        score += match ctx.role_map.get(&step.symbol_id) {
             Some(roles::DerivedRole::Entrypoint) => 10,
             Some(roles::DerivedRole::Orchestrator) => 14,
             Some(roles::DerivedRole::Adapter) => 18,
@@ -499,13 +478,8 @@ fn path_score(
     score
 }
 
-fn node_priority(
-    symbol_id: &str,
-    symbols_by_id: &HashMap<&str, &SemanticSymbol>,
-    role_map: &HashMap<SymbolId, roles::DerivedRole>,
-    score_map: &HashMap<SymbolId, i32>,
-) -> i32 {
-    let Some(symbol) = symbols_by_id.get(symbol_id).copied() else {
+fn node_priority(symbol_id: &str, ctx: &PathContext<'_>) -> i32 {
+    let Some(symbol) = ctx.symbols_by_id.get(symbol_id).copied() else {
         return 0;
     };
     if symbol.external {
@@ -516,8 +490,8 @@ fn node_priority(
         };
     }
 
-    score_map.get(symbol_id).copied().unwrap_or_default()
-        + match role_map.get(symbol_id) {
+    ctx.score_map.get(symbol_id).copied().unwrap_or_default()
+        + match ctx.role_map.get(symbol_id) {
             Some(roles::DerivedRole::Adapter) => 40,
             Some(roles::DerivedRole::Orchestrator) => 30,
             Some(roles::DerivedRole::Entrypoint) => 20,

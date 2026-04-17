@@ -1,8 +1,8 @@
 //! Infrastructure registry and external node synthesis.
 
 use super::types::{
-    EdgeKind, EdgeOrigin, EdgeTarget, SemanticBundle, SemanticEdge, SemanticSymbol, SymbolSpans,
-    Visibility,
+    ControlMetrics, EdgeKind, EdgeOrigin, EdgeTarget, SemanticBundle, SemanticEdge,
+    SemanticSymbol, SymbolSpans, Visibility,
 };
 use crate::analyzer::syntax::types::DeclKind;
 use std::collections::{HashMap, HashSet};
@@ -141,8 +141,7 @@ pub fn synthesize(bundle: &mut SemanticBundle) {
     let repo_name = bundle
         .symbols
         .first()
-        .map(|symbol| symbol.repo_name.clone())
-        .unwrap_or_else(|| "repo".to_string());
+        .map_or_else(|| "repo".to_string(), |symbol| symbol.repo_name.clone());
 
     let mut ext_ids: HashMap<String, String> = HashMap::new();
     let mut seen_edges: HashSet<(String, String, EdgeKind)> = HashSet::new();
@@ -157,14 +156,15 @@ pub fn synthesize(bundle: &mut SemanticBundle) {
                 bundle,
                 &repo_name,
                 &mut ext_ids,
-                infra.technology,
-                infra.kind,
-                &format!("infra:{}:{}", infra.kind, infra.category),
+                ExternalSpec {
+                    name: infra.technology,
+                    kind: infra.kind,
+                    description: &format!("infra:{}:{}", infra.kind, infra.category),
+                },
             );
 
             let edge_kind = match unresolved.kind {
                 EdgeKind::Imports => EdgeKind::Imports,
-                EdgeKind::Calls => EdgeKind::DependsOn,
                 _ => EdgeKind::DependsOn,
             };
             push_external_edge(
@@ -184,9 +184,11 @@ pub fn synthesize(bundle: &mut SemanticBundle) {
                 bundle,
                 &repo_name,
                 &mut ext_ids,
-                &name,
-                "external",
-                "framework:base",
+                ExternalSpec {
+                    name: &name,
+                    kind: "external",
+                    description: "framework:base",
+                },
             );
             push_external_edge(
                 bundle,
@@ -211,9 +213,11 @@ pub fn synthesize(bundle: &mut SemanticBundle) {
                 bundle,
                 &repo_name,
                 &mut ext_ids,
-                inferred_db.technology,
-                inferred_db.kind,
-                &format!("infra:{}:{}", inferred_db.kind, inferred_db.category),
+                ExternalSpec {
+                    name: inferred_db.technology,
+                    kind: inferred_db.kind,
+                    description: &format!("infra:{}:{}", inferred_db.kind, inferred_db.category),
+                },
             );
 
             for source_id in repository_sources {
@@ -229,34 +233,39 @@ pub fn synthesize(bundle: &mut SemanticBundle) {
     }
 }
 
+#[derive(Clone, Copy)]
+struct ExternalSpec<'a> {
+    name: &'a str,
+    kind: &'a str,
+    description: &'a str,
+}
+
 fn ensure_external_symbol(
     bundle: &mut SemanticBundle,
     repo_name: &str,
     ext_ids: &mut HashMap<String, String>,
-    name: &str,
-    kind: &str,
-    description: &str,
+    spec: ExternalSpec<'_>,
 ) -> String {
     ext_ids
-        .entry(name.to_string())
+        .entry(spec.name.to_string())
         .or_insert_with(|| {
             let id = format!(
                 "{repo_name}:__external__/{}:{}",
-                kind,
-                name.to_ascii_lowercase().replace(' ', "-")
+                spec.kind,
+                spec.name.to_ascii_lowercase().replace(' ', "-")
             );
             bundle.symbols.push(SemanticSymbol {
                 symbol_id: id.clone(),
                 repo_name: repo_name.to_string(),
-                file_path: format!("__external__/{}", name),
-                name: name.to_string(),
+                file_path: format!("__external__/{name}", name = spec.name),
+                name: spec.name.to_string(),
                 kind: DeclKind::Class,
                 owner: None,
                 visibility: Visibility::Unknown,
                 external: true,
-                description: description.to_string(),
+                description: spec.description.to_string(),
                 spans: SymbolSpans::default(),
-                control: Default::default(),
+                control: ControlMetrics::default(),
                 annotations: Vec::new(),
             });
             id

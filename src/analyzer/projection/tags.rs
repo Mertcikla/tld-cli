@@ -17,6 +17,10 @@ use crate::workspace::types::Element;
 use std::collections::HashMap;
 
 /// Which auto-tag dimensions the analyzer should emit.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "This is a direct CLI/config flag bundle for independent tag dimensions"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AutoTagOptions {
     pub role: bool,
@@ -122,14 +126,13 @@ pub fn assign_semantic_tags(
     symbol: &SemanticSymbol,
     role: Option<&DerivedRole>,
     salience_score: i32,
-    opts: &AutoTagOptions,
+    opts: AutoTagOptions,
 ) {
-    if opts.role {
-        if let Some(r) = role {
-            if !matches!(r, DerivedRole::LowSignal) {
-                push_unique(&mut element.tags, format!("role:{}", role_slug(r)));
-            }
-        }
+    if opts.role
+        && let Some(r) = role
+        && !matches!(r, DerivedRole::LowSignal)
+    {
+        push_unique(&mut element.tags, format!("role:{}", role_slug(r)));
     }
 
     if opts.domain {
@@ -163,7 +166,6 @@ pub fn assign_semantic_tags(
 }
 
 /// Whether a tag string was emitted by the auto-tagger (vs. a user tag).
-#[allow(dead_code)]
 pub fn is_auto_tag(tag: &str) -> bool {
     tag == "external"
         || tag.starts_with("role:")
@@ -173,7 +175,10 @@ pub fn is_auto_tag(tag: &str) -> bool {
 }
 
 /// Return the default hex color for a known auto-tag, or `None` for user tags.
-#[allow(dead_code)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "Reserved for tag palette export and UI integration")
+)]
 pub fn known_tag_color(tag: &str) -> Option<String> {
     let fixed = match tag {
         "role:entrypoint" => "#22C55E",
@@ -190,9 +195,7 @@ pub fn known_tag_color(tag: &str) -> Option<String> {
         "endpoint:http-put" => "#EAB308",
         "endpoint:http-delete" => "#EF4444",
         "endpoint:http-patch" => "#F472B6",
-        "endpoint:http-head" => "#8B5CF6",
-        "endpoint:http-options" => "#8B5CF6",
-        "endpoint:http-any" => "#8B5CF6",
+        "endpoint:http-head" | "endpoint:http-options" | "endpoint:http-any" => "#8B5CF6",
         "signal:high" => "#FACC15",
         "signal:medium" => "#E5E7EB",
         other if other.starts_with("domain:") => {
@@ -205,7 +208,6 @@ pub fn known_tag_color(tag: &str) -> Option<String> {
 
 /// Deterministic color for an arbitrary domain name. Hashes the name into a
 /// fixed pastel palette so the same domain gets the same color across runs.
-#[allow(dead_code)]
 pub fn domain_color(name: &str) -> String {
     const PALETTE: &[&str] = &[
         "#F87171", "#FB923C", "#FBBF24", "#A3E635", "#4ADE80", "#2DD4BF", "#38BDF8", "#818CF8",
@@ -322,7 +324,7 @@ mod tests {
             &s,
             Some(&DerivedRole::Orchestrator),
             0,
-            &AutoTagOptions::default_set(),
+            AutoTagOptions::default_set(),
         );
         assert!(el.tags.contains(&"role:orchestrator".to_string()));
     }
@@ -336,7 +338,7 @@ mod tests {
             &s,
             Some(&DerivedRole::LowSignal),
             -10,
-            &AutoTagOptions::default_set(),
+            AutoTagOptions::default_set(),
         );
         assert!(!el.tags.iter().any(|t| t.starts_with("role:")));
     }
@@ -350,7 +352,7 @@ mod tests {
             &s,
             Some(&DerivedRole::DataCarrier),
             0,
-            &AutoTagOptions::default_set(),
+            AutoTagOptions::default_set(),
         );
         assert!(el.tags.contains(&"role:data-carrier".to_string()));
     }
@@ -368,7 +370,7 @@ mod tests {
             &s,
             Some(&DerivedRole::Entrypoint),
             5,
-            &AutoTagOptions::default_set(),
+            AutoTagOptions::default_set(),
         );
         assert!(el.tags.contains(&"endpoint:http-get".to_string()));
     }
@@ -378,7 +380,7 @@ mod tests {
         let mut el = Element::default();
         let mut s = sym("postgres", "");
         s.external = true;
-        assign_semantic_tags(&mut el, &s, None, 0, &AutoTagOptions::default_set());
+        assign_semantic_tags(&mut el, &s, None, 0, AutoTagOptions::default_set());
         assert!(el.tags.contains(&"external".to_string()));
     }
 
@@ -390,7 +392,7 @@ mod tests {
             role: false,
             ..AutoTagOptions::default_set()
         };
-        assign_semantic_tags(&mut el, &s, Some(&DerivedRole::Orchestrator), 5, &opts);
+        assign_semantic_tags(&mut el, &s, Some(&DerivedRole::Orchestrator), 5, opts);
         assert!(!el.tags.iter().any(|t| t.starts_with("role:")));
     }
 
@@ -405,7 +407,7 @@ mod tests {
             &s,
             Some(&DerivedRole::Orchestrator),
             0,
-            &AutoTagOptions::default_set(),
+            AutoTagOptions::default_set(),
         );
         assert_eq!(
             el.tags.iter().filter(|t| *t == "role:orchestrator").count(),
@@ -419,7 +421,7 @@ mod tests {
         let mut el = Element::default();
         let s = sym("Handle", "pkg/service.go");
         let opts = AutoTagOptions::all_enabled();
-        assign_semantic_tags(&mut el, &s, Some(&DerivedRole::Orchestrator), 3, &opts);
+        assign_semantic_tags(&mut el, &s, Some(&DerivedRole::Orchestrator), 3, opts);
         assert!(el.tags.contains(&"signal:high".to_string()));
     }
 

@@ -31,7 +31,7 @@ pub fn project(
     syntax: &SyntaxBundle,
     ctx: &BuildContext,
     noise_threshold: i32,
-    auto_tags: &AutoTagOptions,
+    auto_tags: AutoTagOptions,
 ) -> (BuildOutput, ProjectionStats) {
     let scan_parent = std::path::Path::new(&ctx.scan_root)
         .parent()

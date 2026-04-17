@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 pub fn project(
     result: &AnalysisResult,
     ctx: &BuildContext,
-    auto_tags: &AutoTagOptions,
+    auto_tags: AutoTagOptions,
 ) -> BuildOutput {
     let mut output = workspace_builder::build(result, ctx);
 
@@ -52,7 +52,7 @@ pub fn project(
 
     let mut high_signal_slugs: HashSet<String> = HashSet::new();
 
-    for (slug, element) in output.elements.iter_mut() {
+    for (slug, element) in &mut output.elements {
         if element.symbol.is_empty() || element.file_path.is_empty() {
             continue;
         }
