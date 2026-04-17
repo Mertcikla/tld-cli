@@ -2,6 +2,7 @@
 set -e
 
 BINARY="tld"
+REPO="Mertcikla/tld-cli"
 INSTALL_DIR="/usr/local/bin"
 
 # Detect OS and Architecture
@@ -20,17 +21,22 @@ case "$ARCH_UNAME" in
     *) echo "Unsupported architecture: $ARCH_UNAME"; exit 1 ;;
 esac
 
-# Get the latest release version
-VERSION=$(curl -s "https://api.github.com/repos/Mertcikla/tld-cli/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+# Resolve the latest release and matching asset
+RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")
+VERSION=$(printf '%s\n' "$RELEASE_JSON" | sed -n 's/.*"tag_name": "\([^"]*\)".*/\1/p' | head -n 1)
 
 if [ -z "$VERSION" ]; then
-    echo "Could not find latest version for Mertcikla/tld-cli"
+    echo "Could not find latest version for $REPO"
     exit 1
 fi
 
-# Construct the Download URL
 FILENAME="tld_${OS}_${ARCH}.tar.gz"
-URL="https://github.com/Mertcikla/tld-cli/releases/download/$VERSION/$FILENAME"
+URL=$(printf '%s\n' "$RELEASE_JSON" | sed -n 's/.*"browser_download_url": "\([^"]*\)".*/\1/p' | grep "/$FILENAME$" | head -n 1)
+
+if [ -z "$URL" ]; then
+    echo "Could not find release asset $FILENAME in $REPO $VERSION"
+    exit 1
+fi
 
 echo "Downloading $BINARY $VERSION for $OS/$ARCH..."
 

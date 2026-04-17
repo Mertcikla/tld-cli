@@ -36,147 +36,38 @@ jobs:
             exit 1
           fi
 
-  build:
-    name: Build ${{ matrix.target }}
+  release-unix:
+    name: Release macOS and Linux
     needs: verify-version
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            use_cross: false
-            archive: tar.gz
-
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            use_cross: true
-            archive: tar.gz
-
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            use_cross: false
-            archive: tar.gz
-
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            use_cross: false
-            archive: tar.gz
-
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            use_cross: false
-            archive: zip
-
-          - target: aarch64-pc-windows-msvc
-            os: windows-latest
-            use_cross: false
-            archive: zip
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Clone proto definitions
-        run: git clone --depth 1 https://github.com/Mertcikla/tld-proto.git ../proto
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "v1-rust-cache-${{ matrix.target }}"
-
-      - name: Install cross
-        if: matrix.use_cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build (cross)
-        if: matrix.use_cross
-        run: cross build --release --target ${{ matrix.target }}
-
-      - name: Build (cargo)
-        if: '!matrix.use_cross'
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Verify binary version (Unix)
-        if: matrix.archive == 'tar.gz'
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          BIN="target/${{ matrix.target }}/release/${BINARY_NAME}"
-          ACTUAL="$("${BIN}" --version | tr -d '\r')"
-
-          if [[ "${ACTUAL}" != "${BINARY_NAME} ${VERSION}" ]]; then
-            echo "Expected '${BINARY_NAME} ${VERSION}', got '${ACTUAL}'" >&2
-            exit 1
-          fi
-
-      - name: Verify binary version (Windows)
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          $version = "${env:GITHUB_REF_NAME}".Substring(1)
-          $bin = "target\${{ matrix.target }}\release\${env:BINARY_NAME}.exe"
-          $actual = (& $bin --version).Trim()
-
-          if ($actual -ne "${env:BINARY_NAME} $version") {
-            throw "Expected '${env:BINARY_NAME} $version', got '$actual'"
-          }
-
-      - name: Package (Unix)
-        if: matrix.archive == 'tar.gz'
-        shell: bash
-        run: |
-          BIN=target/${{ matrix.target }}/release/${BINARY_NAME}
-          ASSET=${BINARY_NAME}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
-          tar -czf "${ASSET}" -C "$(dirname ${BIN})" "$(basename ${BIN})"
-          echo "ASSET=${ASSET}" >> $GITHUB_ENV
-
-      - name: Package (Windows)
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          $bin = "target\${{ matrix.target }}\release\${env:BINARY_NAME}.exe"
-          $asset = "${env:BINARY_NAME}-${{ github.ref_name }}-${{ matrix.target }}.zip"
-          Compress-Archive -Path $bin -DestinationPath $asset
-          echo "ASSET=$asset" >> $env:GITHUB_ENV
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}
-          path: ${{ env.ASSET }}
-
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Generate release notes with git-cliff
-        uses: orhun/git-cliff-action@v4
-        id: cliff
+      - name: Clone proto definitions
+        run: git clone --depth 1 https://github.com/Mertcikla/tld-proto.git ../proto
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
         with:
-          config: cliff.toml
-          args: --latest --strip header
+          version: 0.15.1
+
+      - name: Install cargo-zigbuild
+        run: cargo install --locked cargo-zigbuild
+
+      - name: Release with GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
         env:
-          OUTPUT: RELEASE_NOTES.md
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/*
-          body_path: RELEASE_NOTES.md
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

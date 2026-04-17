@@ -1,0 +1,60 @@
+version: 2
+
+project_name: tld
+
+before:
+  hooks:
+    - cargo fetch --locked
+
+builds:
+  - id: unix
+    builder: rust
+    binary: tld
+    targets:
+      - x86_64-unknown-linux-gnu
+      - aarch64-unknown-linux-gnu
+      - x86_64-apple-darwin
+      - aarch64-apple-darwin
+    flags:
+      - --release
+
+archives:
+  - id: unix-archives
+    ids:
+      - unix
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+
+homebrew_casks:
+  - ids:
+      - unix-archives
+    binaries:
+      - tld
+    repository:
+      owner: Mertcikla
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://tldiagram.com"
+    description: "CLI for the tlDiagram architecture diagramming system"
+    url:
+      verified: "github.com/Mertcikla/tld-cli/"
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
