@@ -193,6 +193,7 @@ pub fn project(
     }
 
     let connectors = collapse_connectors(connectors);
+    tags::prune_sparse_auto_tags(&mut elements, 3);
     let stats = ProjectionStats {
         flow_count: family_chains.len(),
         symbols_hidden: pruned.hidden_count,

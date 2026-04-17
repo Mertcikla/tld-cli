@@ -14,6 +14,7 @@ use crate::analyzer::semantic::{
     endpoints::detect_endpoint, roles::DerivedRole, types::SemanticSymbol,
 };
 use crate::workspace::types::Element;
+use std::collections::HashMap;
 
 /// Which auto-tag dimensions the analyzer should emit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,6 +227,29 @@ fn push_unique(tags: &mut Vec<String>, tag: String) {
     }
 }
 
+/// Remove auto-generated tags that are attached to fewer than `min_elements`
+/// elements. User-authored tags are always preserved.
+pub fn prune_sparse_auto_tags(elements: &mut HashMap<String, Element>, min_elements: usize) {
+    if min_elements <= 1 {
+        return;
+    }
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for element in elements.values() {
+        for tag in &element.tags {
+            if is_auto_tag(tag) {
+                *counts.entry(tag.clone()).or_default() += 1;
+            }
+        }
+    }
+
+    for element in elements.values_mut() {
+        element.tags.retain(|tag| {
+            !is_auto_tag(tag) || counts.get(tag).copied().unwrap_or_default() >= min_elements
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,6 +455,75 @@ mod tests {
         assert_eq!(
             known_tag_color("domain:article"),
             known_tag_color("domain:article")
+        );
+    }
+
+    #[test]
+    fn prunes_auto_tags_below_minimum_support() {
+        let mut elements = HashMap::from([
+            (
+                "a".to_string(),
+                Element {
+                    tags: vec!["role:orchestrator".to_string(), "wip".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "b".to_string(),
+                Element {
+                    tags: vec!["role:orchestrator".to_string()],
+                    ..Default::default()
+                },
+            ),
+        ]);
+
+        prune_sparse_auto_tags(&mut elements, 3);
+
+        assert!(
+            !elements["a"]
+                .tags
+                .contains(&"role:orchestrator".to_string())
+        );
+        assert!(
+            !elements["b"]
+                .tags
+                .contains(&"role:orchestrator".to_string())
+        );
+        assert!(elements["a"].tags.contains(&"wip".to_string()));
+    }
+
+    #[test]
+    fn keeps_auto_tags_at_minimum_support() {
+        let mut elements = HashMap::from([
+            (
+                "a".to_string(),
+                Element {
+                    tags: vec!["role:orchestrator".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "b".to_string(),
+                Element {
+                    tags: vec!["role:orchestrator".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "c".to_string(),
+                Element {
+                    tags: vec!["role:orchestrator".to_string()],
+                    ..Default::default()
+                },
+            ),
+        ]);
+
+        prune_sparse_auto_tags(&mut elements, 3);
+
+        assert!(
+            elements
+                .values()
+                .all(|element| element.tags.contains(&"role:orchestrator".to_string()))
         );
     }
 }

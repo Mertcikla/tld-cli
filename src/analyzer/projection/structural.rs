@@ -95,6 +95,7 @@ pub fn project(
     }
 
     prune_utility_sinks(&mut output, &high_signal_slugs);
+    tags::prune_sparse_auto_tags(&mut output.elements, 3);
 
     output
 }
