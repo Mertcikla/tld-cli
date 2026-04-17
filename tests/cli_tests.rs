@@ -15,6 +15,16 @@ fn test_tld_help() {
 }
 
 #[test]
+fn test_tld_version_matches_package_version() {
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("--version");
+    cmd.assert().success().stdout(predicate::eq(format!(
+        "tld {}\n",
+        env!("CARGO_PKG_VERSION")
+    )));
+}
+
+#[test]
 fn test_tld_add_help() {
     let mut cmd = Command::cargo_bin("tld").unwrap();
     cmd.arg("add").arg("--help");

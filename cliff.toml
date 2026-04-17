@@ -45,3 +45,7 @@ skip_tags = ""
 ignore_tags = ""
 topo_order = false
 sort_commits = "newest"
+
+[bump]
+bump_type = "patch"
+initial_tag = "0.1.0"

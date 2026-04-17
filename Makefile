@@ -27,23 +27,25 @@ changelog:
 release:
 	@echo "Fetching latest tags..."
 	@git fetch --tags --quiet
-	@LATEST_TAG=$$(git tag --sort=-v:refname | head -n 1); \
-	if [ -z "$$LATEST_TAG" ]; then LATEST_TAG="v0.0.0"; fi; \
-	VERSION=$${LATEST_TAG#v}; \
-	MAJOR=$$(echo $$VERSION | cut -d. -f1); \
-	MINOR=$$(echo $$VERSION | cut -d. -f2); \
-	PATCH=$$(echo $$VERSION | cut -d. -f3); \
-	NEW_PATCH=$$((PATCH + 1)); \
-	NEW_TAG="v$$MAJOR.$$MINOR.$$NEW_PATCH"; \
-	echo "Current tag: $$LATEST_TAG"; \
-	echo "New tag:     $$NEW_TAG"; \
+	@CURRENT_VERSION=$$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1); \
+	NEW_VERSION=$$(git-cliff --bumped-version); \
+	NEW_TAG="v$$NEW_VERSION"; \
+	if git rev-parse -q --verify "refs/tags/$$NEW_TAG" >/dev/null; then \
+		echo "Tag $$NEW_TAG already exists."; \
+		exit 1; \
+	fi; \
+	echo "Current crate version: $$CURRENT_VERSION"; \
+	echo "New crate version:     $$NEW_VERSION"; \
+	echo "New tag:               $$NEW_TAG"; \
 	printf "Confirm release tag and push? [y/N] "; \
 	read confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		echo "Updating crate version..."; \
+		./scripts/set-version.sh $$NEW_VERSION; \
 		echo "Generating changelog..."; \
 		git-cliff --tag $$NEW_TAG --output CHANGELOG.md; \
-		git add CHANGELOG.md; \
-		git commit -m "chore(release): update changelog for $$NEW_TAG"; \
+		git add Cargo.toml Cargo.lock CHANGELOG.md; \
+		git commit -m "chore(release): $$NEW_TAG"; \
 		echo "Creating tag $$NEW_TAG..."; \
 		git tag $$NEW_TAG; \
 		echo "Pushing to origin..."; \
