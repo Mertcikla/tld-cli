@@ -12,8 +12,8 @@ fn main() {
         println!("cargo:rerun-if-changed={}", counter_path.display());
     }
 
-    let version = env::var("TLD_BUILD_VERSION")
-        .ok()
+    let version = env::var_os("TLD_BUILD_VERSION")
+        .and_then(|value| value.into_string().ok())
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(resolve_git_version);
 
