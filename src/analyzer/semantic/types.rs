@@ -32,15 +32,17 @@ pub enum EdgeOrigin {
 }
 
 /// Kind of semantic relationship on an edge.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EdgeKind {
     Calls,
     Imports,
+    DependsOn,
     Constructs,
     Reads,
     Writes,
     Returns,
     Throws,
+    Extends,
     Implements,
 }
 

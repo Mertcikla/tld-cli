@@ -86,6 +86,10 @@ const DEFAULT_EXCLUDES: &[&str] = &[
     "*.spec.jsx",
     "test_*.py",
     "*_test.py",
+    "tests.py",
+    "conftest.py",
+    "*_spec.py",
+    "spec_*.py",
     "*.gen.go",
 ];
 
@@ -454,7 +458,11 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     Ok(())
 }
 
-fn repo_name_hint(ws: &workspace::Workspace, scan_path: &Path, effective_root: Option<&str>) -> String {
+fn repo_name_hint(
+    ws: &workspace::Workspace,
+    scan_path: &Path,
+    effective_root: Option<&str>,
+) -> String {
     derive_repo_identity(ws, scan_path, effective_root).name
 }
 
@@ -476,11 +484,8 @@ fn derive_repo_identity(
         .map(|c| c.project_name.trim().to_string())
         .filter(|s| !s.is_empty());
 
-    let git_root = find_git_root_from(scan_path).or_else(|| {
-        effective_root
-            .map(Path::new)
-            .and_then(find_git_root_from)
-    });
+    let git_root = find_git_root_from(scan_path)
+        .or_else(|| effective_root.map(Path::new).and_then(find_git_root_from));
 
     let fallback_name = if scan_path.is_dir() {
         scan_path
@@ -508,11 +513,11 @@ fn derive_repo_identity(
         .and_then(|s| s.to_str())
         .map(ToString::to_string);
 
-    let name = configured_name
-        .or(git_root_name)
-        .unwrap_or(fallback_name);
+    let name = configured_name.or(git_root_name).unwrap_or(fallback_name);
 
-    let remote_url = git_root.as_ref().and_then(|root| detect_git_remote_url(root));
+    let remote_url = git_root
+        .as_ref()
+        .and_then(|root| detect_git_remote_url(root));
 
     RepoIdentity {
         owner: name.clone(),
@@ -522,11 +527,7 @@ fn derive_repo_identity(
 }
 
 fn find_git_root_from(path: &Path) -> Option<PathBuf> {
-    let dir = if path.is_file() {
-        path.parent()?
-    } else {
-        path
-    };
+    let dir = if path.is_file() { path.parent()? } else { path };
 
     let marker = dir.join(".git");
     if marker.exists() {

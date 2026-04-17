@@ -367,6 +367,7 @@ impl<'a> WorkspaceBuilder<'a> {
                     branch: self.ctx.branch.clone(),
                     file_path: rel.clone(),
                     symbol: sym.name.clone(),
+                    symbol_kind: sym.kind.clone(),
                     description: sym.description.clone(),
                     placements: vec![ViewPlacement {
                         parent_ref: parent_slug,

@@ -83,9 +83,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
                     nanos: m.updated_at.timestamp_subsec_nanos().cast_signed(),
                 });
             }
-            if has_view
-                && let Some(m) = meta.views.get(ref_name)
-            {
+            if has_view && let Some(m) = meta.views.get(ref_name) {
                 plan_el.view_id = Some(m.id);
                 plan_el.view_updated_at = Some(Timestamp {
                     seconds: m.updated_at.timestamp(),
@@ -145,9 +143,7 @@ fn some_if_not_empty(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::build;
-    use crate::workspace::{
-        Config, Connector, Element, ViewPlacement, Workspace,
-    };
+    use crate::workspace::{Config, Connector, Element, ViewPlacement, Workspace};
     use std::collections::HashMap;
 
     #[test]

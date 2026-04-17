@@ -138,11 +138,7 @@ pub fn detect_controller(annotation: &Annotation) -> Option<ControllerKind> {
         .unwrap_or(raw)
         .rsplit_once("::")
         .map(|(_, t)| t)
-        .unwrap_or_else(|| {
-            raw.rsplit_once('.')
-                .map(|(_, t)| t)
-                .unwrap_or(raw)
-        });
+        .unwrap_or_else(|| raw.rsplit_once('.').map(|(_, t)| t).unwrap_or(raw));
     match last {
         "RestController" | "Controller" => Some(ControllerKind::Controller),
         "api_view" => Some(ControllerKind::ApiView),
@@ -186,8 +182,20 @@ pub fn detect_route_call(receiver: &str, method_name: &str) -> Option<HttpMethod
 }
 
 const ROUTER_RECEIVERS: &[&str] = &[
-    "router", "app", "group", "r", "e", "mux", "api", "srv", "server", "engine", "handler", "rg",
-    "bp", "blueprint",
+    "router",
+    "app",
+    "group",
+    "r",
+    "e",
+    "mux",
+    "api",
+    "srv",
+    "server",
+    "engine",
+    "handler",
+    "rg",
+    "bp",
+    "blueprint",
 ];
 
 fn direct_verb(s: &str) -> Option<HttpMethod> {

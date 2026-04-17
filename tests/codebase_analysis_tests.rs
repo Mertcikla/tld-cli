@@ -279,8 +279,8 @@ fn test_python_structural_has_class_symbols() {
 
     let elements = fs::read_to_string(dir.path().join("elements.yaml")).unwrap();
     assert!(
-        elements.contains("class"),
-        "Python fixture should contain class elements"
+        elements.contains("symbol_kind: class") || elements.contains("kind: class"),
+        "Python fixture should preserve class declaration kind"
     );
 }
 
@@ -357,6 +357,11 @@ fn test_data_flow_view_typescript() {
 
     let elements_path = dir.path().join("elements.yaml");
     assert!(elements_path.exists(), "elements.yaml must exist");
+    let elements = fs::read_to_string(elements_path).unwrap();
+    assert!(
+        !elements.contains("kind: function") && !elements.contains("kind: method"),
+        "data-flow view should not leak raw function/method kinds"
+    );
 }
 
 // ── dry-run behavior ─────────────────────────────────────────────────────────

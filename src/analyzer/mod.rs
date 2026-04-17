@@ -16,6 +16,8 @@ use std::path::Path;
 use ts_pack_core::{detect_language_from_path, get_language};
 pub use types::*;
 
+const MAX_ANALYZE_FILE_BYTES: u64 = 512 * 1024;
+
 /// Callback invoked for each file or directory visited during analysis.
 /// Arguments: (path, is_dir).
 pub type OnEntry<'a> = Option<&'a dyn Fn(&str, bool)>;
@@ -204,6 +206,9 @@ impl Service for TreeSitterService {
             if rules.should_ignore_path(path) {
                 return Ok(AnalysisResult::default());
             }
+            if metadata.len() > MAX_ANALYZE_FILE_BYTES {
+                return Ok(AnalysisResult::default());
+            }
             if let Some(cb) = on_entry {
                 cb(path, false);
             }
@@ -251,6 +256,10 @@ impl TreeSitterService {
                 Self::walk_dir(&path, root, rules, on_entry, merged)?;
             } else {
                 if rules.should_ignore_path(rel_path) {
+                    continue;
+                }
+                let metadata = entry.metadata()?;
+                if metadata.len() > MAX_ANALYZE_FILE_BYTES {
                     continue;
                 }
                 if let Some(cb) = on_entry {

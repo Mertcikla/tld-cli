@@ -163,11 +163,12 @@ fn walk_recursive(
 fn edge_stage_label(kind: &EdgeKind) -> String {
     match kind {
         EdgeKind::Constructs => "construct",
+        EdgeKind::DependsOn => "depend",
         EdgeKind::Reads => "read",
         EdgeKind::Writes => "write",
         EdgeKind::Returns => "return",
         EdgeKind::Throws => "external",
-        EdgeKind::Calls | EdgeKind::Imports | EdgeKind::Implements => "call",
+        EdgeKind::Calls | EdgeKind::Imports | EdgeKind::Extends | EdgeKind::Implements => "call",
     }
     .to_string()
 }

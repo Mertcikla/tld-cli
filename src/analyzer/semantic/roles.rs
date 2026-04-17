@@ -66,6 +66,10 @@ fn classify(
     m: &super::graph::NodeMetrics,
     graph: &SemanticGraph,
 ) -> DerivedRole {
+    if sym.external {
+        return DerivedRole::Adapter;
+    }
+
     // ── Framework-annotation rules ───────────────────────────────────────────
 
     // Any symbol bearing an HTTP endpoint annotation is an Entrypoint, even if
@@ -81,11 +85,17 @@ fn classify(
     if looks_like_interface_contract(sym) {
         return DerivedRole::Interface;
     }
-    if looks_like_data_scaffolding(sym) {
-        return DerivedRole::DataCarrier;
-    }
     if looks_like_bootstrap_wiring(sym) {
         return DerivedRole::Bootstrap;
+    }
+    if looks_like_repository(sym) {
+        return DerivedRole::Adapter;
+    }
+    if looks_like_service(sym) {
+        return DerivedRole::Orchestrator;
+    }
+    if looks_like_data_scaffolding(sym) {
+        return DerivedRole::DataCarrier;
     }
     if looks_like_support_scaffolding(sym) {
         return DerivedRole::LowSignal;
@@ -191,9 +201,13 @@ fn looks_like_interface_contract(sym: &super::types::SemanticSymbol) -> bool {
 
     let name = sym.name.to_ascii_lowercase();
     let path = sym.file_path.to_ascii_lowercase();
-    let in_contract_path = has_path_segment(&path, &["interface", "interfaces", "contract", "contracts"]);
+    let in_contract_path =
+        has_path_segment(&path, &["interface", "interfaces", "contract", "contracts"]);
     in_contract_path
-        && matches!(sym.kind, DeclKind::Class | DeclKind::Struct | DeclKind::Type)
+        && matches!(
+            sym.kind,
+            DeclKind::Class | DeclKind::Struct | DeclKind::Type
+        )
         && (name.starts_with('i') || name.ends_with("interface") || name.ends_with("port"))
 }
 
@@ -221,7 +235,17 @@ fn looks_like_data_scaffolding(sym: &super::types::SemanticSymbol) -> bool {
             "record",
             "records",
         ],
-    ) || contains_any(&stem, &["dto", "schema", "serializer", "validator", "request", "response"]);
+    ) || contains_any(
+        &stem,
+        &[
+            "dto",
+            "schema",
+            "serializer",
+            "validator",
+            "request",
+            "response",
+        ],
+    );
 
     let scaffold_name = contains_any(
         &name,
@@ -255,6 +279,20 @@ fn looks_like_data_scaffolding(sym: &super::types::SemanticSymbol) -> bool {
     }
 }
 
+fn looks_like_repository(sym: &super::types::SemanticSymbol) -> bool {
+    let path = sym.file_path.to_ascii_lowercase();
+    let name = sym.name.to_ascii_lowercase();
+    has_path_segment(&path, &["repository", "repositories", "repo", "repos"])
+        || contains_any(&name, &["repository", "repo"])
+}
+
+fn looks_like_service(sym: &super::types::SemanticSymbol) -> bool {
+    let path = sym.file_path.to_ascii_lowercase();
+    let name = sym.name.to_ascii_lowercase();
+    has_path_segment(&path, &["service", "services", "controller", "controllers"])
+        || contains_any(&name, &["service", "controller"])
+}
+
 fn looks_like_bootstrap_wiring(sym: &super::types::SemanticSymbol) -> bool {
     let path = sym.file_path.to_ascii_lowercase();
     let name = sym.name.to_ascii_lowercase();
@@ -277,7 +315,14 @@ fn looks_like_bootstrap_wiring(sym: &super::types::SemanticSymbol) -> bool {
         ],
     ) || contains_any(
         &stem,
-        &["config", "settings", "provider", "container", "bootstrap", "startup"],
+        &[
+            "config",
+            "settings",
+            "provider",
+            "container",
+            "bootstrap",
+            "startup",
+        ],
     ) || contains_any(
         &name,
         &[
@@ -422,11 +467,7 @@ mod tests {
     #[test]
     fn classify_marks_validators_as_low_signal() {
         let bundle = SemanticBundle {
-            symbols: vec![sym(
-                "Bind",
-                DeclKind::Method,
-                "users/validators.go",
-            )],
+            symbols: vec![sym("Bind", DeclKind::Method, "users/validators.go")],
             ..Default::default()
         };
         let graph = SemanticGraph::build(&bundle);

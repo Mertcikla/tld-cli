@@ -1,6 +1,7 @@
 pub mod endpoints;
 pub mod flows;
 pub mod graph;
+pub mod infra;
 pub mod prune;
 pub mod resolver;
 pub mod roles;

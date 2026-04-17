@@ -456,9 +456,7 @@ fn extract_rust_annotations(decl_node: &Node, source: &[u8]) -> Vec<Annotation> 
 
 fn parse_rust_attribute(attr_item: &Node, source: &[u8]) -> Option<Annotation> {
     let text = attr_item.utf8_text(source).unwrap_or_default().trim();
-    let inner = text
-        .strip_prefix("#!")
-        .or_else(|| text.strip_prefix('#'))?;
+    let inner = text.strip_prefix("#!").or_else(|| text.strip_prefix('#'))?;
     let inner = inner.strip_prefix('[')?;
     let inner = inner.strip_suffix(']')?.trim();
     if let Some(paren_idx) = inner.find('(') {
