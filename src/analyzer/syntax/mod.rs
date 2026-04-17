@@ -114,6 +114,7 @@ fn convert_symbols(symbols: &[&Symbol]) -> Vec<SyntaxDecl> {
                     end: sym.line.cast_unsigned(),
                 },
                 description: sym.description.clone(),
+                annotations: sym.annotations.clone(),
             }
         })
         .collect()
@@ -146,6 +147,7 @@ fn convert_refs(refs: &[&AnalyzerRef], decls: &[SyntaxDecl]) -> Vec<SyntaxRef> {
                 owner_local_id,
                 kind,
                 text: r.name.clone(),
+                receiver: r.receiver.clone(),
                 span: LineColSpan {
                     start_line: r.line.cast_unsigned(),
                     start_col: r.column.cast_unsigned(),
@@ -684,7 +686,7 @@ mod tests {
     #[test]
     fn java_bridge_extracts_control_regions() {
         let result = TreeSitterService::extract_file(
-            "tests/test-codebase/java/src/main/java/com/example/ecommerce/service/OrderService.java",
+            "tests/test-codebase/java-project/src/main/java/com/example/ecommerce/service/OrderService.java",
         )
         .expect("java fixture should parse");
 
@@ -692,10 +694,7 @@ mod tests {
         let file = syntax
             .files
             .iter()
-            .find(|file| {
-                file.path
-                    .ends_with("src/main/java/com/example/ecommerce/service/OrderService.java")
-            })
+            .find(|file| file.path.ends_with("ecommerce/service/OrderService.java"))
             .expect("OrderService.java syntax file should exist");
         let place_order_local_id = file
             .decls

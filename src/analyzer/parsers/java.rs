@@ -6,7 +6,7 @@
     clippy::collapsible_if
 )]
 use crate::analyzer::queries;
-use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
+use crate::analyzer::types::{AnalysisResult, Annotation, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -95,6 +95,7 @@ fn parse_declarations(
                 description: find_comment(&outer, source),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_java_annotations(&outer, source),
             });
 
             if let Some(body_node) = class_body_node {
@@ -112,6 +113,7 @@ fn parse_declarations(
                 description: find_comment(&outer, source),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_java_annotations(&outer, source),
             });
 
             if let Some(body_node) = iface_body_node {
@@ -177,6 +179,7 @@ fn parse_class_members(
                     description: find_comment(&decl_node, source),
                     parent: class_name.to_string(),
                     technology: String::new(),
+                    annotations: extract_java_annotations(&decl_node, source),
                 });
             } else if idx == mq.ctor_idx {
                 let decl_node = cap_node.parent().unwrap_or(cap_node);
@@ -192,6 +195,7 @@ fn parse_class_members(
                     description: find_comment(&decl_node, source),
                     parent: class_name.to_string(),
                     technology: String::new(),
+                    annotations: extract_java_annotations(&decl_node, source),
                 });
             }
         }
@@ -240,6 +244,7 @@ fn parse_interface_members(
                     description: String::new(),
                     parent: iface_name.to_string(),
                     technology: String::new(),
+                    annotations: extract_java_annotations(&decl_node, source),
                 });
             }
         }
@@ -303,10 +308,16 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver: String::new(),
                     });
                 }
             } else if idx == rq.call_idx {
                 let name = cap_node.utf8_text(source).unwrap_or_default().to_string();
+                let receiver = cap_node
+                    .parent()
+                    .and_then(|p| p.child_by_field_name("object"))
+                    .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                    .unwrap_or_default();
                 if !name.is_empty() {
                     result.refs.push(Ref {
                         name,
@@ -315,11 +326,60 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver,
                     });
                 }
             }
         }
     }
+}
+
+fn extract_java_annotations(decl_node: &Node, source: &[u8]) -> Vec<Annotation> {
+    let mut out = Vec::new();
+    let mut cursor = decl_node.walk();
+    for child in decl_node.named_children(&mut cursor) {
+        if child.kind() != "modifiers" {
+            continue;
+        }
+        let mut mc = child.walk();
+        for mchild in child.named_children(&mut mc) {
+            match mchild.kind() {
+                "marker_annotation" => {
+                    let name = mchild
+                        .child_by_field_name("name")
+                        .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                        .unwrap_or_default();
+                    if !name.is_empty() {
+                        out.push(Annotation {
+                            name,
+                            args: Vec::new(),
+                        });
+                    }
+                }
+                "annotation" => {
+                    let name = mchild
+                        .child_by_field_name("name")
+                        .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                        .unwrap_or_default();
+                    let args = mchild
+                        .child_by_field_name("arguments")
+                        .map(|args_node| {
+                            let mut ac = args_node.walk();
+                            args_node
+                                .named_children(&mut ac)
+                                .map(|c| c.utf8_text(source).unwrap_or_default().to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !name.is_empty() {
+                        out.push(Annotation { name, args });
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
 }
 
 fn find_comment(node: &Node, source: &[u8]) -> String {

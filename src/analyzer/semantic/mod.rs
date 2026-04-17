@@ -1,3 +1,4 @@
+pub mod endpoints;
 pub mod flows;
 pub mod graph;
 pub mod prune;

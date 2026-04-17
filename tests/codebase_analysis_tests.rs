@@ -7,7 +7,7 @@ use tempfile::tempdir;
 
 #[test]
 fn test_analyze_all_codebases() {
-    let languages = vec!["go", "python", "typescript", "java", "cpp"];
+    let languages = vec!["go", "python", "typescript", "java-project", "cpp"];
 
     for lang in languages {
         println!("Testing analysis of {} codebase...", lang);
@@ -288,7 +288,7 @@ fn test_python_structural_has_class_symbols() {
 
 #[test]
 fn test_business_view_all_codebases() {
-    let languages = vec!["go", "python", "typescript", "java", "cpp"];
+    let languages = vec!["go", "python", "typescript", "java-project", "cpp"];
 
     for lang in languages {
         println!("Testing --view business for {} codebase...", lang);
@@ -572,7 +572,7 @@ fn run_analyze_then_validate(codebase_path: &str) {
 /// Invariant: every standard codebase fixture produces a valid workspace.
 #[test]
 fn test_analyze_produces_valid_workspace_for_all_fixtures() {
-    let fixtures = ["go", "python", "typescript", "java", "cpp"];
+    let fixtures = ["go", "python", "typescript", "java-project", "cpp"];
     for fixture in fixtures {
         run_analyze_then_validate(&format!("tests/test-codebase/{fixture}"));
     }

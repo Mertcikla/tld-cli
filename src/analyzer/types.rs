@@ -1,7 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+/// Annotation attached to a declaration (Python decorator, Java annotation,
+/// TypeScript decorator, Rust attribute macro). The semantic layer uses these
+/// to detect HTTP endpoints, DI injection points, and similar framework
+/// dispatch patterns that are invisible at the raw call graph level.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Annotation {
+    /// Identifier the framework uses (e.g. `GetMapping`, `router.get`,
+    /// `post`, `api_view`). Leading `@` and `#[ ... ]` wrappers are stripped.
+    pub name: String,
+    /// Positional argument texts as written in source (quotes preserved).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+}
+
 /// Symbol is a named declaration found in a source file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Symbol {
     pub name: String,
     pub kind: String,
@@ -16,6 +30,8 @@ pub struct Symbol {
     pub technology: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<Annotation>,
 }
 
 #[expect(clippy::trivially_copy_pass_by_ref)]
@@ -24,7 +40,7 @@ fn is_zero(v: &i32) -> bool {
 }
 
 /// Ref is a call-site reference to a named symbol found within a source file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Ref {
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -36,6 +52,12 @@ pub struct Ref {
     pub line: i32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub column: i32,
+    /// Receiver expression text for method calls (e.g. `router` in
+    /// `router.get(...)`, `self.db` in `self.db.query(...)`). Empty for
+    /// bare function calls. Required to disambiguate framework dispatch
+    /// and to feed the infrastructure registry.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub receiver: String,
 }
 
 /// Result holds the output of extracting symbols from one or more files.

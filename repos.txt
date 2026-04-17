@@ -1,1 +1,12 @@
-https://github.com/Mertcikla/tld-cli
+/Users/mertcikla/apps/diag/tld/tests/real-world/angular-realworld-example-app
+/Users/mertcikla/apps/diag/tld/tests/real-world/fastapi-odmantic-realworld-example
+/Users/mertcikla/apps/diag/tld/tests/real-world/fastapi-realworld-backend
+/Users/mertcikla/apps/diag/tld/tests/real-world/golang-gin-realworld-example-app
+/Users/mertcikla/apps/diag/tld/tests/real-world/realworld_python-lambda-DDB
+/Users/mertcikla/apps/diag/tld/tests/real-world/realworld-django-ninja
+/Users/mertcikla/apps/diag/tld/tests/real-world/realWorld-DjangoRestFramework
+/Users/mertcikla/apps/diag/tld/tests/real-world/realworld-flask
+/Users/mertcikla/apps/diag/tld/tests/real-world/realworld-rust-rocket
+/Users/mertcikla/apps/diag/tld/tests/real-world/realworld-springboot-java
+/Users/mertcikla/apps/diag/tld/tests/real-world/realworld-v1-rust-actix-web-diesel
+/Users/mertcikla/apps/diag/tld/tests/real-world/spring-boot-realworld-example-app

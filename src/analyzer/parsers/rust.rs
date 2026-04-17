@@ -5,7 +5,7 @@
     clippy::expect_used
 )]
 use crate::analyzer::queries;
-use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
+use crate::analyzer::types::{AnalysisResult, Annotation, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -119,6 +119,7 @@ fn parse_declarations(
                 description: find_doc_comment(&outer, source),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_rust_annotations(&outer, source),
             });
         } else if let Some(name_node) = struct_name_node {
             let outer = name_node.parent().unwrap_or(name_node);
@@ -131,6 +132,7 @@ fn parse_declarations(
                 description: find_doc_comment(&outer, source),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_rust_annotations(&outer, source),
             });
         } else if let Some(name_node) = enum_name_node {
             let outer = name_node.parent().unwrap_or(name_node);
@@ -143,6 +145,7 @@ fn parse_declarations(
                 description: find_doc_comment(&outer, source),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_rust_annotations(&outer, source),
             });
         } else if let Some(name_node) = trait_name_node {
             let outer = name_node.parent().unwrap_or(name_node);
@@ -155,6 +158,7 @@ fn parse_declarations(
                 description: find_doc_comment(&outer, source),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_rust_annotations(&outer, source),
             });
         } else if let Some(name_node) = type_name_node {
             let outer = name_node.parent().unwrap_or(name_node);
@@ -167,6 +171,7 @@ fn parse_declarations(
                 description: find_doc_comment(&outer, source),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_rust_annotations(&outer, source),
             });
         } else if let Some(node) = impl_node {
             if let Some(type_node) = impl_type_node {
@@ -229,6 +234,7 @@ fn parse_impl_members(
                     description: find_doc_comment(&outer, source),
                     parent: parent_type.to_string(),
                     technology: String::new(),
+                    annotations: extract_rust_annotations(&outer, source),
                 });
             }
         }
@@ -271,7 +277,7 @@ fn parse_refs(
             let cap_node = cap.node;
             let idx = cap.index;
             if idx == rq.call_idx {
-                let name = rust_call_name(&cap_node, source);
+                let (name, receiver) = rust_call_info(&cap_node, source);
                 if !name.is_empty() {
                     result.refs.push(Ref {
                         name,
@@ -280,10 +286,16 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver,
                     });
                 }
             } else if idx == rq.method_idx {
                 let name = cap_node.utf8_text(source).unwrap_or_default().to_string();
+                let receiver = cap_node
+                    .parent()
+                    .and_then(|p| p.child_by_field_name("value"))
+                    .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                    .unwrap_or_default();
                 if !name.is_empty() {
                     result.refs.push(Ref {
                         name,
@@ -292,6 +304,7 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver,
                     });
                 }
             }
@@ -326,28 +339,54 @@ fn type_name_from_node(node: &Node, source: &[u8]) -> String {
     }
 }
 
-fn rust_call_name(node: &Node, source: &[u8]) -> String {
+fn rust_call_info(node: &Node, source: &[u8]) -> (String, String) {
     match node.kind() {
-        "identifier" => node.utf8_text(source).unwrap_or_default().to_string(),
-        "field_expression" => node
-            .child_by_field_name("field")
-            .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
-            .unwrap_or_default(),
-        "scoped_identifier" => node.child_by_field_name("name").map_or_else(
-            || {
-                let text = node.utf8_text(source).unwrap_or_default();
-                text.rsplit("::").next().unwrap_or(text).trim().to_string()
-            },
-            |n| n.utf8_text(source).unwrap_or_default().to_string(),
+        "identifier" => (
+            node.utf8_text(source).unwrap_or_default().to_string(),
+            String::new(),
         ),
+        "field_expression" => {
+            let name = node
+                .child_by_field_name("field")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            let receiver = node
+                .child_by_field_name("value")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            (name, receiver)
+        }
+        "scoped_identifier" => {
+            let name = node.child_by_field_name("name").map_or_else(
+                || {
+                    let text = node.utf8_text(source).unwrap_or_default();
+                    text.rsplit("::").next().unwrap_or(text).trim().to_string()
+                },
+                |n| n.utf8_text(source).unwrap_or_default().to_string(),
+            );
+            let receiver = node
+                .child_by_field_name("path")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            (name, receiver)
+        }
         "generic_function" => node
             .child_by_field_name("function")
-            .map(|n| rust_call_name(&n, source))
+            .map(|n| rust_call_info(&n, source))
             .unwrap_or_default(),
         _ => {
             let text = node.utf8_text(source).unwrap_or_default();
-            let text = text.rsplit("::").next().unwrap_or(text);
-            text.split('<').next().unwrap_or(text).trim().to_string()
+            let (receiver, name_part) = text.rsplit_once("::").map_or_else(
+                || (String::new(), text.to_string()),
+                |(r, n)| (r.to_string(), n.to_string()),
+            );
+            let name = name_part
+                .split('<')
+                .next()
+                .unwrap_or(&name_part)
+                .trim()
+                .to_string();
+            (name, receiver)
         }
     }
 }
@@ -372,6 +411,7 @@ fn collect_use_paths(node: &Node, source: &[u8], path: &str, result: &mut Analys
                     file_path: path.to_string(),
                     line: (node.start_position().row + 1) as i32,
                     column: (node.start_position().column + 1) as i32,
+                    receiver: String::new(),
                 });
             }
         }
@@ -388,11 +428,85 @@ fn collect_use_paths(node: &Node, source: &[u8], path: &str, result: &mut Analys
                     file_path: path.to_string(),
                     line: (node.start_position().row + 1) as i32,
                     column: (node.start_position().column + 1) as i32,
+                    receiver: String::new(),
                 });
             }
         }
         _ => {}
     }
+}
+
+fn extract_rust_annotations(decl_node: &Node, source: &[u8]) -> Vec<Annotation> {
+    let mut attrs: Vec<Node> = Vec::new();
+    let mut current = decl_node.prev_named_sibling();
+    while let Some(sib) = current {
+        if sib.kind() == "attribute_item" || sib.kind() == "inner_attribute_item" {
+            attrs.push(sib);
+            current = sib.prev_named_sibling();
+        } else {
+            break;
+        }
+    }
+    attrs.reverse();
+    attrs
+        .into_iter()
+        .filter_map(|n| parse_rust_attribute(&n, source))
+        .collect()
+}
+
+fn parse_rust_attribute(attr_item: &Node, source: &[u8]) -> Option<Annotation> {
+    let text = attr_item.utf8_text(source).unwrap_or_default().trim();
+    let inner = text
+        .strip_prefix("#!")
+        .or_else(|| text.strip_prefix('#'))?;
+    let inner = inner.strip_prefix('[')?;
+    let inner = inner.strip_suffix(']')?.trim();
+    if let Some(paren_idx) = inner.find('(') {
+        let name = inner[..paren_idx].trim().to_string();
+        let args_text = &inner[paren_idx + 1..];
+        let args_text = args_text.strip_suffix(')').unwrap_or(args_text);
+        let args: Vec<String> = split_top_level_commas(args_text)
+            .into_iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if name.is_empty() {
+            None
+        } else {
+            Some(Annotation { name, args })
+        }
+    } else {
+        let name = inner.to_string();
+        if name.is_empty() {
+            None
+        } else {
+            Some(Annotation {
+                name,
+                args: Vec::new(),
+            })
+        }
+    }
+}
+
+fn split_top_level_commas(s: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(&s[start..i]);
+                start = i + c.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    if start <= s.len() {
+        out.push(&s[start..]);
+    }
+    out
 }
 
 fn find_doc_comment(node: &Node, source: &[u8]) -> String {

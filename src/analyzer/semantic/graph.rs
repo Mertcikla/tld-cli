@@ -211,6 +211,7 @@ mod tests {
                 sig_line: start,
             },
             control: ControlMetrics::default(),
+            annotations: Vec::new(),
         }
     }
 
@@ -302,6 +303,7 @@ mod tests {
                     tries: 1,
                     early_returns: 2,
                 },
+                annotations: Vec::new(),
             }],
             edges: vec![],
             unresolved_refs: vec![],

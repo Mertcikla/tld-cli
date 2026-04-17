@@ -6,7 +6,7 @@
     clippy::collapsible_if
 )]
 use crate::analyzer::queries;
-use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
+use crate::analyzer::types::{AnalysisResult, Annotation, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -93,6 +93,7 @@ fn parse_declarations(
                 description,
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_python_annotations(&outer, source),
             });
 
             if let Some(body_node) = class_body_node {
@@ -118,6 +119,7 @@ fn parse_declarations(
                     description,
                     parent: String::new(),
                     technology: String::new(),
+                    annotations: extract_python_annotations(&outer, source),
                 });
             }
         }
@@ -191,10 +193,60 @@ fn parse_class_methods(
                     description,
                     parent: class_name.to_string(),
                     technology: String::new(),
+                    annotations: extract_python_annotations(&fn_node, source),
                 });
             }
         }
     }
+}
+
+fn extract_python_annotations(def_node: &Node, source: &[u8]) -> Vec<Annotation> {
+    let Some(parent) = def_node.parent() else {
+        return Vec::new();
+    };
+    if parent.kind() != "decorated_definition" {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut cursor = parent.walk();
+    for child in parent.named_children(&mut cursor) {
+        if child.kind() != "decorator" {
+            continue;
+        }
+        let mut dc = child.walk();
+        let Some(expr) = child.named_children(&mut dc).next() else {
+            continue;
+        };
+        let (name, args) = parse_python_decorator_expr(&expr, source);
+        if !name.is_empty() {
+            out.push(Annotation { name, args });
+        }
+    }
+    out
+}
+
+fn parse_python_decorator_expr(node: &Node, source: &[u8]) -> (String, Vec<String>) {
+    if node.kind() == "call" {
+        let name = node
+            .child_by_field_name("function")
+            .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+            .unwrap_or_default();
+        let args = node
+            .child_by_field_name("arguments")
+            .map(|args_node| {
+                let mut cursor = args_node.walk();
+                args_node
+                    .named_children(&mut cursor)
+                    .map(|c| c.utf8_text(source).unwrap_or_default().to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        return (name, args);
+    }
+    (
+        node.utf8_text(source).unwrap_or_default().to_string(),
+        Vec::new(),
+    )
 }
 
 fn extract_docstring(body_node: &Node, source: &[u8]) -> String {
@@ -269,11 +321,15 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver: String::new(),
                     });
                 }
             } else if idx == rq.callee_idx {
                 let text = cap_node.utf8_text(source).unwrap_or_default();
-                let terminal_name = text.rsplit('.').next().unwrap_or(text).to_string();
+                let (receiver, terminal_name) = match text.rsplit_once('.') {
+                    Some((r, n)) => (r.to_string(), n.to_string()),
+                    None => (String::new(), text.to_string()),
+                };
                 if !terminal_name.is_empty() && terminal_name != "self" {
                     result.refs.push(Ref {
                         name: terminal_name,
@@ -282,6 +338,7 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver,
                     });
                 }
             }

@@ -52,58 +52,71 @@ pub fn score_all(
         let m = graph.metrics_for(id);
         let role = roles.get(id).unwrap_or(&DerivedRole::LowSignal);
         let mut s: i32 = 0;
+        let suppress_graph_bonuses = matches!(
+            role,
+            DerivedRole::LowSignal
+                | DerivedRole::DataCarrier
+                | DerivedRole::Bootstrap
+                | DerivedRole::Interface
+        );
 
         // ── Positive contributions ────────────────────────────────────────────
-        if m.cross_file_out >= 2 {
+        if !suppress_graph_bonuses && m.cross_file_out >= 2 {
             s += 4;
         }
         // Write / mutation edges out (approximated by Write kind edges).
         let write_out = count_edge_kind_out(graph, id, |e| {
             matches!(e.kind, super::types::EdgeKind::Writes)
         });
-        if write_out > 0 {
+        if !suppress_graph_bonuses && write_out > 0 {
             s += 3;
         }
         // High fan-out as a proxy for branching + multiple downstream calls.
-        if m.fan_out >= 3 {
+        if !suppress_graph_bonuses && m.fan_out >= 3 {
             s += 3;
-        } else if m.fan_out >= 2 {
+        } else if !suppress_graph_bonuses && m.fan_out >= 2 {
             s += 1;
         }
         // Constructs things and fan-out >= 2.
         let construct_out = count_edge_kind_out(graph, id, |e| {
             matches!(e.kind, super::types::EdgeKind::Constructs)
         });
-        if construct_out >= 1 && m.fan_out >= 2 {
+        if !suppress_graph_bonuses && construct_out >= 1 && m.fan_out >= 2 {
             s += 2;
         }
         // Reachable from an entrypoint.
-        if reachable_from_entry.contains(id) {
+        if !suppress_graph_bonuses && reachable_from_entry.contains(id) {
             s += 2;
         }
         // Has callers — something depends on this symbol.
-        if m.fan_in >= 2 {
+        if !suppress_graph_bonuses && m.fan_in >= 2 {
             s += 2;
-        } else if m.fan_in == 1 {
+        } else if !suppress_graph_bonuses && m.fan_in == 1 {
             s += 1;
         }
-        if m.cyclomatic_complexity >= 5 {
+        if !suppress_graph_bonuses && m.cyclomatic_complexity >= 5 {
             s += 2;
         }
-        if m.cognitive_complexity >= 7 {
+        if !suppress_graph_bonuses && m.cognitive_complexity >= 7 {
             s += 1;
         }
         // LSP-resolved edges are higher confidence.
-        if m.has_lsp_edges {
+        if !suppress_graph_bonuses && m.has_lsp_edges {
             s += 1;
         }
 
         // ── Negative contributions ────────────────────────────────────────────
         match role {
             DerivedRole::LowSignal | DerivedRole::DataCarrier => {
-                s -= 3;
+                s -= 4;
             }
             DerivedRole::Bootstrap => {
+                s -= 4;
+            }
+            DerivedRole::Interface => {
+                s -= 3;
+            }
+            DerivedRole::Utility => {
                 s -= 2;
             }
             _ => {}
@@ -194,6 +207,7 @@ mod tests {
                 sig_line: start,
             },
             control: ControlMetrics::default(),
+            annotations: Vec::new(),
         }
     }
 
@@ -271,5 +285,85 @@ mod tests {
                 .cyclomatic_complexity
                 >= 5
         );
+    }
+
+    #[test]
+    fn salience_penalizes_bootstrap_even_when_wiring_many_dependencies() {
+        let bundle = SemanticBundle {
+            symbols: vec![
+                make_symbol(
+                    "repo:src/container.ts:Container",
+                    "Container",
+                    DeclKind::Class,
+                    1,
+                    20,
+                ),
+                make_symbol(
+                    "repo:src/container.ts:wire",
+                    "wire",
+                    DeclKind::Function,
+                    22,
+                    35,
+                ),
+                make_symbol(
+                    "repo:src/user.ts:UserService",
+                    "UserService",
+                    DeclKind::Class,
+                    40,
+                    55,
+                ),
+                make_symbol(
+                    "repo:src/article.ts:ArticleService",
+                    "ArticleService",
+                    DeclKind::Class,
+                    57,
+                    72,
+                ),
+                make_symbol(
+                    "repo:src/profile.ts:ProfileService",
+                    "ProfileService",
+                    DeclKind::Class,
+                    74,
+                    89,
+                ),
+            ],
+            edges: vec![
+                SemanticEdge {
+                    source: "repo:src/container.ts:wire".to_string(),
+                    target: EdgeTarget::Resolved("repo:src/user.ts:UserService".to_string()),
+                    kind: EdgeKind::Calls,
+                    origin: EdgeOrigin::BareName,
+                    order_index: 0,
+                    cross_boundary: true,
+                },
+                SemanticEdge {
+                    source: "repo:src/container.ts:wire".to_string(),
+                    target: EdgeTarget::Resolved("repo:src/article.ts:ArticleService".to_string()),
+                    kind: EdgeKind::Calls,
+                    origin: EdgeOrigin::BareName,
+                    order_index: 1,
+                    cross_boundary: true,
+                },
+                SemanticEdge {
+                    source: "repo:src/container.ts:wire".to_string(),
+                    target: EdgeTarget::Resolved("repo:src/profile.ts:ProfileService".to_string()),
+                    kind: EdgeKind::Calls,
+                    origin: EdgeOrigin::BareName,
+                    order_index: 2,
+                    cross_boundary: true,
+                },
+            ],
+            unresolved_refs: vec![],
+        };
+
+        let graph = SemanticGraph::build(&bundle);
+        let mut roles = crate::analyzer::semantic::roles::infer_roles(&graph);
+        roles.insert(
+            "repo:src/container.ts:wire".to_string(),
+            DerivedRole::Bootstrap,
+        );
+
+        let scores = score_all(&graph, &roles);
+        assert!(scores["repo:src/container.ts:wire"] <= -1);
     }
 }

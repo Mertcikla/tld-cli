@@ -2,10 +2,12 @@
 #![allow(dead_code)]
 //! evidence rather than filename patterns or framework conventions.
 
+use super::endpoints::detect_endpoint;
 use super::graph::SemanticGraph;
 use super::types::SymbolId;
 use crate::analyzer::syntax::types::DeclKind;
 use std::collections::HashMap;
+use std::path::Path;
 
 /// High-level architectural role of a symbol.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +66,31 @@ fn classify(
     m: &super::graph::NodeMetrics,
     graph: &SemanticGraph,
 ) -> DerivedRole {
+    // ── Framework-annotation rules ───────────────────────────────────────────
+
+    // Any symbol bearing an HTTP endpoint annotation is an Entrypoint, even if
+    // graph metrics would otherwise classify it differently (framework-
+    // dispatched handlers look structurally like dead code because the router
+    // invokes them reflectively).
+    if sym.annotations.iter().any(|a| detect_endpoint(a).is_some()) {
+        return DerivedRole::Entrypoint;
+    }
+
+    // Name/path heuristics for common scaffolding that graph metrics alone
+    // tend to overvalue in layered web backends.
+    if looks_like_interface_contract(sym) {
+        return DerivedRole::Interface;
+    }
+    if looks_like_data_scaffolding(sym) {
+        return DerivedRole::DataCarrier;
+    }
+    if looks_like_bootstrap_wiring(sym) {
+        return DerivedRole::Bootstrap;
+    }
+    if looks_like_support_scaffolding(sym) {
+        return DerivedRole::LowSignal;
+    }
+
     // ── Hard rules based on DeclKind ─────────────────────────────────────────
 
     // Pure data shapes with no call edges out → DataCarrier.
@@ -155,4 +182,258 @@ fn count_unresolved_out(graph: &SemanticGraph, source: &str) -> usize {
         .outgoing_edges(source)
         .filter(|e| !e.target.is_resolved())
         .count()
+}
+
+fn looks_like_interface_contract(sym: &super::types::SemanticSymbol) -> bool {
+    if matches!(sym.kind, DeclKind::Interface | DeclKind::Trait) {
+        return true;
+    }
+
+    let name = sym.name.to_ascii_lowercase();
+    let path = sym.file_path.to_ascii_lowercase();
+    let in_contract_path = has_path_segment(&path, &["interface", "interfaces", "contract", "contracts"]);
+    in_contract_path
+        && matches!(sym.kind, DeclKind::Class | DeclKind::Struct | DeclKind::Type)
+        && (name.starts_with('i') || name.ends_with("interface") || name.ends_with("port"))
+}
+
+fn looks_like_data_scaffolding(sym: &super::types::SemanticSymbol) -> bool {
+    let path = sym.file_path.to_ascii_lowercase();
+    let name = sym.name.to_ascii_lowercase();
+    let stem = file_stem_lower(&path);
+    let scaffold_path = has_path_segment(
+        &path,
+        &[
+            "dto",
+            "dtos",
+            "schema",
+            "schemas",
+            "serializer",
+            "serializers",
+            "validator",
+            "validators",
+            "request",
+            "requests",
+            "response",
+            "responses",
+            "payload",
+            "payloads",
+            "record",
+            "records",
+        ],
+    ) || contains_any(&stem, &["dto", "schema", "serializer", "validator", "request", "response"]);
+
+    let scaffold_name = contains_any(
+        &name,
+        &[
+            "dto",
+            "schema",
+            "serializer",
+            "validator",
+            "request",
+            "response",
+            "payload",
+            "record",
+        ],
+    );
+
+    match sym.kind {
+        DeclKind::Class
+        | DeclKind::Struct
+        | DeclKind::Enum
+        | DeclKind::Type
+        | DeclKind::Field
+        | DeclKind::Variable => scaffold_path || scaffold_name,
+        DeclKind::Method | DeclKind::Function => {
+            scaffold_path
+                && (name.starts_with("from_")
+                    || name.starts_with("to_")
+                    || name == "bind"
+                    || name == "response")
+        }
+        _ => false,
+    }
+}
+
+fn looks_like_bootstrap_wiring(sym: &super::types::SemanticSymbol) -> bool {
+    let path = sym.file_path.to_ascii_lowercase();
+    let name = sym.name.to_ascii_lowercase();
+    let stem = file_stem_lower(&path);
+
+    has_path_segment(
+        &path,
+        &[
+            "config",
+            "configs",
+            "settings",
+            "provider",
+            "providers",
+            "container",
+            "containers",
+            "bootstrap",
+            "boot",
+            "startup",
+            "wiring",
+        ],
+    ) || contains_any(
+        &stem,
+        &["config", "settings", "provider", "container", "bootstrap", "startup"],
+    ) || contains_any(
+        &name,
+        &[
+            "create_app",
+            "configure",
+            "register",
+            "provider",
+            "container",
+            "bootstrap",
+        ],
+    )
+}
+
+fn looks_like_support_scaffolding(sym: &super::types::SemanticSymbol) -> bool {
+    let path = sym.file_path.to_ascii_lowercase();
+    let name = sym.name.to_ascii_lowercase();
+    let stem = file_stem_lower(&path);
+
+    has_path_segment(
+        &path,
+        &[
+            "exception",
+            "exceptions",
+            "error",
+            "errors",
+            "logging",
+            "middleware",
+            "middlewares",
+            "auth",
+            "security",
+            "util",
+            "utils",
+            "helper",
+            "helpers",
+        ],
+    ) || contains_any(
+        &stem,
+        &[
+            "exception",
+            "error",
+            "logging",
+            "middleware",
+            "auth",
+            "security",
+            "util",
+            "helper",
+        ],
+    ) || contains_any(
+        &name,
+        &[
+            "exception",
+            "error",
+            "middleware",
+            "token",
+            "password",
+            "hash",
+            "helper",
+        ],
+    )
+}
+
+fn has_path_segment(path: &str, needles: &[&str]) -> bool {
+    Path::new(path).components().any(|component| {
+        let segment = component.as_os_str().to_string_lossy().to_ascii_lowercase();
+        needles.iter().any(|needle| segment == *needle)
+    })
+}
+
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
+}
+
+fn file_stem_lower(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or(path)
+        .to_ascii_lowercase()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analyzer::semantic::graph::SemanticGraph;
+    use crate::analyzer::semantic::types::{
+        ControlMetrics, SemanticBundle, SemanticSymbol, SymbolSpans, Visibility,
+    };
+
+    fn sym(name: &str, kind: DeclKind, file_path: &str) -> SemanticSymbol {
+        SemanticSymbol {
+            symbol_id: format!("repo:{file_path}:{name}"),
+            repo_name: "repo".to_string(),
+            file_path: file_path.to_string(),
+            name: name.to_string(),
+            kind,
+            owner: None,
+            visibility: Visibility::Unknown,
+            external: false,
+            description: String::new(),
+            spans: SymbolSpans::default(),
+            control: ControlMetrics::default(),
+            annotations: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn classify_marks_dto_classes_as_data_carriers() {
+        let bundle = SemanticBundle {
+            symbols: vec![sym(
+                "UserLoginRequest",
+                DeclKind::Class,
+                "conduit/api/schemas/requests/user.py",
+            )],
+            ..Default::default()
+        };
+        let graph = SemanticGraph::build(&bundle);
+        let roles = infer_roles(&graph);
+        assert_eq!(
+            roles["repo:conduit/api/schemas/requests/user.py:UserLoginRequest"],
+            DerivedRole::DataCarrier
+        );
+    }
+
+    #[test]
+    fn classify_marks_container_wiring_as_bootstrap() {
+        let bundle = SemanticBundle {
+            symbols: vec![sym(
+                "get_article_service",
+                DeclKind::Function,
+                "conduit/core/providers.py",
+            )],
+            ..Default::default()
+        };
+        let graph = SemanticGraph::build(&bundle);
+        let roles = infer_roles(&graph);
+        assert_eq!(
+            roles["repo:conduit/core/providers.py:get_article_service"],
+            DerivedRole::Bootstrap
+        );
+    }
+
+    #[test]
+    fn classify_marks_validators_as_low_signal() {
+        let bundle = SemanticBundle {
+            symbols: vec![sym(
+                "Bind",
+                DeclKind::Method,
+                "users/validators.go",
+            )],
+            ..Default::default()
+        };
+        let graph = SemanticGraph::build(&bundle);
+        let roles = infer_roles(&graph);
+        assert!(matches!(
+            roles["repo:users/validators.go:Bind"],
+            DerivedRole::LowSignal | DerivedRole::DataCarrier
+        ));
+    }
 }

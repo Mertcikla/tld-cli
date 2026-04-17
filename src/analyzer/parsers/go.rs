@@ -96,6 +96,7 @@ fn parse_declarations(
                     description: find_comment(&outer, source),
                     parent: String::new(),
                     technology: String::new(),
+                    annotations: Vec::new(),
                 });
             } else if idx == decl.method_idx {
                 let recv_type = m
@@ -118,6 +119,7 @@ fn parse_declarations(
                     description: find_comment(&outer, source),
                     parent: recv_type,
                     technology: String::new(),
+                    annotations: Vec::new(),
                 });
             } else if idx == decl.struct_idx {
                 let outer = find_ancestor_of_kind(&cap_node, "type_spec").unwrap_or(cap_node);
@@ -130,6 +132,7 @@ fn parse_declarations(
                     description: find_comment(&outer, source),
                     parent: String::new(),
                     technology: String::new(),
+                    annotations: Vec::new(),
                 });
             } else if idx == decl.iface_idx {
                 let outer = find_ancestor_of_kind(&cap_node, "type_spec").unwrap_or(cap_node);
@@ -142,6 +145,7 @@ fn parse_declarations(
                     description: find_comment(&outer, source),
                     parent: String::new(),
                     technology: String::new(),
+                    annotations: Vec::new(),
                 });
             } else if idx == decl.type_idx {
                 // Check whether it's already covered by struct/iface captures.
@@ -159,6 +163,7 @@ fn parse_declarations(
                         description: String::new(),
                         parent: String::new(),
                         technology: String::new(),
+                        annotations: Vec::new(),
                     });
                 }
             } else if idx == decl.alias_idx {
@@ -172,6 +177,7 @@ fn parse_declarations(
                     description: String::new(),
                     parent: String::new(),
                     technology: String::new(),
+                    annotations: Vec::new(),
                 });
             }
         }
@@ -231,10 +237,11 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver: String::new(),
                     });
                 }
             } else if idx == rq.callee_idx {
-                let name = go_call_name(&cap_node, source);
+                let (name, receiver) = go_call_info(&cap_node, source);
                 if !name.is_empty() {
                     result.refs.push(Ref {
                         name,
@@ -243,6 +250,7 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver,
                     });
                 }
             }
@@ -280,39 +288,47 @@ fn find_comment(node: &Node, source: &[u8]) -> String {
     String::new()
 }
 
-fn go_call_name(node: &Node, source: &[u8]) -> String {
+fn go_call_info(node: &Node, source: &[u8]) -> (String, String) {
     match node.kind() {
-        "identifier" | "field_identifier" | "type_identifier" => {
-            node.utf8_text(source).unwrap_or_default().to_string()
-        }
+        "identifier" | "field_identifier" | "type_identifier" => (
+            node.utf8_text(source).unwrap_or_default().to_string(),
+            String::new(),
+        ),
         "selector_expression" => {
-            if let Some(field_node) = node.child_by_field_name("field") {
-                field_node.utf8_text(source).unwrap_or_default().to_string()
-            } else {
-                String::new()
-            }
+            let name = node
+                .child_by_field_name("field")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            let receiver = node
+                .child_by_field_name("operand")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            (name, receiver)
         }
         "parenthesized_expression" => {
             let mut cursor = node.walk();
             if let Some(child) = node.named_children(&mut cursor).next() {
-                go_call_name(&child, source)
+                go_call_info(&child, source)
             } else {
-                String::new()
+                (String::new(), String::new())
             }
         }
         _ => {
             let text = node.utf8_text(source).unwrap_or_default().trim();
             if text.is_empty() {
-                return String::new();
+                return (String::new(), String::new());
             }
-            let mut text = text.to_string();
-            if let Some(index) = text.rfind('.') {
-                text = text[index + 1..].to_string();
-            }
-            if let Some(index) = text.find('[') {
-                text = text[..index].to_string();
-            }
-            text.trim().to_string()
+            let (receiver, name_part) = text.rsplit_once('.').map_or_else(
+                || (String::new(), text.to_string()),
+                |(r, n)| (r.to_string(), n.to_string()),
+            );
+            let name_part = name_part
+                .split('[')
+                .next()
+                .unwrap_or(&name_part)
+                .trim()
+                .to_string();
+            (name_part, receiver)
         }
     }
 }

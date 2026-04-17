@@ -109,6 +109,7 @@ fn parse_declarations(
                 description: String::new(),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: Vec::new(),
             });
             if let Some(body) = class_body_node {
                 type_body_ranges.push((body.start_byte(), body.end_byte()));
@@ -126,6 +127,7 @@ fn parse_declarations(
                 description: String::new(),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: Vec::new(),
             });
             if let Some(body) = struct_body_node {
                 type_body_ranges.push((body.start_byte(), body.end_byte()));
@@ -143,6 +145,7 @@ fn parse_declarations(
                 description: String::new(),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: Vec::new(),
             });
         } else if let Some(decl_node) = fn_decl_node {
             // Skip functions inside class/struct bodies.
@@ -168,6 +171,7 @@ fn parse_declarations(
                     description: String::new(),
                     parent,
                     technology: String::new(),
+                    annotations: Vec::new(),
                 });
             }
         }
@@ -258,6 +262,7 @@ fn parse_type_members(
                 description: String::new(),
                 parent: type_name.to_string(),
                 technology: String::new(),
+                annotations: Vec::new(),
             });
         }
     }
@@ -367,18 +372,11 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver: String::new(),
                     });
                 }
             } else if idx == rq.callee_idx {
-                let text = cap_node.utf8_text(source).unwrap_or_default().trim();
-                let name = text
-                    .rsplit("::")
-                    .next()
-                    .unwrap_or(text)
-                    .rsplit('.')
-                    .next()
-                    .unwrap_or(text)
-                    .to_string();
+                let (name, receiver) = cpp_call_info(&cap_node, source);
                 if !name.is_empty() {
                     result.refs.push(Ref {
                         name,
@@ -387,9 +385,72 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver,
                     });
                 }
             }
+        }
+    }
+}
+
+fn cpp_call_info(node: &Node, source: &[u8]) -> (String, String) {
+    match node.kind() {
+        "identifier" | "field_identifier" | "type_identifier" => (
+            node.utf8_text(source).unwrap_or_default().to_string(),
+            String::new(),
+        ),
+        "field_expression" => {
+            let name = node
+                .child_by_field_name("field")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            let receiver = node
+                .child_by_field_name("argument")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            (name, receiver)
+        }
+        "qualified_identifier" => {
+            let name = node
+                .child_by_field_name("name")
+                .map(|n| cpp_name(&n, source))
+                .unwrap_or_default();
+            let receiver = node
+                .child_by_field_name("scope")
+                .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+                .unwrap_or_default();
+            (name, receiver)
+        }
+        "template_function" => {
+            let name = node
+                .child_by_field_name("name")
+                .map(|n| cpp_name(&n, source))
+                .unwrap_or_default();
+            (name, String::new())
+        }
+        "parenthesized_expression" => {
+            let mut cursor = node.walk();
+            if let Some(child) = node.named_children(&mut cursor).next() {
+                cpp_call_info(&child, source)
+            } else {
+                (String::new(), String::new())
+            }
+        }
+        _ => {
+            let text = node.utf8_text(source).unwrap_or_default().trim();
+            if text.is_empty() {
+                return (String::new(), String::new());
+            }
+            if let Some((r, n)) = text.rsplit_once("::") {
+                return (n.trim().to_string(), r.trim().to_string());
+            }
+            if let Some((r, n)) = text.rsplit_once('.') {
+                return (n.trim().to_string(), r.trim().to_string());
+            }
+            if let Some((r, n)) = text.rsplit_once("->") {
+                return (n.trim().to_string(), r.trim().to_string());
+            }
+            (text.to_string(), String::new())
         }
     }
 }

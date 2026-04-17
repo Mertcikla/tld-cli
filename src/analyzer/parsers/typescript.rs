@@ -5,7 +5,7 @@
     clippy::expect_used
 )]
 use crate::analyzer::queries;
-use crate::analyzer::types::{AnalysisResult, Ref, Symbol};
+use crate::analyzer::types::{AnalysisResult, Annotation, Ref, Symbol};
 use std::sync::OnceLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
@@ -42,7 +42,7 @@ fn parse_declarations(
     let decl = decl_query(language, path);
 
     // Collect all classes first so we can process methods with parent context.
-    let mut classes: Vec<(String, Node, i32, i32)> = Vec::new();
+    let mut classes: Vec<(String, Node, Node, i32, i32)> = Vec::new();
     let mut other_symbols: Vec<Symbol> = Vec::new();
 
     let mut cursor = QueryCursor::new();
@@ -68,13 +68,14 @@ fn parse_declarations(
 
         if let Some(name_node) = class_name_node {
             let class_name = name_node.utf8_text(source).unwrap_or_default().to_string();
+            let outer = name_node.parent().unwrap_or(name_node);
             let outer_line = class_body_node
                 .map_or((name_node.end_position().row + 1) as i32, |b| {
                     (b.end_position().row + 1) as i32
                 });
             let name_line = (name_node.start_position().row + 1) as i32;
             if let Some(body) = class_body_node {
-                classes.push((class_name, body, outer_line, name_line));
+                classes.push((class_name, outer, body, outer_line, name_line));
             } else {
                 other_symbols.push(Symbol {
                     name: class_name,
@@ -85,6 +86,7 @@ fn parse_declarations(
                     description: String::new(),
                     parent: String::new(),
                     technology: String::new(),
+                    annotations: extract_ts_annotations(&outer, source),
                 });
             }
         } else if let Some(name_node) = iface_name_node {
@@ -98,6 +100,7 @@ fn parse_declarations(
                 description: String::new(),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: Vec::new(),
             });
         } else if let Some(name_node) = alias_name_node {
             let outer = name_node.parent().unwrap_or(name_node);
@@ -110,6 +113,7 @@ fn parse_declarations(
                 description: String::new(),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: Vec::new(),
             });
         } else if let Some(name_node) = fn_name_node {
             let outer = name_node.parent().unwrap_or(name_node);
@@ -122,12 +126,13 @@ fn parse_declarations(
                 description: String::new(),
                 parent: String::new(),
                 technology: String::new(),
+                annotations: extract_ts_annotations(&outer, source),
             });
         }
     }
 
     // Emit class symbols first (so methods can reference them by slug).
-    for (class_name, body_node, outer_line, name_line) in &classes {
+    for (class_name, outer, body_node, outer_line, name_line) in &classes {
         result.symbols.push(Symbol {
             name: class_name.clone(),
             kind: "class".to_string(),
@@ -137,6 +142,7 @@ fn parse_declarations(
             description: String::new(),
             parent: String::new(),
             technology: String::new(),
+            annotations: extract_ts_annotations(outer, source),
         });
         parse_class_members(body_node, source, path, language, class_name, result);
     }
@@ -185,6 +191,7 @@ fn parse_class_members(
                     description: String::new(),
                     parent: class_name.to_string(),
                     technology: String::new(),
+                    annotations: extract_ts_annotations(&outer, source),
                 });
             }
         }
@@ -280,6 +287,68 @@ fn ref_query(language: &Language, path: &str) -> &'static RefQuery {
     }
 }
 
+fn extract_ts_annotations(decl_node: &Node, source: &[u8]) -> Vec<Annotation> {
+    let mut out = Vec::new();
+    let mut cursor = decl_node.walk();
+    for child in decl_node.named_children(&mut cursor) {
+        if child.kind() != "decorator" {
+            continue;
+        }
+        let mut dc = child.walk();
+        let Some(expr) = child.named_children(&mut dc).next() else {
+            continue;
+        };
+        let (name, args) = parse_ts_decorator_expr(&expr, source);
+        if !name.is_empty() {
+            out.push(Annotation { name, args });
+        }
+    }
+    // Decorators can also live on the parent export_statement.
+    if let Some(parent) = decl_node.parent() {
+        if parent.kind() == "export_statement" {
+            let mut cursor = parent.walk();
+            for child in parent.named_children(&mut cursor) {
+                if child.kind() != "decorator" {
+                    continue;
+                }
+                let mut dc = child.walk();
+                let Some(expr) = child.named_children(&mut dc).next() else {
+                    continue;
+                };
+                let (name, args) = parse_ts_decorator_expr(&expr, source);
+                if !name.is_empty() {
+                    out.push(Annotation { name, args });
+                }
+            }
+        }
+    }
+    out
+}
+
+fn parse_ts_decorator_expr(node: &Node, source: &[u8]) -> (String, Vec<String>) {
+    if node.kind() == "call_expression" {
+        let name = node
+            .child_by_field_name("function")
+            .map(|n| n.utf8_text(source).unwrap_or_default().to_string())
+            .unwrap_or_default();
+        let args = node
+            .child_by_field_name("arguments")
+            .map(|args_node| {
+                let mut cursor = args_node.walk();
+                args_node
+                    .named_children(&mut cursor)
+                    .map(|c| c.utf8_text(source).unwrap_or_default().to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        return (name, args);
+    }
+    (
+        node.utf8_text(source).unwrap_or_default().to_string(),
+        Vec::new(),
+    )
+}
+
 fn parse_refs(
     node: &Node,
     source: &[u8],
@@ -307,11 +376,15 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver: String::new(),
                     });
                 }
             } else if idx == rq.callee_idx {
                 let text = cap_node.utf8_text(source).unwrap_or_default();
-                let terminal_name = text.rsplit('.').next().unwrap_or(text).to_string();
+                let (receiver, terminal_name) = match text.rsplit_once('.') {
+                    Some((r, n)) => (r.to_string(), n.to_string()),
+                    None => (String::new(), text.to_string()),
+                };
                 if !terminal_name.is_empty() {
                     result.refs.push(Ref {
                         name: terminal_name,
@@ -320,6 +393,7 @@ fn parse_refs(
                         file_path: path.to_string(),
                         line: (cap_node.start_position().row + 1) as i32,
                         column: (cap_node.start_position().column + 1) as i32,
+                        receiver,
                     });
                 }
             }

@@ -83,6 +83,16 @@ def remove_analysis_artifacts(repo_dir: Path) -> None:
             artifact.unlink()
 
 
+def resolve_local_directory(raw_value: str, input_base_dir: Path) -> Path | None:
+    candidate = Path(raw_value).expanduser()
+    candidates = [candidate] if candidate.is_absolute() else [input_base_dir / candidate, Path.cwd() / candidate]
+
+    for path in candidates:
+        if path.is_dir():
+            return path.resolve()
+    return None
+
+
 def append_result(results_file: Path, run_id: str, result: RunResult) -> None:
     with results_file.open("a", encoding="utf-8") as handle:
         handle.write("=" * 88 + "\n")
@@ -91,7 +101,15 @@ def append_result(results_file: Path, run_id: str, result: RunResult) -> None:
         handle.write(result.stderr.rstrip() + "\n" if result.stderr else "\n")
 
 
-def process_repository(url: str, work_root: Path, results_file: Path, run_id: str, tld_bin: str, depth: int, keep_repos: bool) -> None:
+def process_repository(url: str, work_root: Path, results_file: Path, run_id: str, tld_bin: str, depth: int, keep_repos: bool, input_base_dir: Path) -> None:
+    local_repo_dir = resolve_local_directory(url, input_base_dir)
+    if local_repo_dir is not None:
+        for view in VIEWS:
+            analyze = run_tld_analyze(tld_bin, local_repo_dir, view)
+            append_result(results_file, run_id, RunResult(url, local_repo_dir, view, analyze.returncode, analyze.stdout, analyze.stderr))
+            # remove_analysis_artifacts(local_repo_dir)
+        return
+
     repo_name = sanitize_repo_name(url)
     repo_dir = work_root / repo_name
     ensure_empty_directory(repo_dir)
@@ -142,9 +160,20 @@ def main(argv: Iterable[str] | None = None) -> int:
         print("No repository URLs found in the input file.", file=sys.stderr)
         return 1
 
+    input_base_dir = args.input_file.resolve().parent
+
     for index, url in enumerate(urls, start=1):
         print(f"[{index}/{len(urls)}] processing {url}")
-        process_repository(url=url, work_root=args.work_root, results_file=args.results_file, run_id=run_id, tld_bin=args.tld_bin, depth=args.depth, keep_repos=args.keep_repos)
+        process_repository(
+            url=url,
+            work_root=args.work_root,
+            results_file=args.results_file,
+            run_id=run_id,
+            tld_bin=args.tld_bin,
+            depth=args.depth,
+            keep_repos=args.keep_repos,
+            input_base_dir=input_base_dir,
+        )
 
     print(f"Results appended to {args.results_file} (run-id: {run_id})")
     return 0

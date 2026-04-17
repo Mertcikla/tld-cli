@@ -164,6 +164,9 @@ pub struct SyntaxDecl {
     pub signature_span: LineSpan,
     /// Leading docstring or comment.
     pub description: String,
+    /// Framework annotations attached to this declaration.
+    /// Mirrors `crate::analyzer::types::Symbol::annotations`.
+    pub annotations: Vec<crate::analyzer::types::Annotation>,
 }
 
 impl SyntaxDecl {
@@ -186,6 +189,9 @@ pub struct SyntaxRef {
     pub kind: RefKind,
     /// Textual form of the callee / import target / etc.
     pub text: String,
+    /// Receiver expression text for method calls (e.g. `router` in
+    /// `router.get(...)`). Empty for bare function calls.
+    pub receiver: String,
     pub span: LineColSpan,
     /// Source-order index within the owning declaration.
     pub order_index: usize,

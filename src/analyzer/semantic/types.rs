@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use crate::analyzer::syntax::types::DeclKind;
+use crate::analyzer::types::Annotation;
 
 /// Stable, globally-unique identifier for a symbol.
 /// Format: `{repo_name}:{file_rel}:{name}` or `{repo_name}:{file_rel}:{parent}::{name}`.
@@ -96,6 +97,8 @@ pub struct SemanticSymbol {
     pub description: String,
     pub spans: SymbolSpans,
     pub control: ControlMetrics,
+    /// Framework annotations carried through from the syntax layer.
+    pub annotations: Vec<Annotation>,
 }
 
 /// A directed edge in the semantic graph.

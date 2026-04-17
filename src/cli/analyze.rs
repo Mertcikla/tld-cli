@@ -9,6 +9,86 @@ use crate::workspace::workspace_builder::BuildContext;
 use clap::Args;
 use std::path::{Path, PathBuf};
 
+/// Patterns excluded from analysis by default.
+///
+/// Matched by `Rules::should_ignore_path` (see `analyzer::ignore`), which does
+/// both whole-path glob matching and per-segment matching. Directory patterns
+/// end with `/` (matched against any path segment); file patterns are globs
+/// (matched against base names).
+const DEFAULT_EXCLUDES: &[&str] = &[
+    // Build / tooling directories
+    "target/",
+    ".git/",
+    "node_modules/",
+    "build/",
+    ".tld/",
+    ".claude/",
+    "workdir/",
+    "dist/",
+    "out/",
+    "vendor/",
+    ".next/",
+    ".nuxt/",
+    ".svelte-kit/",
+    "coverage/",
+    ".cache/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    ".gradle/",
+    ".idea/",
+    ".vscode/",
+    // Test directories
+    "tests/",
+    "test/",
+    "__tests__/",
+    "spec/",
+    "specs/",
+    "fixtures/",
+    "testdata/",
+    "mocks/",
+    "__mocks__/",
+    "e2e/",
+    "cypress/",
+    // Migrations / generated schemas
+    "migrations/",
+    "alembic/",
+    "migrate/",
+    // Static assets / docs
+    "static/",
+    "staticfiles/",
+    "public/",
+    "assets/",
+    "docs/",
+    "templates/",
+    // Minified / generated / declaration file globs
+    "*.min.js",
+    "*.min.css",
+    "*.bundle.js",
+    "*.d.ts",
+    "*.pb.go",
+    "*_pb2.py",
+    "*_pb2_grpc.py",
+    "*.generated.*",
+    "generated/",
+    // Test files by naming convention
+    "*_test.go",
+    "*.test.ts",
+    "*.test.tsx",
+    "*.test.js",
+    "*.test.jsx",
+    "*.spec.ts",
+    "*.spec.tsx",
+    "*.spec.js",
+    "*.spec.jsx",
+    "test_*.py",
+    "*_test.py",
+    "*.gen.go",
+];
+
 #[derive(Args, Debug, Clone)]
 pub struct AnalyzeArgs {
     /// Path to analyze (file or directory)
@@ -96,15 +176,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         .map(|c| c.exclude.clone())
         .unwrap_or_default();
 
-    for default_exclude in &[
-        "target/",
-        ".git/",
-        "node_modules/",
-        "build/",
-        ".tld/",
-        ".claude/",
-        "workdir/",
-    ] {
+    for default_exclude in DEFAULT_EXCLUDES {
         let de = default_exclude.to_string();
         if !exclude.contains(&de) {
             exclude.push(de);

@@ -84,6 +84,7 @@ pub fn resolve_syntax(bundle: &SyntaxBundle, scan_parent: &str) -> SemanticBundl
                     .get(&(file_rel.clone(), decl.local_id.clone()))
                     .cloned()
                     .unwrap_or_default(),
+                annotations: decl.annotations.clone(),
             }
         })
         .collect();
@@ -355,6 +356,7 @@ mod tests {
                         span: LineSpan { start: 1, end: 20 },
                         signature_span: LineSpan { start: 1, end: 1 },
                         description: String::new(),
+                        annotations: Vec::new(),
                     },
                     SyntaxDecl {
                         local_id: "method:placeOrder".to_string(),
@@ -364,6 +366,7 @@ mod tests {
                         span: LineSpan { start: 3, end: 10 },
                         signature_span: LineSpan { start: 3, end: 3 },
                         description: String::new(),
+                        annotations: Vec::new(),
                     },
                     SyntaxDecl {
                         local_id: "fn:charge".to_string(),
@@ -373,12 +376,14 @@ mod tests {
                         span: LineSpan { start: 12, end: 14 },
                         signature_span: LineSpan { start: 12, end: 12 },
                         description: String::new(),
+                        annotations: Vec::new(),
                     },
                 ],
                 refs: vec![SyntaxRef {
                     owner_local_id: Some("method:placeOrder".to_string()),
                     kind: RefKind::Call,
                     text: "charge".to_string(),
+                    receiver: String::new(),
                     span: LineColSpan {
                         start_line: 5,
                         start_col: 8,
