@@ -108,13 +108,24 @@ mod tests {
 
         // Add remote
         Command::new("git")
-            .args(["remote", "add", "origin", "https://github.com/example/repo.git"])
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/repo.git",
+            ])
             .current_dir(repo_path)
             .output()
             .unwrap();
 
         let remotes = get_remotes(repo_path);
-        assert_eq!(remotes.get("origin").unwrap(), "https://github.com/example/repo.git");
-        assert_eq!(get_remote_url_by_name(repo_path, "origin").unwrap(), "https://github.com/example/repo.git");
+        assert_eq!(
+            remotes.get("origin").unwrap(),
+            "https://github.com/example/repo.git"
+        );
+        assert_eq!(
+            get_remote_url_by_name(repo_path, "origin").unwrap(),
+            "https://github.com/example/repo.git"
+        );
     }
 }

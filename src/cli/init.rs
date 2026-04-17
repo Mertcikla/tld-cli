@@ -54,14 +54,20 @@ pub fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
                 "dist".to_string(),
                 "vendor".to_string(),
                 ".tld".to_string(),
+                ".venv".to_string(),
+                "build".to_string(),
+                "out".to_string(),
             ],
             ..Default::default()
         };
 
         // Git detection
-        if let Some(toplevel) = (git::is_git_repo(workspace_root)).then(|| git::get_toplevel(workspace_root)).flatten() {
-            let canonical_root = fs::canonicalize(workspace_root)
-                .unwrap_or_else(|_| workspace_root.to_path_buf());
+        if let Some(toplevel) = (git::is_git_repo(workspace_root))
+            .then(|| git::get_toplevel(workspace_root))
+            .flatten()
+        {
+            let canonical_root =
+                fs::canonicalize(workspace_root).unwrap_or_else(|_| workspace_root.to_path_buf());
             let canonical_toplevel = fs::canonicalize(&toplevel).unwrap_or(toplevel);
 
             if let Some(name) = (canonical_root == canonical_toplevel)

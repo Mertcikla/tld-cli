@@ -34,9 +34,14 @@ fn test_tld_init_in_git_repo() {
         .current_dir(repo_path)
         .assert()
         .success();
-    
+
     Command::new("git")
-        .args(["remote", "add", "origin", "https://github.com/example/repo.git"])
+        .args([
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/repo.git",
+        ])
         .current_dir(repo_path)
         .assert()
         .success();
@@ -49,11 +54,11 @@ fn test_tld_init_in_git_repo() {
     assert!(config_path.exists());
 
     let config = fs::read_to_string(config_path).unwrap();
-    
+
     // Should have detected repo name (tempdir name)
     let repo_name = repo_path.file_name().unwrap().to_str().unwrap();
     assert!(config.contains(&format!("project_name: {repo_name}")));
-    
+
     // Should have detected origin
     assert!(config.contains("url: https://github.com/example/repo.git"));
     assert!(config.contains("localDir: ."));
