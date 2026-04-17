@@ -8,6 +8,7 @@ use crate::output;
 use crate::workspace;
 use crate::workspace::workspace_builder::BuildContext;
 use clap::Args;
+use indicatif::ProgressBar;
 use std::path::{Path, PathBuf};
 
 /// Patterns excluded from analysis by default.
@@ -231,22 +232,37 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     // ── Run tree-sitter analysis ──────────────────────────────────────────────
     let analyzer_service = TreeSitterService::new();
 
-    let spinner = output::new_spinner("Scanning files...");
+    let scan_total = if scan_scope.files.is_empty() {
+        let mut total = 0_u64;
+        for repo in &scan_scope.repositories {
+            total +=
+                TreeSitterService::count_path(&repo.root_dir, &Rules::new(repo.exclude.clone()))?;
+        }
+        total
+    } else {
+        scan_scope.files.len() as u64
+    };
+    let scan_progress = progress_bar_for_total(scan_total, "Scanning files...");
 
     let mut result = if scan_scope.files.is_empty() {
         let mut merged = crate::analyzer::types::AnalysisResult::default();
         for repo in &scan_scope.repositories {
             let repo_rules = Rules::new(repo.exclude.clone());
+            let repo_start = scan_progress.position();
+            let repo_progress = scan_progress.clone();
             match analyzer_service.extract_path(
                 &repo.root_dir,
                 &repo_rules,
                 Some(&|path, _is_dir| {
-                    spinner.set_message(format!("Scanning {path}"));
+                    if !_is_dir {
+                        update_progress_message(&repo_progress, path, "Scanning");
+                        repo_progress.inc(1);
+                    }
                 }),
             ) {
                 Ok(r) => merged.merge(r),
                 Err(TldError::ParserDownloadRequired { ref lang, .. }) => {
-                    spinner.finish_and_clear();
+                    scan_progress.finish_and_clear();
                     eprintln!(
                         "{}",
                         TldError::ParserDownloadRequired {
@@ -266,10 +282,20 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                             Ok(_) => {
                                 dl_spinner.finish_and_clear();
                                 output::print_ok("Download complete. Re-running analysis...");
+                                scan_progress.set_position(repo_start);
                                 let retry = analyzer_service.extract_path(
                                     &repo.root_dir,
                                     &repo_rules,
-                                    None,
+                                    Some(&|path, is_dir| {
+                                        if !is_dir {
+                                            update_progress_message(
+                                                &repo_progress,
+                                                path,
+                                                "Scanning",
+                                            );
+                                            repo_progress.inc(1);
+                                        }
+                                    }),
                                 )?;
                                 merged.merge(retry);
                             }
@@ -283,7 +309,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                     }
                 }
                 Err(e) => {
-                    spinner.finish_and_clear();
+                    scan_progress.finish_and_clear();
                     return Err(e);
                 }
             }
@@ -293,7 +319,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         // --changed-since: analyze only the listed files.
         let mut merged = crate::analyzer::types::AnalysisResult::default();
         for file in &scan_scope.files {
-            spinner.set_message(format!("Scanning {}", file.abs_path));
+            update_progress_message(&scan_progress, &file.abs_path, "Scanning");
             match TreeSitterService::extract_file(&file.abs_path) {
                 Ok(mut r) => {
                     r.files_scanned.push(file.abs_path.clone());
@@ -301,15 +327,16 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 }
                 Err(TldError::UnsupportedLanguage(_) | TldError::ParserNotImplemented(_)) => {}
                 Err(e) => {
-                    spinner.finish_and_clear();
+                    scan_progress.finish_and_clear();
                     return Err(e);
                 }
             }
+            scan_progress.inc(1);
         }
         merged
     };
 
-    spinner.finish_and_clear();
+    scan_progress.finish_and_clear();
 
     // ── Dry-run reporting ─────────────────────────────────────────────────────
     if args.dry_run {
@@ -357,17 +384,23 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             .collect()
     };
     if !unique_langs.is_empty() {
-        let lsp_spinner = output::new_spinner("Running LSP definition lookup...");
+        let pending_lsp_lookups = result
+            .refs
+            .iter()
+            .filter(|r| r.kind == "call" && r.target_path.is_empty())
+            .count() as u64;
+        let lsp_progress =
+            progress_bar_for_total(pending_lsp_lookups, "Running LSP definition lookup...");
         match crate::analyzer::lsp::resolve_calls_with_lsp(
             &mut result.refs,
             &effective_scan_root,
             &unique_langs,
-            &lsp_spinner,
+            &lsp_progress,
         )
         .await
         {
             Ok(()) => {
-                lsp_spinner.finish_and_clear();
+                lsp_progress.finish_and_clear();
                 let resolved = result
                     .refs
                     .iter()
@@ -378,7 +411,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 ));
             }
             Err(e) => {
-                lsp_spinner.finish_and_clear();
+                lsp_progress.finish_and_clear();
                 output::print_warn(&format!(
                     "LSP enrichment unavailable ({e}); analysis accuracy may drop, but continuing."
                 ));
@@ -592,6 +625,18 @@ fn detect_git_branch(path: &Path) -> Option<String> {
         }
     }
     None
+}
+
+fn progress_bar_for_total(total: u64, msg: &str) -> ProgressBar {
+    if total > 0 {
+        output::new_progress_bar(total, msg)
+    } else {
+        output::new_spinner(msg)
+    }
+}
+
+fn update_progress_message(progress: &ProgressBar, path: &str, action: &str) {
+    progress.set_message(format!("{action} {path}"));
 }
 
 #[cfg(test)]

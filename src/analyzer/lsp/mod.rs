@@ -119,7 +119,7 @@ pub async fn resolve_calls_with_lsp(
     refs: &mut [crate::analyzer::types::Ref],
     root_dir: &str,
     unique_langs: &[&str],
-    spinner: &indicatif::ProgressBar,
+    progress: &indicatif::ProgressBar,
 ) -> Result<(), crate::error::TldError> {
     use crate::analyzer::lsp::session::Session;
     use crate::error::TldError;
@@ -127,6 +127,12 @@ pub async fn resolve_calls_with_lsp(
     let root_uri = format!("file://{}", root_dir.trim_end_matches('/'));
 
     for lang in unique_langs {
+        let lang_pending = count_pending_refs_for_language(refs, lang);
+        if lang_pending == 0 {
+            continue;
+        }
+        progress.set_message(format!("Indexing {lang} definitions"));
+
         let cmd = match resolve_command(lang) {
             Ok(c) => c,
             Err(TldError::LspInstallRequired {
@@ -134,37 +140,43 @@ pub async fn resolve_calls_with_lsp(
                 executable,
                 install_cmd,
             }) => {
-                match prompt_install(&l, &executable, &install_cmd, spinner)? {
+                match prompt_install(&l, &executable, &install_cmd, progress)? {
                     Some(c) => c,
-                    None => continue, // Continue without LSP
+                    None => {
+                        progress.inc(lang_pending);
+                        continue;
+                    } // Continue without LSP
                 }
             }
             Err(e) => {
-                spinner.suspend(|| {
+                progress.suspend(|| {
                     output::print_warn(&format!(
                         "No LSP server found for '{lang}' ({e}); analysis accuracy may drop."
                     ));
                 });
+                progress.inc(lang_pending);
                 continue;
             }
         };
 
         let session_res = Session::start(&cmd.path, &cmd.args, root_dir);
         let Ok(session) = session_res else {
-            spinner.suspend(|| {
+            progress.suspend(|| {
                 output::print_warn(&format!(
                     "Could not start the '{lang}' LSP server; analysis accuracy may drop."
                 ));
             });
+            progress.inc(lang_pending);
             continue;
         };
 
         if session.initialize(root_uri.clone()).await.is_err() {
-            spinner.suspend(|| {
+            progress.suspend(|| {
                 output::print_warn(&format!(
                     "Could not initialize the '{lang}' LSP server; analysis accuracy may drop."
                 ));
             });
+            progress.inc(lang_pending);
             continue;
         }
 
@@ -183,27 +195,18 @@ pub async fn resolve_calls_with_lsp(
             }
 
             // Only process refs from files matching this language.
-            let file_ext = std::path::Path::new(&r.file_path)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-            let file_lang = match file_ext {
-                "go" => "go",
-                "py" => "python",
-                "ts" | "tsx" => "typescript",
-                "js" | "jsx" => "javascript",
-                "java" => "java",
-                "cpp" | "cc" | "hpp" | "h" => "cpp",
-                "rs" => "rust",
-                _ => continue,
+            let Some(file_lang) = language_for_path(&r.file_path) else {
+                continue;
             };
             if file_lang != *lang {
                 continue;
             }
 
+            progress.set_message(format!("Resolving {lang}: {}::{}", r.file_path, r.name));
             let cache_key = (r.file_path.clone(), r.line, r.column);
             if let Some(cached) = cache.get(&cache_key) {
                 r.target_path.clone_from(cached);
+                progress.inc(1);
                 continue;
             }
 
@@ -229,6 +232,7 @@ pub async fn resolve_calls_with_lsp(
                 cache.insert(cache_key, path.clone());
                 r.target_path = path;
             }
+            progress.inc(1);
         }
 
         for file_path in opened_files {
@@ -258,16 +262,40 @@ fn extract_location_path(response: &serde_json::Value) -> Option<String> {
     })
 }
 
+fn count_pending_refs_for_language(refs: &[crate::analyzer::types::Ref], lang: &str) -> u64 {
+    refs.iter()
+        .filter(|r| r.kind == "call" && r.target_path.is_empty())
+        .filter(|r| language_for_path(&r.file_path) == Some(lang))
+        .count() as u64
+}
+
+fn language_for_path(path: &str) -> Option<&'static str> {
+    match std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+    {
+        "go" => Some("go"),
+        "py" => Some("python"),
+        "ts" | "tsx" => Some("typescript"),
+        "js" | "jsx" => Some("javascript"),
+        "java" => Some("java"),
+        "cpp" | "cc" | "hpp" | "h" => Some("cpp"),
+        "rs" => Some("rust"),
+        _ => None,
+    }
+}
+
 #[expect(clippy::print_stdout)]
 fn prompt_install(
     lang: &str,
     executable: &str,
     install_cmd: &str,
-    spinner: &indicatif::ProgressBar,
+    progress: &indicatif::ProgressBar,
 ) -> Result<Option<ResolvedCommand>, crate::error::TldError> {
     use std::io::{Write, stdin, stdout};
 
-    spinner.suspend(|| {
+    progress.suspend(|| {
         println!("\nThe '{lang}' LSP server ({executable}) is not installed.");
         print!("Would you like to install it now using `{install_cmd}`? [y/N]: ");
         stdout().flush().ok();

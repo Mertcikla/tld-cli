@@ -62,7 +62,7 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
     }
 
     // Proposed Changes Table
-    if !resp.element_results.is_empty() || !resp.connector_results.is_empty() {
+    if args.verbose && (!resp.element_results.is_empty() || !resp.connector_results.is_empty()) {
         println!("\nProposed Changes:");
         use tabled::{Table, Tabled};
 

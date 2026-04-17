@@ -83,13 +83,19 @@ impl<'a> WorkspaceBuilder<'a> {
 
     fn initialize_paths(&mut self) {
         let mut seen_files = HashSet::new();
+        let files_with_symbols: HashSet<String> = self
+            .result
+            .symbols
+            .iter()
+            .map(|s| rel_from_base(&s.file_path, &self.scan_parent))
+            .collect();
 
         for abs_path in &self.result.files_scanned {
             let rel = rel_from_base(abs_path, &self.scan_parent);
             if should_skip_file(&rel) {
                 continue;
             }
-            if seen_files.insert(rel.clone()) {
+            if files_with_symbols.contains(&rel) && seen_files.insert(rel.clone()) {
                 self.file_rel_paths.push(rel);
             }
         }
@@ -209,13 +215,6 @@ impl<'a> WorkspaceBuilder<'a> {
     }
 
     fn add_file_elements(&mut self) {
-        let files_with_symbols: HashSet<String> = self
-            .result
-            .symbols
-            .iter()
-            .map(|s| rel_from_base(&s.file_path, &self.scan_parent))
-            .collect();
-
         let mut registry = SlugRegistry::new();
         for rel_path in &self.file_rel_paths {
             let file_name = Path::new(rel_path)
@@ -226,73 +225,71 @@ impl<'a> WorkspaceBuilder<'a> {
             let slug = registry.claim(file_name, rel_path);
             self.file_slug_by_rel.insert(rel_path.clone(), slug.clone());
 
-            if files_with_symbols.contains(rel_path) {
-                let parent_dir = Path::new(rel_path)
-                    .parent()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or("");
-                let parent_slug = if parent_dir.is_empty() {
-                    self.repo_slug.clone()
-                } else {
-                    self.folder_slug_by_path
-                        .get(parent_dir)
-                        .cloned()
-                        .unwrap_or_else(|| self.repo_slug.clone())
-                };
+            let parent_dir = Path::new(rel_path)
+                .parent()
+                .and_then(|p| p.to_str())
+                .unwrap_or("");
+            let parent_slug = if parent_dir.is_empty() {
+                self.repo_slug.clone()
+            } else {
+                self.folder_slug_by_path
+                    .get(parent_dir)
+                    .cloned()
+                    .unwrap_or_else(|| self.repo_slug.clone())
+            };
 
-                // Qualify the display name with its immediate parent directory when
-                // another file with the same base name has already been registered.
-                let display_name = if self.used_names.contains_key(file_name) {
-                    let qualifier = if parent_dir.is_empty() {
-                        Path::new(&self.ctx.repo_name)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(&self.ctx.repo_name)
-                            .to_string()
-                    } else {
-                        Path::new(parent_dir)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(parent_dir)
-                            .to_string()
-                    };
-                    let base = format!("{qualifier}/{file_name}");
-                    // Guard against the qualified name also conflicting.
-                    if self.used_names.contains_key(&base) {
-                        let mut n = 2;
-                        loop {
-                            let candidate = format!("{base}-{n}");
-                            if !self.used_names.contains_key(&candidate) {
-                                break candidate;
-                            }
-                            n += 1;
+            // Qualify the display name with its immediate parent directory when
+            // another file with the same base name has already been registered.
+            let display_name = if self.used_names.contains_key(file_name) {
+                let qualifier = if parent_dir.is_empty() {
+                    Path::new(&self.ctx.repo_name)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&self.ctx.repo_name)
+                        .to_string()
+                } else {
+                    Path::new(parent_dir)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(parent_dir)
+                        .to_string()
+                };
+                let base = format!("{qualifier}/{file_name}");
+                // Guard against the qualified name also conflicting.
+                if self.used_names.contains_key(&base) {
+                    let mut n = 2;
+                    loop {
+                        let candidate = format!("{base}-{n}");
+                        if !self.used_names.contains_key(&candidate) {
+                            break candidate;
                         }
-                    } else {
-                        base
+                        n += 1;
                     }
                 } else {
-                    file_name.to_string()
-                };
+                    base
+                }
+            } else {
+                file_name.to_string()
+            };
 
-                self.used_names.insert(display_name.clone(), slug.clone());
-                self.elements.insert(
-                    slug,
-                    Element {
-                        name: display_name.clone(),
-                        kind: "file".to_string(),
-                        technology: detect_file_technology(rel_path),
-                        owner: self.ctx.owner.clone(),
-                        branch: self.ctx.branch.clone(),
-                        file_path: rel_path.clone(),
-                        view_label: display_name,
-                        placements: vec![ViewPlacement {
-                            parent_ref: parent_slug,
-                            ..Default::default()
-                        }],
+            self.used_names.insert(display_name.clone(), slug.clone());
+            self.elements.insert(
+                slug,
+                Element {
+                    name: display_name.clone(),
+                    kind: "file".to_string(),
+                    technology: detect_file_technology(rel_path),
+                    owner: self.ctx.owner.clone(),
+                    branch: self.ctx.branch.clone(),
+                    file_path: rel_path.clone(),
+                    view_label: display_name,
+                    placements: vec![ViewPlacement {
+                        parent_ref: parent_slug,
                         ..Default::default()
-                    },
-                );
-            }
+                    }],
+                    ..Default::default()
+                },
+            );
         }
     }
 
@@ -810,4 +807,45 @@ fn nearest_common_ancestor_folder_slug(
         .get(&cp)
         .cloned()
         .unwrap_or_else(|| slugify(common.last().copied().unwrap_or(repo_slug)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BuildContext, build};
+    use crate::analyzer::types::{AnalysisResult, Symbol};
+
+    #[test]
+    fn build_skips_empty_nested_folders_without_file_elements() {
+        let result = AnalysisResult {
+            symbols: vec![Symbol {
+                name: "run".to_string(),
+                kind: "function".to_string(),
+                file_path: "/repo/src/main.py".to_string(),
+                technology: "python".to_string(),
+                ..Default::default()
+            }],
+            refs: Vec::new(),
+            files_scanned: vec![
+                "/repo/src/main.py".to_string(),
+                "/repo/src/empty/note.py".to_string(),
+            ],
+        };
+        let ctx = BuildContext {
+            repo_name: "repo".to_string(),
+            branch: "main".to_string(),
+            owner: "repo".to_string(),
+            repo_url: None,
+            scan_root: "/repo".to_string(),
+        };
+
+        let output = build(&result, &ctx);
+
+        assert!(
+            output
+                .elements
+                .values()
+                .all(|element| element.file_path != "src/empty"),
+            "folders should only be emitted when they contain a real file element"
+        );
+    }
 }

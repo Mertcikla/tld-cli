@@ -8,7 +8,7 @@ dev:
 
 test:
 	cargo test
-	
+
 repo-test:
 	uv run scripts/test_bench.py
 
@@ -28,7 +28,8 @@ release:
 	@echo "Fetching latest tags..."
 	@git fetch --tags --quiet
 	@CURRENT_VERSION=$$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1); \
-	NEW_VERSION=$$(git-cliff --bumped-version); \
+	NEW_VERSION_RAW=$$(git-cliff --bumped-version); \
+	NEW_VERSION=$${NEW_VERSION_RAW#v}; \
 	NEW_TAG="v$$NEW_VERSION"; \
 	if git rev-parse -q --verify "refs/tags/$$NEW_TAG" >/dev/null; then \
 		echo "Tag $$NEW_TAG already exists."; \

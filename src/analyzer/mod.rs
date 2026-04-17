@@ -38,6 +38,17 @@ impl TreeSitterService {
         Self {}
     }
 
+    pub fn count_path(path: &str, rules: &Rules) -> Result<u64, TldError> {
+        let metadata = fs::metadata(path)?;
+        if metadata.is_dir() {
+            Self::count_dir(Path::new(path), path, rules)
+        } else if rules.should_ignore_path(path) || metadata.len() > MAX_ANALYZE_FILE_BYTES {
+            Ok(0)
+        } else {
+            Ok(1)
+        }
+    }
+
     pub fn extract_file(path: &str) -> Result<AnalysisResult, TldError> {
         let lang_name = if let Some(l) = detect_language_from_path(path) {
             l
@@ -225,6 +236,35 @@ impl TreeSitterService {
         let mut merged = AnalysisResult::default();
         Self::walk_dir(Path::new(root), root, rules, on_entry, &mut merged)?;
         Ok(merged)
+    }
+
+    fn count_dir(dir: &Path, root: &str, rules: &Rules) -> Result<u64, TldError> {
+        let mut count = 0_u64;
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let rel_path = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_str()
+                .unwrap_or("");
+
+            if entry.file_type()?.is_dir() {
+                if rules.should_ignore_path(rel_path) {
+                    continue;
+                }
+                count += Self::count_dir(&path, root, rules)?;
+            } else {
+                if rules.should_ignore_path(rel_path) {
+                    continue;
+                }
+                let metadata = entry.metadata()?;
+                if metadata.len() <= MAX_ANALYZE_FILE_BYTES {
+                    count += 1;
+                }
+            }
+        }
+        Ok(count)
     }
 
     fn walk_dir(

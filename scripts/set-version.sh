@@ -8,6 +8,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 version="$1"
+version="${version#v}"
 
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "expected a semantic version like 0.1.1, got: $version" >&2

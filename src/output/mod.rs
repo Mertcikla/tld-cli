@@ -30,6 +30,7 @@ pub fn print_info(msg: &str) {
 // ── Spinner helpers ────────────────────────────────────────────────────────────
 
 const SPINNER_CHARS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+const PROGRESS_CHARS: &str = "=>-";
 
 /// Create a spinner with an initial message. Caller drives it.
 pub fn new_spinner(msg: &str) -> ProgressBar {
@@ -41,6 +42,18 @@ pub fn new_spinner(msg: &str) -> ProgressBar {
     );
     pb.set_message(msg.to_string());
     pb.enable_steady_tick(Duration::from_millis(80));
+    pb
+}
+
+/// Create a determinate progress bar with an initial message.
+pub fn new_progress_bar(len: u64, msg: &str) -> ProgressBar {
+    let pb = ProgressBar::new(len);
+    pb.set_style(
+        ProgressStyle::with_template("{bar:24.cyan/blue} {pos:>4}/{len:4} {percent:>3}% {msg}")
+            .expect("should have valid progress template")
+            .progress_chars(PROGRESS_CHARS),
+    );
+    pb.set_message(msg.to_string());
     pb
 }
 
