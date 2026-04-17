@@ -140,12 +140,11 @@ pub async fn resolve_calls_with_lsp(
                 executable,
                 install_cmd,
             }) => {
-                match prompt_install(&l, &executable, &install_cmd, progress)? {
-                    Some(c) => c,
-                    None => {
-                        progress.inc(lang_pending);
-                        continue;
-                    } // Continue without LSP
+                if let Some(c) = prompt_install(&l, &executable, &install_cmd, progress)? {
+                    c
+                } else {
+                    progress.inc(lang_pending);
+                    continue; // Continue without LSP
                 }
             }
             Err(e) => {

@@ -253,8 +253,8 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             match analyzer_service.extract_path(
                 &repo.root_dir,
                 &repo_rules,
-                Some(&|path, _is_dir| {
-                    if !_is_dir {
+                Some(&|path, is_dir| {
+                    if !is_dir {
                         update_progress_message(&repo_progress, path, "Scanning");
                         repo_progress.inc(1);
                     }
