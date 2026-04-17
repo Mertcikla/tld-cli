@@ -1873,7 +1873,7 @@ dependencies = [
 
 [[package]]
 name = "tld"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "assert_cmd",
  "chrono",

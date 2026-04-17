@@ -35,6 +35,7 @@ All notable changes to tld are documented here.
 
 ### Refactoring
 
+- Simplify is_git_repo result handling using is_ok_and ([`b1d0081`](https://github.com/Mertcikla/tld-cli/commit/b1d0081d1bdceb2d3a837f70aec6694d3e7cd9fd))
 - Analyzer - pass AutoTagOptions by value and add PathContext ([`a5a485d`](https://github.com/Mertcikla/tld-cli/commit/a5a485d24a9bf8674d797a5b9c54c3ad48bad4fd))
 - Streamline code structure and improve readability across multiple modules ([`17c6cf9`](https://github.com/Mertcikla/tld-cli/commit/17c6cf9336fa46104d00f048e06530d3a51376d2))
 - Update CLI and workspace logic while expanding test-codebase configuration and infrastructure ([`406ee24`](https://github.com/Mertcikla/tld-cli/commit/406ee24472aa7a679af927219e28ea43f59951a3))
