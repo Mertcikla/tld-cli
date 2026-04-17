@@ -1,8 +1,8 @@
 //! Infrastructure registry and external node synthesis.
 
 use super::types::{
-    ControlMetrics, EdgeKind, EdgeOrigin, EdgeTarget, SemanticBundle, SemanticEdge,
-    SemanticSymbol, SymbolSpans, Visibility,
+    ControlMetrics, EdgeKind, EdgeOrigin, EdgeTarget, SemanticBundle, SemanticEdge, SemanticSymbol,
+    SymbolSpans, Visibility,
 };
 use crate::analyzer::syntax::types::DeclKind;
 use std::collections::{HashMap, HashSet};

@@ -782,9 +782,7 @@ fn decl_signature_text(lines: &[String], decl: &SyntaxDecl) -> String {
         .max(decl.span.start)
         .min(decl.span.end.max(decl.signature_span.start));
     end = end.max(decl.signature_span.start + 4);
-    let end = usize::try_from(end)
-        .unwrap_or(lines.len())
-        .min(lines.len());
+    let end = usize::try_from(end).unwrap_or(lines.len()).min(lines.len());
     if start >= end || start >= lines.len() {
         return lines.get(start).cloned().unwrap_or_default();
     }

@@ -87,7 +87,9 @@ pub fn detect_endpoint(annotation: &Annotation) -> Option<HttpEndpoint> {
     let lower = stripped.to_ascii_lowercase();
     let lower = lower.as_str();
     let last_dot = lower.rsplit_once('.').map_or(lower, |(_, tail)| tail);
-    let last_seg = last_dot.rsplit_once("::").map_or(last_dot, |(_, tail)| tail);
+    let last_seg = last_dot
+        .rsplit_once("::")
+        .map_or(last_dot, |(_, tail)| tail);
 
     // Case 1: direct verb annotation (e.g. "get", "post", "GetMapping").
     if let Some(method) = direct_verb(last_seg) {

@@ -90,9 +90,9 @@ pub fn project(
         adjacency: &adjacency,
     };
     let family_chains = select_family_chains(&bundle, &visible_ids, &path_ctx)
-    .into_iter()
-    .take(10)
-    .collect::<Vec<_>>();
+        .into_iter()
+        .take(10)
+        .collect::<Vec<_>>();
 
     let repo_slug = slugify(&ctx.repo_name);
     let mut elements: HashMap<String, Element> = HashMap::new();
@@ -192,7 +192,7 @@ pub fn project(
     }
 
     let connectors = collapse_connectors(connectors);
-    tags::prune_sparse_auto_tags(&mut elements, 3);
+    tags::prune_auto_tags(&mut elements, 3);
     let stats = ProjectionStats {
         flow_count: family_chains.len(),
         symbols_hidden: pruned.hidden_count,
@@ -374,14 +374,7 @@ fn best_path_from(start: &SymbolId, ctx: &PathContext<'_>, max_depth: usize) -> 
     let mut visited = HashSet::from([start.clone()]);
     let mut path = best.clone();
 
-    dfs_best_path(
-        start,
-        ctx,
-        max_depth,
-        &mut visited,
-        &mut path,
-        &mut best,
-    );
+    dfs_best_path(start, ctx, max_depth, &mut visited, &mut path, &mut best);
 
     best
 }
@@ -395,8 +388,7 @@ fn dfs_best_path(
     path: &mut Vec<PathStep>,
     best: &mut Vec<PathStep>,
 ) {
-    if path_score(path, ctx) > path_score(best, ctx)
-    {
+    if path_score(path, ctx) > path_score(best, ctx) {
         *best = path.clone();
     }
 
@@ -405,9 +397,7 @@ fn dfs_best_path(
     }
 
     let mut neighbors = ctx.adjacency.get(current).cloned().unwrap_or_default();
-    neighbors.sort_by_key(|edge| {
-        std::cmp::Reverse(node_priority(&edge.target, ctx))
-    });
+    neighbors.sort_by_key(|edge| std::cmp::Reverse(node_priority(&edge.target, ctx)));
 
     for edge in neighbors {
         if visited.contains(&edge.target) {
@@ -426,16 +416,8 @@ fn dfs_best_path(
             .is_some_and(|symbol| symbol.external);
 
         if !is_terminal {
-            dfs_best_path(
-                &edge.target,
-                ctx,
-                remaining_depth - 1,
-                visited,
-                path,
-                best,
-            );
-        } else if path_score(path, ctx) > path_score(best, ctx)
-        {
+            dfs_best_path(&edge.target, ctx, remaining_depth - 1, visited, path, best);
+        } else if path_score(path, ctx) > path_score(best, ctx) {
             *best = path.clone();
         }
 
@@ -444,10 +426,7 @@ fn dfs_best_path(
     }
 }
 
-fn path_score(
-    path: &[PathStep],
-    ctx: &PathContext<'_>,
-) -> i32 {
+fn path_score(path: &[PathStep], ctx: &PathContext<'_>) -> i32 {
     let mut score = i32::try_from(path.len()).unwrap_or(i32::MAX / 4) * 4;
 
     for step in path {

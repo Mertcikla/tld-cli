@@ -14,7 +14,7 @@ use crate::analyzer::semantic::{
     endpoints::detect_endpoint, roles::DerivedRole, types::SemanticSymbol,
 };
 use crate::workspace::types::Element;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Which auto-tag dimensions the analyzer should emit.
 #[expect(
@@ -177,7 +177,10 @@ pub fn is_auto_tag(tag: &str) -> bool {
 /// Return the default hex color for a known auto-tag, or `None` for user tags.
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "Reserved for tag palette export and UI integration")
+    expect(
+        dead_code,
+        reason = "Reserved for tag palette export and UI integration"
+    )
 )]
 pub fn known_tag_color(tag: &str) -> Option<String> {
     let fixed = match tag {
@@ -229,10 +232,15 @@ fn push_unique(tags: &mut Vec<String>, tag: String) {
     }
 }
 
-/// Remove auto-generated tags that are attached to fewer than `min_elements`
-/// elements. User-authored tags are always preserved.
-pub fn prune_sparse_auto_tags(elements: &mut HashMap<String, Element>, min_elements: usize) {
+/// Apply post-processing rules to auto-generated tags:
+/// - drop sparse tags below `min_elements`
+/// - merge near-duplicate tags when their target sets overlap by >80% of the
+///   smaller set
+///
+/// User-authored tags are always preserved.
+pub fn prune_auto_tags(elements: &mut HashMap<String, Element>, min_elements: usize) {
     if min_elements <= 1 {
+        merge_duplicate_auto_tags(elements);
         return;
     }
 
@@ -249,6 +257,116 @@ pub fn prune_sparse_auto_tags(elements: &mut HashMap<String, Element>, min_eleme
         element.tags.retain(|tag| {
             !is_auto_tag(tag) || counts.get(tag).copied().unwrap_or_default() >= min_elements
         });
+    }
+
+    merge_duplicate_auto_tags(elements);
+}
+
+fn merge_duplicate_auto_tags(elements: &mut HashMap<String, Element>) {
+    let mut tag_to_elements: HashMap<String, BTreeSet<String>> = HashMap::new();
+    for (element_ref, element) in elements.iter() {
+        for tag in &element.tags {
+            if is_auto_tag(tag) {
+                tag_to_elements
+                    .entry(tag.clone())
+                    .or_default()
+                    .insert(element_ref.clone());
+            }
+        }
+    }
+
+    let tags: Vec<String> = tag_to_elements.keys().cloned().collect();
+    let mut parent: Vec<usize> = (0..tags.len()).collect();
+
+    for left in 0..tags.len() {
+        for right in (left + 1)..tags.len() {
+            let left_targets = &tag_to_elements[&tags[left]];
+            let right_targets = &tag_to_elements[&tags[right]];
+            if should_merge_tag_sets(left_targets, right_targets) {
+                union_indices(&mut parent, left, right);
+            }
+        }
+    }
+
+    let mut groups: HashMap<usize, Vec<String>> = HashMap::new();
+    for (idx, tag) in tags.into_iter().enumerate() {
+        let root = find_index(&mut parent, idx);
+        groups.entry(root).or_default().push(tag);
+    }
+
+    let mut replacements: HashMap<String, String> = HashMap::new();
+    for group in groups.into_values() {
+        if group.len() <= 1 {
+            continue;
+        }
+        let merged_name = merged_tag_name(&group);
+        for tag in group {
+            replacements.insert(tag, merged_name.clone());
+        }
+    }
+
+    if replacements.is_empty() {
+        return;
+    }
+
+    for element in elements.values_mut() {
+        let mut merged_tags: Vec<String> = Vec::new();
+        for tag in &element.tags {
+            let final_tag = replacements.get(tag).unwrap_or(tag);
+            if !merged_tags.contains(final_tag) {
+                merged_tags.push(final_tag.clone());
+            }
+        }
+        element.tags = merged_tags;
+    }
+}
+
+fn should_merge_tag_sets(left: &BTreeSet<String>, right: &BTreeSet<String>) -> bool {
+    if left.is_empty() || right.is_empty() {
+        return false;
+    }
+
+    let intersection = left.intersection(right).count();
+    intersection * 100 > left.len().min(right.len()) * 80
+}
+
+fn merged_tag_name(tags: &[String]) -> String {
+    let sorted = sorted_unique_tags(tags);
+    let appended = sorted.join("+");
+    if appended.len() <= 30 {
+        appended
+    } else {
+        sorted
+            .into_iter()
+            .min_by(|left, right| left.len().cmp(&right.len()).then_with(|| left.cmp(right)))
+            .unwrap_or_default()
+    }
+}
+
+fn sorted_unique_tags(tags: &[String]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut unique: Vec<String> = tags
+        .iter()
+        .filter(|tag| seen.insert((*tag).clone()))
+        .cloned()
+        .collect();
+    unique.sort();
+    unique
+}
+
+fn find_index(parent: &mut [usize], idx: usize) -> usize {
+    if parent[idx] != idx {
+        let root = find_index(parent, parent[idx]);
+        parent[idx] = root;
+    }
+    parent[idx]
+}
+
+fn union_indices(parent: &mut [usize], left: usize, right: usize) {
+    let left_root = find_index(parent, left);
+    let right_root = find_index(parent, right);
+    if left_root != right_root {
+        parent[right_root] = left_root;
     }
 }
 
@@ -479,7 +597,7 @@ mod tests {
             ),
         ]);
 
-        prune_sparse_auto_tags(&mut elements, 3);
+        prune_auto_tags(&mut elements, 3);
 
         assert!(
             !elements["a"]
@@ -520,12 +638,129 @@ mod tests {
             ),
         ]);
 
-        prune_sparse_auto_tags(&mut elements, 3);
+        prune_auto_tags(&mut elements, 3);
 
         assert!(
             elements
                 .values()
                 .all(|element| element.tags.contains(&"role:orchestrator".to_string()))
+        );
+    }
+
+    #[test]
+    fn merges_duplicate_auto_tags_with_short_appended_name() {
+        let mut elements = HashMap::from([
+            (
+                "a".to_string(),
+                Element {
+                    tags: vec!["role:web".to_string(), "domain:api".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "b".to_string(),
+                Element {
+                    tags: vec!["role:web".to_string(), "domain:api".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "c".to_string(),
+                Element {
+                    tags: vec!["role:web".to_string()],
+                    ..Default::default()
+                },
+            ),
+        ]);
+
+        prune_auto_tags(&mut elements, 1);
+
+        let merged = "domain:api+role:web".to_string();
+        assert!(elements["a"].tags.contains(&merged));
+        assert!(elements["b"].tags.contains(&merged));
+        assert!(elements["c"].tags.contains(&merged));
+        assert!(!elements["a"].tags.contains(&"role:web".to_string()));
+        assert!(!elements["a"].tags.contains(&"domain:api".to_string()));
+    }
+
+    #[test]
+    fn merges_duplicate_auto_tags_using_shorter_name_when_join_is_long() {
+        let first = "endpoint:http-options".to_string();
+        let second = "role:orchestrator".to_string();
+        let mut elements = HashMap::from([
+            (
+                "a".to_string(),
+                Element {
+                    tags: vec![first.clone(), second.clone()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "b".to_string(),
+                Element {
+                    tags: vec![first.clone(), second.clone()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "c".to_string(),
+                Element {
+                    tags: vec![first.clone()],
+                    ..Default::default()
+                },
+            ),
+        ]);
+
+        prune_auto_tags(&mut elements, 1);
+
+        assert!(elements["a"].tags.contains(&second));
+        assert!(elements["b"].tags.contains(&second));
+        assert!(elements["c"].tags.contains(&second));
+        assert!(!elements["a"].tags.contains(&first));
+    }
+
+    #[test]
+    fn keeps_distinct_auto_tags_when_overlap_is_not_above_threshold() {
+        let mut elements = HashMap::from([
+            (
+                "a".to_string(),
+                Element {
+                    tags: vec!["role:web".to_string(), "domain:api".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "b".to_string(),
+                Element {
+                    tags: vec!["role:web".to_string(), "domain:api".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "c".to_string(),
+                Element {
+                    tags: vec!["role:web".to_string()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "d".to_string(),
+                Element {
+                    tags: vec!["domain:api".to_string()],
+                    ..Default::default()
+                },
+            ),
+        ]);
+
+        prune_auto_tags(&mut elements, 1);
+
+        assert!(elements["a"].tags.contains(&"role:web".to_string()));
+        assert!(elements["a"].tags.contains(&"domain:api".to_string()));
+        assert!(
+            !elements["a"]
+                .tags
+                .iter()
+                .any(|tag| tag == "domain:api+role:web")
         );
     }
 }
