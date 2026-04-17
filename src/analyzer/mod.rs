@@ -296,14 +296,41 @@ impl TreeSitterService {
 #[cfg(test)]
 mod tests {
     use super::{Rules, TreeSitterService};
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn extract_path_syntax_returns_files_and_decls() {
         let service = TreeSitterService::new();
         let rules = Rules::new(Vec::new());
+        let dir = tempdir().expect("temp dir should be created");
+        let source = r#"
+function helper() {
+    return 1;
+}
+
+function placeOrder() {
+    if (helper() > 0) {
+        return helper();
+    }
+
+    return 0;
+}
+"#;
+        let file_path = dir.path().join("src/order.ts");
+        fs::create_dir_all(file_path.parent().expect("fixture dir should exist"))
+            .expect("fixture directory should be creatable");
+        fs::write(&file_path, source).expect("fixture file should be writable");
 
         let syntax = service
-            .extract_path_syntax("tests/test-codebase/typescript", &rules, "typescript", None)
+            .extract_path_syntax(
+                dir.path()
+                    .to_str()
+                    .expect("temp path should be valid utf-8"),
+                &rules,
+                "typescript",
+                None,
+            )
             .expect("syntax extraction should succeed");
 
         assert!(

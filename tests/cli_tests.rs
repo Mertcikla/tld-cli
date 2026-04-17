@@ -20,7 +20,7 @@ fn test_tld_version_matches_package_version() {
     cmd.arg("--version");
     cmd.assert().success().stdout(predicate::eq(format!(
         "tld {}\n",
-        env!("CARGO_PKG_VERSION")
+        env!("TLD_BUILD_VERSION")
     )));
 }
 

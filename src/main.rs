@@ -85,7 +85,7 @@ async fn main() -> Result<(), TldError> {
             cli::tag::exec(args.clone(), wdir).await?;
         }
         Commands::Version => {
-            println!("tld {}", env!("CARGO_PKG_VERSION"));
+            println!("tld {}", cli::version::DISPLAY_VERSION);
         }
     }
 

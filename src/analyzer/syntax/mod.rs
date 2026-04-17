@@ -535,18 +535,53 @@ fn span_from_node(node: &tree_sitter::Node) -> Option<LineSpan> {
 mod tests {
     use super::*;
     use crate::analyzer::TreeSitterService;
+    use std::fs;
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    fn write_fixture(root: &Path, rel_path: &str, source: &str) -> String {
+        let path = root.join(rel_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("fixture directory should be creatable");
+        }
+        fs::write(&path, source).expect("fixture file should be writable");
+        path.to_string_lossy().into_owned()
+    }
 
     #[test]
     fn typescript_bridge_extracts_control_regions() {
+        let dir = tempdir().expect("temp dir should be created");
+        let path = write_fixture(
+            dir.path(),
+            "src/services/order.ts",
+            r#"
+function helper() {
+    return 1;
+}
+
+function placeOrder(items: number[]) {
+    for (const item of items) {
+        if (item > 0) {
+            try {
+                helper();
+            } catch (error) {
+                return 0;
+            }
+        }
+    }
+
+    return items.length;
+}
+"#,
+        );
         let result =
-            TreeSitterService::extract_file("tests/test-codebase/typescript/src/services/order.ts")
-                .expect("typescript fixture should parse");
+            TreeSitterService::extract_file(&path).expect("typescript fixture should parse");
 
         let syntax = from_analysis_result(&result, "typescript");
         let file = syntax
             .files
             .iter()
-            .find(|file| file.path.ends_with("src/services/order.ts"))
+            .find(|file| file.path == path)
             .expect("order.ts syntax file should exist");
         let place_order_local_id = file
             .decls
@@ -589,14 +624,33 @@ mod tests {
 
     #[test]
     fn python_bridge_extracts_control_regions() {
-        let result = TreeSitterService::extract_file("tests/test-codebase/python/app/services.py")
-            .expect("python fixture should parse");
+        let dir = tempdir().expect("temp dir should be created");
+        let path = write_fixture(
+            dir.path(),
+            "app/services.py",
+            r#"
+def helper():
+    return 1
+
+
+def place_order(items):
+    for item in items:
+        if item > 0:
+            try:
+                helper()
+            except Exception:
+                return 0
+
+    return len(items)
+"#,
+        );
+        let result = TreeSitterService::extract_file(&path).expect("python fixture should parse");
 
         let syntax = from_analysis_result(&result, "python");
         let file = syntax
             .files
             .iter()
-            .find(|file| file.path.ends_with("app/services.py"))
+            .find(|file| file.path == path)
             .expect("services.py syntax file should exist");
         let place_order_local_id = file
             .decls
@@ -639,16 +693,36 @@ mod tests {
 
     #[test]
     fn go_bridge_extracts_control_regions() {
-        let result = TreeSitterService::extract_file(
-            "tests/test-codebase/go/internal/service/order_service.go",
-        )
-        .expect("go fixture should parse");
+        let dir = tempdir().expect("temp dir should be created");
+        let path = write_fixture(
+            dir.path(),
+            "internal/service/order_service.go",
+            r#"
+package service
+
+func helper() int {
+    return 1
+}
+
+func PlaceOrder(items []int) int {
+    for _, item := range items {
+        if item > 0 {
+            helper()
+            return item
+        }
+    }
+
+    return 0
+}
+"#,
+        );
+        let result = TreeSitterService::extract_file(&path).expect("go fixture should parse");
 
         let syntax = from_analysis_result(&result, "go");
         let file = syntax
             .files
             .iter()
-            .find(|file| file.path.ends_with("internal/service/order_service.go"))
+            .find(|file| file.path == path)
             .expect("order_service.go syntax file should exist");
         let place_order_local_id = file
             .decls
@@ -685,16 +759,39 @@ mod tests {
 
     #[test]
     fn java_bridge_extracts_control_regions() {
-        let result = TreeSitterService::extract_file(
-            "tests/test-codebase/java-project/src/main/java/com/example/ecommerce/service/OrderService.java",
-        )
-        .expect("java fixture should parse");
+        let dir = tempdir().expect("temp dir should be created");
+        let path = write_fixture(
+            dir.path(),
+            "src/main/java/com/example/ecommerce/service/OrderService.java",
+            r#"
+class OrderService {
+    int helper() {
+        return 1;
+    }
+
+    int placeOrder(int[] items) {
+        for (int item : items) {
+            if (item > 0) {
+                try {
+                    helper();
+                } catch (RuntimeException ex) {
+                    return 0;
+                }
+            }
+        }
+
+        return items.length;
+    }
+}
+"#,
+        );
+        let result = TreeSitterService::extract_file(&path).expect("java fixture should parse");
 
         let syntax = from_analysis_result(&result, "java");
         let file = syntax
             .files
             .iter()
-            .find(|file| file.path.ends_with("ecommerce/service/OrderService.java"))
+            .find(|file| file.path == path)
             .expect("OrderService.java syntax file should exist");
         let place_order_local_id = file
             .decls

@@ -55,7 +55,7 @@ release:
 	fi
 
 install:
-	cargo install --path .
+	cargo install --path . --force
 
 # Allow passing arguments to cargo run
 %:

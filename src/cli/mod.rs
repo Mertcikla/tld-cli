@@ -26,7 +26,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(
     name = "tld",
-    version = env!("CARGO_PKG_VERSION"),
+    version = crate::cli::version::DISPLAY_VERSION,
     about = "tld -- tlDiagram CLI",
     long_about = "tld manages software architecture diagrams as code.\n\n\
         Define your architecture in YAML, preview changes with 'tld plan',\n\
