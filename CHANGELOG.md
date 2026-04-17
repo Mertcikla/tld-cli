@@ -2,6 +2,46 @@
 
 All notable changes to tld are documented here.
 
+## [0.1.10] - 2026-04-17
+
+### Documentation
+
+- Update installation instructions and add tag management features ([`6232bf9`](https://github.com/Mertcikla/tld-cli/commit/6232bf9ef829d943b670596a7c6919423f545cfa))
+
+### Features
+
+- Add .venv, build, and out to init ignore list ([`9a92662`](https://github.com/Mertcikla/tld-cli/commit/9a92662f055f4496062513fb789fbc8cb88ac79b))
+- Merge near-duplicate auto-generated tags and rename pruning fn ([`c97dcb5`](https://github.com/Mertcikla/tld-cli/commit/c97dcb528c0f95587018d1dd73d45d84e023b8d9))
+- Add build.rs to set TLD_BUILD_VERSION and show it in CLI ([`dbe3060`](https://github.com/Mertcikla/tld-cli/commit/dbe306049113ff3a57e4aea6c6a52eb0f010eb67))
+- Prune sparse auto-generated tags in projections ([`70a1ff4`](https://github.com/Mertcikla/tld-cli/commit/70a1ff4fe9d4b7f03fbb00cfd26621a069855edc))
+- Add tagging for scanned elements ([`fba2abf`](https://github.com/Mertcikla/tld-cli/commit/fba2abf4fae359cbfaccab725524ed1971fac373))
+- Add HTTP endpoint recognition from annotations ([`a4fa9ec`](https://github.com/Mertcikla/tld-cli/commit/a4fa9ecfcb6371c2a8a95b1810141e1d7ae5c9c7))
+- Add repository URL to BuildContext and update projections to include it ([`f4e6db7`](https://github.com/Mertcikla/tld-cli/commit/f4e6db7d4692d6094d37625df6f3debe146aeb40))
+- Enhance view handling in plan generation and add tests for view auto-enablement ([`a9a20b4`](https://github.com/Mertcikla/tld-cli/commit/a9a20b422ad3251e01c05689701f40a1325d38b3))
+- Add install_cmd for LSPs and prompt to install missing servers ([`9f44048`](https://github.com/Mertcikla/tld-cli/commit/9f440486440ef5436b560a4a26cdb8f29d96fbf9))
+- Add benchmarking script for `tld analyze` and update `.gitignore` and `Makefile` ([`a21d053`](https://github.com/Mertcikla/tld-cli/commit/a21d053a4b4cbfc7d19734d91b5169e938e0fd25))
+- Add language-specific query files for C++, Go, Java, JavaScript, Python, Rust, and TypeScript ([`dae3891`](https://github.com/Mertcikla/tld-cli/commit/dae389185f5c48d4700f337ecee440006bdadbe4))
+- Enhance config loading with environment variable support and add tests for config functions ([`6caf4a7`](https://github.com/Mertcikla/tld-cli/commit/6caf4a75604ac8deecde96b202dab90b87a83dc7))
+- Improve gRPC channel connection handling and add tests for URL normalization ([`7191584`](https://github.com/Mertcikla/tld-cli/commit/7191584bfc7710ce9ac59a9d4a9eef033f35d283))
+- Enhance config loading with environment variable support for server URL, API key, and organization ID ([`38590e3`](https://github.com/Mertcikla/tld-cli/commit/38590e36c12832a77d64fd267b85eb2e96d1a5b9))
+- Add new flags to analyze command for enhanced functionality ([`a82fff6`](https://github.com/Mertcikla/tld-cli/commit/a82fff67292f8e20c06d6ab654f0f2cf37eea1fc))
+- Enhance analyze command with new flags and remove deprecated lsp flag ([`bf7ba34`](https://github.com/Mertcikla/tld-cli/commit/bf7ba34dd105f8d415e633faca50b1b36a11872e))
+- Enhance salience scoring with cyclomatic and cognitive complexity metrics ([`4fe9a53`](https://github.com/Mertcikla/tld-cli/commit/4fe9a534f3f23d3163f0ea5efd0a24eac232b0e3))
+- Introduce semantic analysis types and syntax extraction ([`274f023`](https://github.com/Mertcikla/tld-cli/commit/274f02349a549769fa34fcd9fead2385784311dc))
+- Update language parsers and expand test-codebase configuration files ([`69ffc30`](https://github.com/Mertcikla/tld-cli/commit/69ffc301e05b3c081104ab70646550463f3f659c))
+- Initialize test-codebase repository and update multi-language project configurations ([`84eaed6`](https://github.com/Mertcikla/tld-cli/commit/84eaed64d86c61b7bdc46b2862323a82c63a15b9))
+- Add initial parsers and implement codebase analysis tests ([`487b09d`](https://github.com/Mertcikla/tld-cli/commit/487b09d56f79358c0861669bf35871b8600201db))
+- Add icons configuration and update workspace analysis and conversion logic ([`64b69a6`](https://github.com/Mertcikla/tld-cli/commit/64b69a6b29dea0bbd03862634281539be0ee4a41))
+
+### Refactoring
+
+- Analyzer - pass AutoTagOptions by value and add PathContext ([`a5a485d`](https://github.com/Mertcikla/tld-cli/commit/a5a485d24a9bf8674d797a5b9c54c3ad48bad4fd))
+- Streamline code structure and improve readability across multiple modules ([`17c6cf9`](https://github.com/Mertcikla/tld-cli/commit/17c6cf9336fa46104d00f048e06530d3a51376d2))
+- Update CLI and workspace logic while expanding test-codebase configuration and infrastructure ([`406ee24`](https://github.com/Mertcikla/tld-cli/commit/406ee24472aa7a679af927219e28ea43f59951a3))
+- Update codebase analysis logic and initialize test repository infrastructure ([`a335eb7`](https://github.com/Mertcikla/tld-cli/commit/a335eb70649a94b5a1b4eb233bbff0df38a80454))
+- Update test codebase structure and initialize git repositories for testing environments ([`ed75176`](https://github.com/Mertcikla/tld-cli/commit/ed75176be9b42125e543cf4c371a98b7a1f6b031))
+- Update CLI logic and test codebase structure while initializing git hooks for examples ([`1b41b4f`](https://github.com/Mertcikla/tld-cli/commit/1b41b4faefb3717a9f32afb2ce76d4fa42fa83c0))
+
 ## [0.1.8] - 2026-04-15
 
 ### Bug Fixes
