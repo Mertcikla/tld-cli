@@ -1,7 +1,8 @@
 use crate::error::TldError;
 use crate::output;
-use crate::workspace;
+use crate::workspace::{self, git, types::Repository, types::WorkspaceConfig};
 use clap::Args;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -17,6 +18,17 @@ pub struct InitArgs {
 pub fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
     let dir = args.dir.unwrap_or_else(|| ".tld".to_string());
     let path = Path::new(&dir);
+
+    // Workspace root is the parent of the .tld directory
+    let workspace_root = if let Some(parent) = path.parent() {
+        if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        }
+    } else {
+        Path::new(".")
+    };
 
     if !path.exists() {
         fs::create_dir_all(path)?;
@@ -34,9 +46,65 @@ pub fn exec(args: InitArgs, _wdir: String) -> Result<(), TldError> {
 
     let ws_config_path = path.join(".tld.yaml");
     if !ws_config_path.exists() {
-        // Simple default for now, skipping git detection for this step
-        let default_config = "project_name: \"\"\nexclude: []\nrepositories: {}\n";
-        fs::write(ws_config_path, default_config)?;
+        let mut config = WorkspaceConfig {
+            exclude: vec![
+                "node_modules".to_string(),
+                "target".to_string(),
+                ".git".to_string(),
+                "dist".to_string(),
+                "vendor".to_string(),
+                ".tld".to_string(),
+            ],
+            ..Default::default()
+        };
+
+        // Git detection
+        if let Some(toplevel) = (git::is_git_repo(workspace_root)).then(|| git::get_toplevel(workspace_root)).flatten() {
+            let canonical_root = fs::canonicalize(workspace_root)
+                .unwrap_or_else(|_| workspace_root.to_path_buf());
+            let canonical_toplevel = fs::canonicalize(&toplevel).unwrap_or(toplevel);
+
+            if let Some(name) = (canonical_root == canonical_toplevel)
+                .then(|| canonical_toplevel.file_name().and_then(|n| n.to_str()))
+                .flatten()
+            {
+                config.project_name = name.to_string();
+            }
+
+            let remotes = git::get_remotes(workspace_root);
+            if !remotes.is_empty() {
+                let mut repositories = HashMap::new();
+                for (name, url) in remotes {
+                    repositories.insert(
+                        name,
+                        Repository {
+                            url,
+                            local_dir: ".".to_string(),
+                            ..Default::default()
+                        },
+                    );
+                }
+                config.repositories = repositories;
+            }
+        }
+
+        // If project_name is still empty (not a git root), use the directory name
+        if config.project_name.is_empty() {
+            let abs_root = fs::canonicalize(workspace_root).unwrap_or_else(|_| {
+                if workspace_root == Path::new(".") {
+                    std::env::current_dir().unwrap_or_else(|_| workspace_root.to_path_buf())
+                } else {
+                    workspace_root.to_path_buf()
+                }
+            });
+            if let Some(name) = abs_root.file_name().and_then(|n| n.to_str()) {
+                config.project_name = name.to_string();
+            }
+        }
+
+        let yaml = serde_yaml::to_string(&config)
+            .map_err(|e| TldError::Generic(format!("Failed to serialize config: {e}")))?;
+        fs::write(ws_config_path, yaml)?;
     }
 
     // Initialize global config if it doesn't exist
