@@ -34,8 +34,7 @@ pub fn is_git_repo(path: &Path) -> bool {
         .args(["rev-parse", "--is-inside-work-tree"])
         .current_dir(path)
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 pub fn get_remotes(path: &Path) -> std::collections::HashMap<String, String> {
