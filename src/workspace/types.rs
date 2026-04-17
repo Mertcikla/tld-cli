@@ -21,6 +21,8 @@ pub struct Config {
 pub struct WorkspaceConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_tag: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]

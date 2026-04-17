@@ -1,3 +1,4 @@
+use crate::analyzer::projection::tags::AutoTagOptions;
 use crate::analyzer::projection::{self, ViewMode};
 use crate::analyzer::scope;
 use crate::analyzer::syntax;
@@ -132,6 +133,12 @@ pub struct AnalyzeArgs {
     /// Include low-signal nodes that would normally be pruned (business view only)
     #[arg(long = "include-low-signal", default_value = "false")]
     pub include_low_signal: bool,
+
+    /// Auto-assign semantic tags to analyzed elements: none | all | csv dimensions
+    ///
+    /// Supported dimensions: role, domain, endpoint, external, signal
+    #[arg(long = "auto-tag")]
+    pub auto_tag: Option<String>,
 }
 
 #[expect(clippy::print_stdout, clippy::print_stderr)]
@@ -167,6 +174,15 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     // ── Load workspace config ─────────────────────────────────────────────────
     let ws = workspace::load(&wdir)?;
     let scan_path = args.path.clone();
+    let auto_tag_opts = args
+        .auto_tag
+        .as_deref()
+        .or_else(|| {
+            ws.ws_config
+                .as_ref()
+                .and_then(|config| config.auto_tag.as_deref())
+        })
+        .map_or_else(AutoTagOptions::default_set, AutoTagOptions::parse);
 
     let abs_scan_path = Path::new(&scan_path)
         .canonicalize()
@@ -402,7 +418,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
 
     let (build_output, stats_msg) = match view_mode {
         ViewMode::Structural => {
-            let out = projection::structural::project(&result, &ctx);
+            let out = projection::structural::project(&result, &ctx, &auto_tag_opts);
             let msg = format!(
                 "{} elements written, {} connectors created (structural view).",
                 out.elements.len(),
@@ -414,7 +430,8 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             let syntax = semantic_syntax.ok_or_else(|| {
                 TldError::Generic("semantic views should build a syntax bundle".to_string())
             })?;
-            let (out, stats) = projection::business::project(syntax, &ctx, noise_threshold);
+            let (out, stats) =
+                projection::business::project(syntax, &ctx, noise_threshold, &auto_tag_opts);
             let msg = format!(
                 "{} elements written, {} connectors created, {} low-signal symbols hidden, {} unresolved refs, {} resolved call edges ({} via LSP) (business view).",
                 out.elements.len(),
@@ -430,7 +447,8 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             let syntax = semantic_syntax.ok_or_else(|| {
                 TldError::Generic("semantic views should build a syntax bundle".to_string())
             })?;
-            let (out, stats) = projection::data_flow::project(syntax, &ctx, noise_threshold);
+            let (out, stats) =
+                projection::data_flow::project(syntax, &ctx, noise_threshold, &auto_tag_opts);
             let msg = format!(
                 "{} elements written, {} connectors created, {} flows synthesized, {} low-signal symbols hidden, {} unresolved refs (data-flow view).",
                 out.elements.len(),
@@ -444,7 +462,12 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     };
 
     // ── Persist to workspace ──────────────────────────────────────────────────
+    // analyze is the sole producer of derived elements/connectors, so replace
+    // both collections wholesale — merging leaves stale entries whenever source
+    // code renames, deletes, or prunes a symbol.
     let mut ws = workspace::load(&wdir)?;
+    ws.elements.clear();
+    ws.connectors.clear();
     for (slug, el) in build_output.elements {
         ws.elements.insert(slug, el);
     }

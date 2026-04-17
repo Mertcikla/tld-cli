@@ -427,12 +427,7 @@ impl<'a> WorkspaceBuilder<'a> {
         }
 
         let tgt_rel_path = self.elements.get(&target_slug)?.file_path.clone();
-        let view = nearest_common_ancestor_folder_slug(
-            &src_rel,
-            &tgt_rel_path,
-            &self.folder_slug_by_path,
-            &self.repo_slug,
-        );
+        let view = self.pick_connector_view(&src_rel, &tgt_rel_path);
 
         Some(Connector {
             view,
@@ -457,13 +452,16 @@ impl<'a> WorkspaceBuilder<'a> {
 
         // Priority 1: LSP gave us a resolved target_path — find the target symbol there.
         let tgt_slug = if r.target_path.is_empty() {
-            // Fallback: bare slug name match (original behaviour).
+            // Fallback: bare slug match, but only to an element living in the same
+            // file as the caller. Cross-file bare-name matches produce spurious
+            // connectors for stdlib-shaped calls like `.ok()`, `.new()`, `.as_str()`
+            // that collide with user-defined symbols of the same short name.
             let slug = slugify(&r.name);
-            if self.elements.contains_key(&slug) {
-                Some(slug)
-            } else {
-                None
-            }
+            let caller_rel = rel_from_base(&containing.file_path, &self.scan_parent);
+            self.elements
+                .get(&slug)
+                .filter(|el| el.file_path == caller_rel)
+                .map(|_| slug)
         } else {
             let tgt_rel = rel_from_base(&r.target_path, &self.scan_parent);
             // Try to find a symbol element in the target file with the matching name.
@@ -489,12 +487,7 @@ impl<'a> WorkspaceBuilder<'a> {
         let src_rel = self.elements.get(&src_slug)?.file_path.clone();
         let tgt_rel = self.elements.get(&tgt_slug)?.file_path.clone();
 
-        let view = nearest_common_ancestor_folder_slug(
-            &src_rel,
-            &tgt_rel,
-            &self.folder_slug_by_path,
-            &self.repo_slug,
-        );
+        let view = self.pick_connector_view(&src_rel, &tgt_rel);
 
         Some(Connector {
             view,
@@ -505,6 +498,21 @@ impl<'a> WorkspaceBuilder<'a> {
             direction: "forward".to_string(),
             ..Default::default()
         })
+    }
+
+    fn pick_connector_view(&self, src_rel: &str, tgt_rel: &str) -> String {
+        if src_rel == tgt_rel
+            && let Some(slug) = self.file_slug_by_rel.get(src_rel)
+            && self.elements.contains_key(slug)
+        {
+            return slug.clone();
+        }
+        nearest_common_ancestor_folder_slug(
+            src_rel,
+            tgt_rel,
+            &self.folder_slug_by_path,
+            &self.repo_slug,
+        )
     }
 
     /// Find the element slug for a declaration by matching the `symbol` field and file path.

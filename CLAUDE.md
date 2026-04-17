@@ -120,6 +120,12 @@ Local workspaces should only contain `elements.yaml`, `connectors.yaml`, and `.t
 ### Files to skip in analysis
 `should_skip_file()` in `workspace_builder.rs` excludes: `lock`, `toml`, `json`, `md`, `txt`, `yaml`, `yml`, `sum`, `mod`, `gitignore`, `xml`, `gradle`, `properties`.
 
+### Auto-tagging
+- `tld analyze` auto-assigns semantic element tags for `role`, `domain`, `endpoint`, and `external` by default.
+- Tags use namespaced names like `role:entrypoint`, `domain:user`, `endpoint:http-get`, and bare `external`.
+- Disable emission with `--auto-tag=none`, or scope it with `--auto-tag=role,domain`.
+- Workspace config can set `auto_tag: role,domain,endpoint,external`.
+
 ## CI & Release
 
 **Proto files** live in https://github.com/Mertcikla/tld-proto.git.

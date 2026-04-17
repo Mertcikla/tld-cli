@@ -1,6 +1,7 @@
 //! Data-flow projector — emits one representative request chain per endpoint
 //! family, collapsed to architectural nodes such as endpoint/service/repository/db.
 
+use super::tags::{self, AutoTagOptions};
 use super::{collapse_connectors, domain_for_symbol, edge_labels, present_symbol, unique_slug};
 use crate::analyzer::semantic::{
     graph::SemanticGraph,
@@ -44,6 +45,7 @@ pub fn project(
     syntax: &SyntaxBundle,
     ctx: &BuildContext,
     noise_threshold: i32,
+    auto_tags: &AutoTagOptions,
 ) -> (BuildOutput, ProjectionStats) {
     let scan_parent = std::path::Path::new(&ctx.scan_root)
         .parent()
@@ -145,32 +147,33 @@ pub fn project(
             let Some(symbol) = symbols_by_id.get(step.symbol_id.as_str()).copied() else {
                 continue;
             };
-            let presentation = present_symbol(symbol, role_map.get(&step.symbol_id));
+            let role = role_map.get(&step.symbol_id);
+            let score = score_map.get(&step.symbol_id).copied().unwrap_or_default();
+            let presentation = present_symbol(symbol, role);
             let element_slug = unique_slug(
                 &format!("{}-{}-{}", chain.family, idx, symbol.name),
                 &format!("{}/{}", chain.family, symbol.file_path),
                 &mut slug_registry,
             );
 
-            elements.insert(
-                element_slug.clone(),
-                Element {
-                    name: symbol.name.clone(),
-                    kind: presentation.kind,
-                    technology: presentation.technology,
-                    owner: ctx.owner.clone(),
-                    branch: ctx.branch.clone(),
-                    file_path: symbol.file_path.clone(),
-                    symbol: symbol.name.clone(),
-                    symbol_kind: presentation.symbol_kind,
-                    description: symbol.description.clone(),
-                    placements: vec![ViewPlacement {
-                        parent_ref: family_slug.clone(),
-                        ..Default::default()
-                    }],
+            let mut element = Element {
+                name: symbol.name.clone(),
+                kind: presentation.kind,
+                technology: presentation.technology,
+                owner: ctx.owner.clone(),
+                branch: ctx.branch.clone(),
+                file_path: symbol.file_path.clone(),
+                symbol: symbol.name.clone(),
+                symbol_kind: presentation.symbol_kind,
+                description: symbol.description.clone(),
+                placements: vec![ViewPlacement {
+                    parent_ref: family_slug.clone(),
                     ..Default::default()
-                },
-            );
+                }],
+                ..Default::default()
+            };
+            tags::assign_semantic_tags(&mut element, symbol, role, score, auto_tags);
+            elements.insert(element_slug.clone(), element);
 
             if let (Some(source), Some(edge_kind)) = (prev_slug.clone(), step.via_kind.as_ref()) {
                 let (label, relationship) = edge_labels(edge_kind);

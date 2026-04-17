@@ -2,6 +2,7 @@
 //! Business projector — emits architecturally significant symbols grouped into
 //! coarse business domains plus synthesized infrastructure terminals.
 
+use super::tags::{self, AutoTagOptions};
 use super::{collapse_connectors, domain_for_symbol, edge_labels, present_symbol, unique_slug};
 use crate::analyzer::semantic::{
     graph::SemanticGraph,
@@ -30,6 +31,7 @@ pub fn project(
     syntax: &SyntaxBundle,
     ctx: &BuildContext,
     noise_threshold: i32,
+    auto_tags: &AutoTagOptions,
 ) -> (BuildOutput, ProjectionStats) {
     let scan_parent = std::path::Path::new(&ctx.scan_root)
         .parent()
@@ -93,6 +95,11 @@ pub fn project(
             symbol_domains.insert(sym.symbol_id.clone(), domain.clone());
             domain_registry.entry(domain.clone()).or_insert_with(|| {
                 let slug = format!("domain-{}", slugify(&domain));
+                let domain_tags = if auto_tags.domain {
+                    vec![format!("domain:{domain}")]
+                } else {
+                    Vec::new()
+                };
                 elements.insert(
                     slug.clone(),
                     Element {
@@ -101,6 +108,7 @@ pub fn project(
                         technology: "Domain".to_string(),
                         owner: ctx.owner.clone(),
                         branch: ctx.branch.clone(),
+                        tags: domain_tags,
                         placements: vec![ViewPlacement {
                             parent_ref: repo_slug.clone(),
                             ..Default::default()
@@ -122,27 +130,28 @@ pub fn project(
             .and_then(|domain| domain_registry.get(domain))
             .cloned()
             .unwrap_or_else(|| repo_slug.clone());
-        let presentation = present_symbol(sym, role_map.get(&sym.symbol_id));
+        let role = role_map.get(&sym.symbol_id);
+        let score = score_map.get(&sym.symbol_id).copied().unwrap_or_default();
+        let presentation = present_symbol(sym, role);
 
-        elements.insert(
-            slug,
-            Element {
-                name: sym.name.clone(),
-                kind: presentation.kind,
-                technology: presentation.technology,
-                owner: ctx.owner.clone(),
-                branch: ctx.branch.clone(),
-                file_path: sym.file_path.clone(),
-                symbol: sym.name.clone(),
-                symbol_kind: presentation.symbol_kind,
-                description: sym.description.clone(),
-                placements: vec![ViewPlacement {
-                    parent_ref,
-                    ..Default::default()
-                }],
+        let mut element = Element {
+            name: sym.name.clone(),
+            kind: presentation.kind,
+            technology: presentation.technology,
+            owner: ctx.owner.clone(),
+            branch: ctx.branch.clone(),
+            file_path: sym.file_path.clone(),
+            symbol: sym.name.clone(),
+            symbol_kind: presentation.symbol_kind,
+            description: sym.description.clone(),
+            placements: vec![ViewPlacement {
+                parent_ref,
                 ..Default::default()
-            },
-        );
+            }],
+            ..Default::default()
+        };
+        tags::assign_semantic_tags(&mut element, sym, role, score, auto_tags);
+        elements.insert(slug, element);
     }
 
     let mut connectors: Vec<Connector> = Vec::new();

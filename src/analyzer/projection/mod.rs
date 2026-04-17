@@ -1,6 +1,7 @@
 pub mod business;
 pub mod data_flow;
 pub mod structural;
+pub mod tags;
 
 use crate::analyzer::semantic::{
     endpoints::detect_endpoint,
