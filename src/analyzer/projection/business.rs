@@ -2,6 +2,7 @@
 //! Business projector — emits architecturally significant symbols grouped into
 //! coarse business domains plus synthesized infrastructure terminals.
 
+use super::collapse::{self, CollapseConfig};
 use super::tags::{self, AutoTagOptions};
 use super::{collapse_connectors, domain_for_symbol, edge_labels, present_symbol, unique_slug};
 use crate::analyzer::semantic::{
@@ -32,6 +33,7 @@ pub fn project(
     ctx: &BuildContext,
     noise_threshold: i32,
     auto_tags: AutoTagOptions,
+    collapse_config: CollapseConfig,
 ) -> (BuildOutput, ProjectionStats) {
     let scan_parent = std::path::Path::new(&ctx.scan_root)
         .parent()
@@ -65,6 +67,7 @@ pub fn project(
 
     let repo_slug = slugify(&ctx.repo_name);
     let mut elements: HashMap<String, Element> = HashMap::new();
+    let mut signal_by_slug: HashMap<String, i32> = HashMap::new();
     let mut sym_id_to_slug: HashMap<String, String> = HashMap::new();
     let mut slug_registry: HashMap<String, usize> = HashMap::new();
     let mut domain_registry: HashMap<String, String> = HashMap::new();
@@ -151,6 +154,7 @@ pub fn project(
             ..Default::default()
         };
         tags::assign_semantic_tags(&mut element, sym, role, score, auto_tags);
+        signal_by_slug.insert(slug.clone(), score);
         elements.insert(slug, element);
     }
 
@@ -232,13 +236,16 @@ pub fn project(
             .count(),
     };
 
-    (
+    let output = collapse::auto_collapse(
         BuildOutput {
             elements,
             connectors,
         },
-        stats,
-    )
+        &signal_by_slug,
+        collapse_config,
+    );
+
+    (output, stats)
 }
 
 fn forced_projection_symbol_ids(

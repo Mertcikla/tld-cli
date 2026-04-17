@@ -18,6 +18,26 @@ pub use types::*;
 
 const MAX_ANALYZE_FILE_BYTES: u64 = 512 * 1024;
 
+fn is_supported_source_path(path: &str) -> bool {
+    matches!(
+        Path::new(path).extension().and_then(|ext| ext.to_str()),
+        Some(
+            "py" | "java"
+                | "cpp"
+                | "cc"
+                | "hpp"
+                | "h"
+                | "cxx"
+                | "ts"
+                | "tsx"
+                | "js"
+                | "jsx"
+                | "go"
+                | "rs"
+        )
+    )
+}
+
 /// Callback invoked for each file or directory visited during analysis.
 /// Arguments: (path, is_dir).
 pub type OnEntry<'a> = Option<&'a dyn Fn(&str, bool)>;
@@ -42,7 +62,10 @@ impl TreeSitterService {
         let metadata = fs::metadata(path)?;
         if metadata.is_dir() {
             Self::count_dir(Path::new(path), path, rules)
-        } else if rules.should_ignore_path(path) || metadata.len() > MAX_ANALYZE_FILE_BYTES {
+        } else if rules.should_ignore_path(path)
+            || metadata.len() > MAX_ANALYZE_FILE_BYTES
+            || !is_supported_source_path(path)
+        {
             Ok(0)
         } else {
             Ok(1)
@@ -217,6 +240,9 @@ impl Service for TreeSitterService {
             if metadata.len() > MAX_ANALYZE_FILE_BYTES {
                 return Ok(AnalysisResult::default());
             }
+            if !is_supported_source_path(path) {
+                return Ok(AnalysisResult::default());
+            }
             if let Some(cb) = on_entry {
                 cb(path, false);
             }
@@ -258,6 +284,9 @@ impl TreeSitterService {
                 if rules.should_ignore_path(rel_path) {
                     continue;
                 }
+                if !is_supported_source_path(rel_path) {
+                    continue;
+                }
                 let metadata = entry.metadata()?;
                 if metadata.len() <= MAX_ANALYZE_FILE_BYTES {
                     count += 1;
@@ -293,6 +322,9 @@ impl TreeSitterService {
                 Self::walk_dir(&path, root, rules, on_entry, merged)?;
             } else {
                 if rules.should_ignore_path(rel_path) {
+                    continue;
+                }
+                if !is_supported_source_path(rel_path) {
                     continue;
                 }
                 let metadata = entry.metadata()?;

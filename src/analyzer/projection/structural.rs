@@ -1,6 +1,7 @@
 //! Structural projector — preserves the file/folder hierarchy while normalizing
 //! symbol elements to architectural kinds and preserving the raw declaration kind.
 
+use super::collapse::{self, CollapseConfig};
 use super::present_symbol;
 use super::tags::{self, AutoTagOptions};
 use crate::analyzer::{
@@ -17,6 +18,7 @@ pub fn project(
     result: &AnalysisResult,
     ctx: &BuildContext,
     auto_tags: AutoTagOptions,
+    collapse_config: CollapseConfig,
 ) -> BuildOutput {
     let mut output = workspace_builder::build(result, ctx);
 
@@ -51,6 +53,7 @@ pub fn project(
     }
 
     let mut high_signal_slugs: HashSet<String> = HashSet::new();
+    let mut signal_by_slug: HashMap<String, i32> = HashMap::new();
 
     for (slug, element) in &mut output.elements {
         if element.symbol.is_empty() || element.file_path.is_empty() {
@@ -90,6 +93,7 @@ pub fn project(
         if score > 0 {
             high_signal_slugs.insert(slug.clone());
         }
+        signal_by_slug.insert(slug.clone(), score);
 
         tags::assign_semantic_tags(element, symbol, role, score, auto_tags);
     }
@@ -97,7 +101,7 @@ pub fn project(
     prune_utility_sinks(&mut output, &high_signal_slugs);
     tags::prune_auto_tags(&mut output.elements, 3);
 
-    output
+    collapse::auto_collapse(output, &signal_by_slug, collapse_config)
 }
 
 /// Drop `calls` connectors pointing at utility-sink elements — targets with

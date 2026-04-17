@@ -1,8 +1,9 @@
+use crate::analyzer::projection::collapse::CollapseConfig;
 use crate::analyzer::projection::tags::AutoTagOptions;
 use crate::analyzer::projection::{self, ViewMode};
 use crate::analyzer::scope;
 use crate::analyzer::syntax;
-use crate::analyzer::{Rules, Service, TreeSitterService};
+use crate::analyzer::{AnalysisResult, Rules, Service, TreeSitterService};
 use crate::error::TldError;
 use crate::output;
 use crate::workspace;
@@ -95,6 +96,12 @@ const DEFAULT_EXCLUDES: &[&str] = &[
     "*.gen.go",
 ];
 
+const HARD_MAX_ELEMENTS: usize = 10_000;
+const DEFAULT_TARGET_ELEMENTS: usize = 500;
+const LSP_AUTO_MAX_PENDING_CALLS: usize = 5_000;
+const LSP_AUTO_MAX_SYMBOLS: usize = 8_000;
+const LSP_AUTO_MAX_FILES: usize = 1_500;
+
 #[derive(Args, Debug, Clone)]
 pub struct AnalyzeArgs {
     /// Path to analyze (file or directory)
@@ -140,10 +147,33 @@ pub struct AnalyzeArgs {
     /// Supported dimensions: role, domain, endpoint, external, signal
     #[arg(long = "auto-tag")]
     pub auto_tag: Option<String>,
+
+    /// LSP enrichment mode: auto | on | off
+    ///
+    /// auto skips expensive definition lookup for structural views and very large scans.
+    #[arg(long = "lsp", default_value = "auto")]
+    pub lsp: String,
+
+    /// Target number of visible elements after auto-collapse.
+    ///
+    /// The analyzer enforces a hard maximum of 10000 elements regardless of this value.
+    #[arg(long = "max-elements", default_value_t = DEFAULT_TARGET_ELEMENTS)]
+    pub max_elements: usize,
 }
 
 #[expect(clippy::print_stdout, clippy::print_stderr)]
 pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
+    if args.max_elements == 0 {
+        return Err(TldError::Generic(
+            "--max-elements must be greater than 0".to_string(),
+        ));
+    }
+    if args.max_elements > HARD_MAX_ELEMENTS {
+        return Err(TldError::Generic(format!(
+            "--max-elements must be <= {HARD_MAX_ELEMENTS}"
+        )));
+    }
+
     // ── Pre-download requested parsers ────────────────────────────────────────
     if let Some(ref langs_csv) = args.download {
         let langs: Vec<&str> = langs_csv.split(',').map(str::trim).collect();
@@ -169,6 +199,12 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         TldError::Generic(format!(
             "Unknown view '{}'. Valid values: structural, business, data-flow",
             args.view
+        ))
+    })?;
+    let lsp_mode = LspMode::from_str(&args.lsp).ok_or_else(|| {
+        TldError::Generic(format!(
+            "Unknown LSP mode '{}'. Valid values: auto, on, off",
+            args.lsp
         ))
     })?;
 
@@ -388,33 +424,42 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             .refs
             .iter()
             .filter(|r| r.kind == "call" && r.target_path.is_empty())
-            .count() as u64;
-        let lsp_progress =
-            progress_bar_for_total(pending_lsp_lookups, "Running LSP definition lookup...");
-        match crate::analyzer::lsp::resolve_calls_with_lsp(
-            &mut result.refs,
-            &effective_scan_root,
-            &unique_langs,
-            &lsp_progress,
-        )
-        .await
-        {
-            Ok(()) => {
-                lsp_progress.finish_and_clear();
-                let resolved = result
-                    .refs
-                    .iter()
-                    .filter(|r| !r.target_path.is_empty())
-                    .count();
-                output::print_info(&format!(
-                    "LSP enrichment complete ({resolved} calls resolved)."
-                ));
+            .count();
+        match lsp_decision(&lsp_mode, &view_mode, &result, pending_lsp_lookups) {
+            LspDecision::Run => {
+                let lsp_progress = progress_bar_for_total(
+                    pending_lsp_lookups as u64,
+                    "Running LSP definition lookup...",
+                );
+                match crate::analyzer::lsp::resolve_calls_with_lsp(
+                    &mut result.refs,
+                    &effective_scan_root,
+                    &unique_langs,
+                    &lsp_progress,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        lsp_progress.finish_and_clear();
+                        let resolved = result
+                            .refs
+                            .iter()
+                            .filter(|r| !r.target_path.is_empty())
+                            .count();
+                        output::print_info(&format!(
+                            "LSP enrichment complete ({resolved} calls resolved)."
+                        ));
+                    }
+                    Err(e) => {
+                        lsp_progress.finish_and_clear();
+                        output::print_warn(&format!(
+                            "LSP enrichment unavailable ({e}); analysis accuracy may drop, but continuing."
+                        ));
+                    }
+                }
             }
-            Err(e) => {
-                lsp_progress.finish_and_clear();
-                output::print_warn(&format!(
-                    "LSP enrichment unavailable ({e}); analysis accuracy may drop, but continuing."
-                ));
+            LspDecision::Skip(reason) => {
+                output::print_info(&format!("Skipping LSP enrichment ({reason})."));
             }
         }
     }
@@ -446,12 +491,14 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     } else {
         args.noise_threshold
     };
+    let collapse_config = CollapseConfig::new(args.max_elements, HARD_MAX_ELEMENTS);
 
     let semantic_syntax = syntax_bundle.as_ref();
 
     let (build_output, stats_msg) = match view_mode {
         ViewMode::Structural => {
-            let out = projection::structural::project(&result, &ctx, auto_tag_opts);
+            let out =
+                projection::structural::project(&result, &ctx, auto_tag_opts, collapse_config);
             let msg = format!(
                 "{} elements written, {} connectors created (structural view).",
                 out.elements.len(),
@@ -463,8 +510,13 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             let syntax = semantic_syntax.ok_or_else(|| {
                 TldError::Generic("semantic views should build a syntax bundle".to_string())
             })?;
-            let (out, stats) =
-                projection::business::project(syntax, &ctx, noise_threshold, auto_tag_opts);
+            let (out, stats) = projection::business::project(
+                syntax,
+                &ctx,
+                noise_threshold,
+                auto_tag_opts,
+                collapse_config,
+            );
             let msg = format!(
                 "{} elements written, {} connectors created, {} low-signal symbols hidden, {} unresolved refs, {} resolved call edges ({} via LSP) (business view).",
                 out.elements.len(),
@@ -512,6 +564,73 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     output::print_ok(&format!("Analysis complete. {stats_msg}"));
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LspMode {
+    Auto,
+    On,
+    Off,
+}
+
+impl LspMode {
+    fn from_str(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "auto" => Some(Self::Auto),
+            "on" => Some(Self::On),
+            "off" => Some(Self::Off),
+            _ => None,
+        }
+    }
+}
+
+enum LspDecision {
+    Run,
+    Skip(String),
+}
+
+fn lsp_decision(
+    mode: &LspMode,
+    view_mode: &ViewMode,
+    result: &AnalysisResult,
+    pending_lsp_lookups: usize,
+) -> LspDecision {
+    match mode {
+        LspMode::On => {
+            if pending_lsp_lookups == 0 {
+                LspDecision::Skip("no unresolved call sites".to_string())
+            } else {
+                LspDecision::Run
+            }
+        }
+        LspMode::Off => LspDecision::Skip("disabled by --lsp off".to_string()),
+        LspMode::Auto => {
+            if pending_lsp_lookups == 0 {
+                return LspDecision::Skip("no unresolved call sites".to_string());
+            }
+            if matches!(view_mode, ViewMode::Structural) {
+                return LspDecision::Skip("auto mode disables LSP for structural view".to_string());
+            }
+            if pending_lsp_lookups > LSP_AUTO_MAX_PENDING_CALLS {
+                return LspDecision::Skip(format!(
+                    "auto mode budget exceeded: {pending_lsp_lookups} pending calls"
+                ));
+            }
+            if result.symbols.len() > LSP_AUTO_MAX_SYMBOLS {
+                return LspDecision::Skip(format!(
+                    "auto mode budget exceeded: {} symbols",
+                    result.symbols.len()
+                ));
+            }
+            if result.files_scanned.len() > LSP_AUTO_MAX_FILES {
+                return LspDecision::Skip(format!(
+                    "auto mode budget exceeded: {} files",
+                    result.files_scanned.len()
+                ));
+            }
+            LspDecision::Run
+        }
+    }
 }
 
 fn repo_name_hint(

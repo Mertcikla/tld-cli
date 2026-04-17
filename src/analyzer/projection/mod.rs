@@ -1,4 +1,5 @@
 pub mod business;
+pub mod collapse;
 pub mod data_flow;
 pub mod structural;
 pub mod tags;
