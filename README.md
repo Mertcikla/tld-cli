@@ -48,12 +48,12 @@ This will install the `tld` binary into your `$CARGO_HOME/bin` directory.
 
 3. Create your first element:
    ```bash
-   tld add "System Overview" --ref system-overview --kind workspace --diagram-label "System Context"
+   tld add "System Overview" --kind workspace
    ```
 
 4. Add elements to that view:
    ```bash
-   tld add "Web API" --parent system-overview --kind service --technology "Go / Gin"
+   tld add "Web API" --ref web-api --parent system-overview --kind service --technology "Go / Gin"
    ```
 
 5. Validate your workspace:
@@ -92,9 +92,10 @@ A tld workspace consists of the following directory structure:
 ### Resource Creation
 
 - `tld add <name>`: Define a new element. Every created element owns a canonical diagram.
+  - `--ref <slug>`: Override the generated slug/ref for the element.
   - `--tag <name>`: Apply a tag to the element (can be specified multiple times; idempotent).
-  - Example: `tld add "Web API" --kind service --tag backend --tag api`
-- `tld connect --from <source> --to <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
+  - Example: `tld add "Web API" --ref web-api --kind service --tag backend --tag api`
+- `tld connect <source> <target>`: Define a connector between two elements. The owning diagram is inferred from their shared parent placement.
 - `tld remove element <ref>`: Remove an element from the workspace.
 - `tld remove connector --view <ref> --from <source_ref> --to <target_ref>`: Remove matching connector(s).
 - `tld update element <ref> <field> <value>`: Update an element field. Use `field=ref` to rename an element reference and cascade the change through placements and connector endpoints.

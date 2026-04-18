@@ -7,6 +7,9 @@ use clap::Args;
 pub struct AddArgs {
     /// Name of the element to add or update
     pub name: String,
+    /// Override the generated slug/ref for this element
+    #[arg(long = "ref")]
+    pub ref_name: Option<String>,
     /// Element kind (e.g. service, database, function)
     #[arg(long)]
     pub kind: Option<String>,
@@ -30,7 +33,12 @@ pub struct AddArgs {
 #[expect(clippy::needless_pass_by_value)]
 pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
-    let ref_name = workspace::slugify(&args.name);
+    let ref_name = args
+        .ref_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map_or_else(|| workspace::slugify(&args.name), ToOwned::to_owned);
 
     let existing = ws.elements.get(&ref_name).cloned();
     let mut element = existing.clone().unwrap_or_else(|| Element {

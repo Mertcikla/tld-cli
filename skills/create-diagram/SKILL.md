@@ -168,10 +168,10 @@ Create `diagram.sh`, then append and run the root elements as the first batch. R
 
 ```bash
 # === Root elements ===
-tld add "Domain & Business Logic" --ref domain --diagram-label "System" --tag layer:domain
-tld add "Data & Persistence" --ref data --diagram-label "System" --tag layer:data
-tld add "Interfaces & Integrations" --ref interfaces --diagram-label "System" --tag layer:interfaces
-tld add "Platform & Infrastructure" --ref deployment --diagram-label "System" --tag layer:infra
+tld add "Domain & Business Logic" --ref domain --tag layer:domain
+tld add "Data & Persistence" --ref data --tag layer:data
+tld add "Interfaces & Integrations" --ref interfaces --tag layer:interfaces
+tld add "Platform & Infrastructure" --ref deployment --tag layer:infra
 ```
 
 Append and run the next level as a second batch:
@@ -268,7 +268,7 @@ For every subsystem, append one batch per view and run it before starting the ne
 
 ```bash
 # === API (L3) ===
-tld add "API" --ref api-internals --parent backend --diagram-label "Container"
+tld add "API" --ref api-internals --parent backend
 ```
 
 No separate link command needed — drilling into `api-internals` from the backend view happens automatically.

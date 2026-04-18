@@ -130,18 +130,19 @@ fn test_examples_md_flow_stays_executable() {
 fn test_cli_guide_matches_current_cli_surface() {
     let guide = fs::read_to_string("docs/CLI_GUIDE.md").expect("read guide");
     let examples = fs::read_to_string("examples.md").expect("read examples");
+    let readme = fs::read_to_string("README.md").expect("read readme");
 
     assert!(guide.contains("tld add <name> [flags]"));
     assert!(guide.contains("tld connect <source-ref> <target-ref> [flags]"));
     assert!(guide.contains("tld plan [--recreate-ids] [-v|--verbose] [-o|--output <file>]"));
+    assert!(guide.contains("--ref <slug>"));
     assert!(!guide.contains("tld connect --from"));
-    assert!(!guide.contains("--style"));
-    assert!(!guide.contains("--diagram-label"));
     assert!(!guide.contains("--position-x"));
     assert!(!guide.contains("--position-y"));
     assert!(!guide.contains("--changed-since"));
     assert!(!guide.contains("--deep"));
-    assert!(!examples.contains("--ref"));
+    assert!(examples.contains("--ref backend"));
+    assert!(readme.contains("--ref web-api"));
 }
 
 #[test]

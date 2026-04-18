@@ -4,7 +4,7 @@ These commands use only local workspace files (`elements.yaml` and `connectors.y
 
 ```bash
 tld init
-tld add Backend --kind service --tag layer:domain
+tld add Backend --ref backend --kind service --tag layer:domain
 tld add Api --parent backend --technology Go --tag protocol:rest
 tld add Database --parent backend --technology PostgreSQL --tag role:database
 tld connect api database --view backend --label reads-writes --relationship uses

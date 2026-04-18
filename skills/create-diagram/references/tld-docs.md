@@ -37,7 +37,6 @@ Every element automatically gets a view (`has_view: true`), so any element can b
 - `--description "..."` - What this element does
 - `--technology "..."` - Primary technology (e.g. `Go`, `React`, `PostgreSQL`)
 - `--url "..."` - Link to docs, repo, or dashboard
-- `--diagram-label "..."` - Optional label for this element's view (e.g. `System`, `Container`, `Component`)
 - `--position-x <float>` - Horizontal canvas position
 - `--position-y <float>` - Vertical canvas position
 

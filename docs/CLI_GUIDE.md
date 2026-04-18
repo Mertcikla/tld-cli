@@ -62,6 +62,7 @@ Initialize workspace files. Default directory is `.tld`.
 Create or update an element.
 
 Flags:
+- `--ref <slug>`: override the generated element reference
 - `--kind <kind>`
 - `--technology <text>`
 - `--description <text>`

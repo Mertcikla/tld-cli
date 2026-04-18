@@ -30,7 +30,30 @@ fn test_tld_add_help() {
     cmd.arg("add").arg("--help");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Add or update an element"));
+        .stdout(predicate::str::contains("Add or update an element"))
+        .stdout(predicate::str::contains("--ref"));
+}
+
+#[test]
+fn test_tld_add_ref_overrides_generated_slug() {
+    let dir = tempdir().unwrap();
+    let wdir = dir.path().to_str().unwrap();
+
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("-w")
+        .arg(wdir)
+        .arg("add")
+        .arg("System Overview")
+        .arg("--ref")
+        .arg("system-root")
+        .arg("--kind")
+        .arg("workspace");
+    cmd.assert().success();
+
+    let elements = fs::read_to_string(dir.path().join("elements.yaml")).unwrap();
+    assert!(elements.contains("system-root:"));
+    assert!(elements.contains("name: System Overview"));
+    assert!(!elements.contains("system-overview:"));
 }
 
 #[test]
