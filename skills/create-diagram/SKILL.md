@@ -61,13 +61,30 @@ Append any missing connectors to `diagram.sh` and run them before moving on.
 
 ---
 
-## View density: the 10-element rule
+## View density: the 15-element rule
 
-Keep each view focused. **Aim for ~10 elements per view; never exceed 20.** A crowded view isn't more informative — it becomes a wall of boxes where the relationships disappear. If you're placing more than 10–15 elements in a single view, that's a signal to cluster before you continue.
+Keep each view focused. **Aim for ~15 elements per view; never exceed 25.** A crowded view isn't more informative — it becomes a wall of boxes where the relationships disappear. If you're placing more than 15–20 elements in a single view, that's a signal to use tags, cluster, or both.
+
+### Tags: planes and boundaries within a view
+
+Before clustering, consider whether **tags** can give the view enough structure to remain readable at a higher element count. Tags let a reader filter the view to a single plane, role, or boundary — making ~20 elements navigable where a flat list would not be.
+
+**Good uses of tags:**
+- Layer/plane: `layer:api`, `layer:data`, `layer:infra`
+- Boundary: `boundary:public`, `boundary:private`, `boundary:internal`, `boundary:external`
+- Protocol: `protocol:grpc`, `protocol:rest`, `protocol:event`
+- Role: `role:service`, `role:database`, `role:worker`, `role:gateway`
+
+**Constraints — tags are not free:**
+- Each element should carry **1–3 tags** maximum. More than 3 signals that the element is doing too many things or the tag scheme is too granular.
+- **Total tag count across the view must not exceed total element count.** If you have 10 elements, you can assign at most 10 tags total across all of them — meaning most elements should have 0–1 tags.
+- Do not tag every element for the sake of completeness. Tag an element only when its tag conveys something a reader couldn't infer from the element name and connectors alone.
+
+**Tags complement clustering — use both.** Tags handle *role clarity* within a view; clustering handles *size*. A well-tagged view of 18 elements is better than a cluster of 8 that hides the relationships. A cluster of 5 with clear tags on each element is better than a flat list of 18 tagged elements where the groupings are invisible.
 
 ### When and how to cluster
 
-After mapping your inventory, count the elements you're about to place. If the count is heading above 10–15:
+After mapping your inventory, count the elements you're about to place. If the count is heading above 15–20 even after considering tags:
 
 1. **List all the elements** — write them out so you can see the whole set at once.
 2. **Find the largest cohesive group** — look for elements that share a role, layer, or domain: all the auth-related pieces, all the data-layer components, all the event processors, etc.
@@ -90,7 +107,7 @@ Copy this checklist and check off items as you complete them:
 - [ ] Step 3: Create diagram.sh and root elements — batch checkpoint
 - [ ] Step 4: Add child elements per subsystem — batch checkpoint after each view
 - [ ] Step 4a: Connect elements within each view
-- [ ] Step 4b: 10-element rule
+- [ ] Step 4b: 15-element rule (tags + clustering)
 - [ ] Step 5: Audit shared elements — trace every view they appear in
 - [ ] Step 6: Drill into every major subsystem (3–5 levels) — batch checkpoint after each view
 - [ ] Step 7: Run `tld validate`
@@ -198,9 +215,9 @@ An unconnected element is a bug — either it's missing connectors, or it doesn'
 
 **Batch checkpoint after connectors:** Any elements from other views that interact with elements you just wired? Append cross-view connectors now.
 
-### Step 4b: 10-element rule
+### Step 4b: 15-element rule
 
-Count elements in each view. More than ~10? Apply the **clustering strategy** from the View density section before continuing.
+Count elements in each view. More than ~15? First consider whether **tags** can organize the view into readable planes (e.g. `layer:api` vs `layer:data`, or `boundary:public` vs `boundary:private`). If the count still exceeds 20 after tagging, apply the **clustering strategy** from the View density section. Use both together when the view warrants it.
 
 ---
 
