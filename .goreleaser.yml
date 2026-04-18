@@ -39,7 +39,7 @@ homebrew_casks:
     repository:
       owner: Mertcikla
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      token: "{{ .Env.GITHUB_TOKEN }}"
     homepage: "https://tldiagram.com"
     description: "CLI for the tlDiagram architecture diagramming system"
     url:

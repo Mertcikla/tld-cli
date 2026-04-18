@@ -21,9 +21,6 @@ pub struct ConnectArgs {
     /// Direction of the connector (forward, backward, both, none)
     #[arg(long, default_value = "forward")]
     pub direction: String,
-    /// Visual style (bezier, straight, step, smoothstep)
-    #[arg(long, default_value = "bezier")]
-    pub style: String,
 }
 
 #[expect(clippy::needless_pass_by_value)]
@@ -81,7 +78,6 @@ pub fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
         label: args.label.unwrap_or_default(),
         relationship: args.relationship.unwrap_or_default(),
         direction: args.direction,
-        style: args.style,
         ..Default::default()
     };
 

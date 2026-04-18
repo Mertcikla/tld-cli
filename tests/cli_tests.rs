@@ -34,6 +34,16 @@ fn test_tld_add_help() {
 }
 
 #[test]
+fn test_tld_connect_help_does_not_expose_style() {
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("connect").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("--direction"))
+        .stdout(predicate::str::contains("--style").not());
+}
+
+#[test]
 fn test_tld_analyze_help_exposes_simplified_flags() {
     let mut cmd = Command::cargo_bin("tld").unwrap();
     cmd.arg("analyze").arg("--help");

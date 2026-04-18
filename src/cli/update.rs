@@ -22,7 +22,7 @@ pub enum UpdateResource {
         value: Option<String>,
     },
     /// Update a connector field.
-    /// Valid fields: view, source, target, label, description, relationship, direction, style, url
+    /// Valid fields: view, source, target, label, description, relationship, direction, url
     Connector {
         /// Connector canonical ref (view:source:target:label)
         r#ref: String,
@@ -92,7 +92,6 @@ pub fn exec(args: UpdateArgs, wdir: String) -> Result<(), TldError> {
                     ("description", conn.description.clone()),
                     ("relationship", conn.relationship.clone()),
                     ("direction", conn.direction.clone()),
-                    ("style", conn.style.clone()),
                     ("url", conn.url.clone()),
                 ]);
             }

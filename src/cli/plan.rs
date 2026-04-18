@@ -1,9 +1,12 @@
 use crate::client;
+use crate::client::diagv1::ApplyPlanResponse;
 use crate::error::TldError;
 use crate::output;
 use crate::planner;
 use crate::workspace;
 use clap::Args;
+use std::fmt::Write;
+use std::fs;
 use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
@@ -19,7 +22,7 @@ pub struct PlanArgs {
     pub verbose: bool,
 }
 
-#[expect(clippy::print_stdout, clippy::items_after_statements)]
+#[expect(clippy::print_stdout)]
 pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
     let ws = workspace::load(&wdir)?;
 
@@ -53,17 +56,34 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
 
     output::print_ok("Plan built successfully.");
 
+    let report = render_plan_report(&resp, args.verbose);
+    if let Some(output_path) = args.output {
+        fs::write(&output_path, report)?;
+        output::print_ok(&format!("Plan report written to {output_path}"));
+    } else {
+        print!("{report}");
+    }
+
+    Ok(())
+}
+
+fn render_plan_report(resp: &ApplyPlanResponse, verbose: bool) -> String {
+    let mut out = String::new();
+
     // Summary of counts
     if let Some(summary) = &resp.summary {
-        println!("\nPlan Summary:");
-        println!("  Elements:   {:3} planned", summary.elements_planned);
-        println!("  Views:      {:3} planned", summary.views_planned);
-        println!("  Connectors: {:3} planned", summary.connectors_planned);
+        out.push_str("Plan Summary:\n");
+        let _ = writeln!(out, "  Elements:   {:3} planned", summary.elements_planned);
+        let _ = writeln!(out, "  Views:      {:3} planned", summary.views_planned);
+        let _ = writeln!(
+            out,
+            "  Connectors: {:3} planned",
+            summary.connectors_planned
+        );
     }
 
     // Proposed Changes Table
-    if args.verbose && (!resp.element_results.is_empty() || !resp.connector_results.is_empty()) {
-        println!("\nProposed Changes:");
+    if verbose && (!resp.element_results.is_empty() || !resp.connector_results.is_empty()) {
         use tabled::{Table, Tabled};
 
         #[derive(Tabled)]
@@ -93,17 +113,24 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
         }
 
         if !rows.is_empty() {
-            let table = Table::new(rows).to_string();
-            println!("{table}");
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("Proposed Changes:\n");
+            out.push_str(&Table::new(rows).to_string());
+            out.push('\n');
         }
     }
 
     // Conflicts
     if !resp.conflicts.is_empty() {
-        println!();
-        output::print_warn(&format!("{} conflicts detected!", resp.conflicts.len()));
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        let _ = writeln!(out, "{} conflicts detected!", resp.conflicts.len());
         for conflict in &resp.conflicts {
-            println!(
+            let _ = writeln!(
+                out,
                 "  * {} \"{}\": {}",
                 conflict.resource_type, conflict.r#ref, conflict.resolution_hint
             );
@@ -112,15 +139,57 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
 
     // Drift
     if !resp.drift.is_empty() {
-        println!();
-        output::print_info(&format!("{} drift items detected.", resp.drift.len()));
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        let _ = writeln!(out, "{} drift items detected.", resp.drift.len());
         for drift in &resp.drift {
-            println!(
+            let _ = writeln!(
+                out,
                 "  * {} \"{}\": {}",
                 drift.resource_type, drift.r#ref, drift.reason
             );
         }
     }
 
-    Ok(())
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_plan_report;
+    use crate::client::diagv1::{ApplyPlanResponse, PlanConflictItem, PlanDriftItem, PlanSummary};
+
+    #[test]
+    fn render_plan_report_includes_summary_conflicts_and_drift() {
+        let resp = ApplyPlanResponse {
+            summary: Some(PlanSummary {
+                elements_planned: 2,
+                views_planned: 1,
+                connectors_planned: 3,
+                ..Default::default()
+            }),
+            conflicts: vec![PlanConflictItem {
+                resource_type: "element".to_string(),
+                r#ref: "backend".to_string(),
+                resolution_hint: "pull before apply".to_string(),
+                ..Default::default()
+            }],
+            drift: vec![PlanDriftItem {
+                resource_type: "connector".to_string(),
+                r#ref: "root:api:db:reads".to_string(),
+                reason: "label changed on server".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let text = render_plan_report(&resp, false);
+
+        assert!(text.contains("Plan Summary:"));
+        assert!(text.contains("1 conflicts detected!"));
+        assert!(text.contains("1 drift items detected."));
+        assert!(text.contains("backend"));
+        assert!(text.contains("root:api:db:reads"));
+    }
 }
