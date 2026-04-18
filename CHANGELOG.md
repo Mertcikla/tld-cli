@@ -2,6 +2,12 @@
 
 All notable changes to tld are documented here.
 
+## [0.1.11] - 2026-04-18
+
+### Features
+
+- Add auto-collapse projection and --max-elements cap ([`f12e950`](https://github.com/Mertcikla/tld-cli/commit/f12e95099b718ce3770b39efcc5fac0674457882))
+
 ## [0.1.10] - 2026-04-17
 
 ### Documentation
