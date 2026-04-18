@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use std::fs;
@@ -54,6 +56,45 @@ fn test_tld_add_ref_overrides_generated_slug() {
     assert!(elements.contains("system-root:"));
     assert!(elements.contains("name: System Overview"));
     assert!(!elements.contains("system-overview:"));
+}
+
+#[test]
+fn test_tld_add_without_parent_uses_workspace_repository_root() {
+    let dir = tempdir().unwrap();
+    let wdir = dir.path();
+
+    fs::write(
+        wdir.join(".tld.yaml"),
+        r"project_name: kafka
+repositories:
+  origin:
+    url: https://github.com/apache/kafka.git
+    localDir: .
+",
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("-w")
+        .arg(wdir)
+        .arg("add")
+        .arg("Broker")
+        .arg("--kind")
+        .arg("service");
+    cmd.assert().success();
+
+    let elements = fs::read_to_string(wdir.join("elements.yaml")).unwrap();
+    assert!(elements.contains("kafka:"));
+    assert!(elements.contains("name: kafka"));
+    assert!(elements.contains("kind: repository"));
+    assert!(elements.contains("technology: Git Repository"));
+    assert!(elements.contains("- parent: root"));
+    assert!(elements.contains("broker:"));
+    assert!(elements.contains("name: Broker"));
+    assert!(elements.contains("- parent: kafka"));
+
+    let config = fs::read_to_string(wdir.join(".tld.yaml")).unwrap();
+    assert!(config.contains("root: kafka"));
 }
 
 #[test]
@@ -287,7 +328,7 @@ fn test_tld_analyze_workspace_root_respects_pointed_path_not_repo_projection() {
 
     fs::write(
         wdir.join(".tld.yaml"),
-        r#"project_name: Multi Repo
+        r"project_name: Multi Repo
 exclude: []
 repositories:
   repo-a:
@@ -296,7 +337,7 @@ repositories:
     localDir: repo-b
     exclude:
       - internal/
-"#,
+",
     )
     .unwrap();
 

@@ -18,6 +18,9 @@ use diagv1::{
     workspace_service_client::WorkspaceServiceClient,
 };
 
+pub type AuthedWorkspaceClient =
+    WorkspaceServiceClient<InterceptedService<Channel, AuthInterceptor>>;
+
 /// Normalises a server URL to include the `/api` suffix.
 pub fn normalize_url(server_url: &str) -> String {
     let base = server_url.trim_end_matches('/');
@@ -60,7 +63,7 @@ impl Interceptor for AuthInterceptor {
 pub async fn new_workspace_client(
     server_url: &str,
     api_key: &str,
-) -> Result<WorkspaceServiceClient<InterceptedService<Channel, AuthInterceptor>>, TldError> {
+) -> Result<AuthedWorkspaceClient, TldError> {
     let channel = connect_channel(server_url).await?;
     let origin =
         Uri::try_from(normalize_url(server_url)).map_err(|e| TldError::Generic(e.to_string()))?;

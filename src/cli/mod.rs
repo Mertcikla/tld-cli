@@ -12,6 +12,7 @@ pub mod login;
 pub mod plan;
 pub mod pull;
 pub mod remove;
+pub mod repository_root;
 pub mod status;
 pub mod tag;
 pub mod update;

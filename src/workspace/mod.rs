@@ -3,11 +3,13 @@ pub mod git;
 pub mod lockfile;
 pub mod merger;
 pub mod mutations;
+pub mod repository_roots;
 pub mod types;
 pub mod validator;
 pub mod workspace_builder;
 pub use git::*;
 pub use lockfile::*;
+pub use repository_roots::*;
 pub use types::*;
 pub use validator::*;
 
@@ -58,6 +60,14 @@ pub fn load_config() -> Result<Config, TldError> {
 pub fn write_config(server_url: &str, api_key: &str, org_id: &str) -> Result<PathBuf, TldError> {
     let path = config_path()?;
     write_config_to_path(&path, server_url, api_key, org_id)?;
+    Ok(path)
+}
+
+/// Write the workspace config (`.tld.yaml`) for a workspace directory.
+pub fn save_workspace_config(dir: &str, config: &WorkspaceConfig) -> Result<PathBuf, TldError> {
+    let path = Path::new(dir).join(".tld.yaml");
+    let data = serde_yaml::to_string(config).map_err(|e| TldError::Yaml(e.to_string()))?;
+    fs::write(&path, data)?;
     Ok(path)
 }
 
@@ -129,6 +139,25 @@ fn apply_config_env_overrides(mut cfg: Config, env: ConfigEnv) -> Config {
     }
 
     cfg
+}
+
+/// Converts "API Service" -> "api-service" for use as a ref/filename.
+pub fn slugify(s: &str) -> String {
+    let s = s.to_lowercase();
+    let mut result = String::new();
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            result.push(c);
+        } else {
+            result.push('-');
+        }
+    }
+    // Clean up multiple hyphens and trim
+    let mut s = result;
+    while s.contains("--") {
+        s = s.replace("--", "-");
+    }
+    s.trim_matches('-').to_string()
 }
 
 // ── Workspace loading ─────────────────────────────────────────────────────────
@@ -384,23 +413,4 @@ mod tests {
         );
         assert_eq!(cfg.org_id, "019d8caf-c445-76de-894d-2e72a53829e6");
     }
-}
-
-/// Converts "API Service" -> "api-service" for use as a ref/filename.
-pub fn slugify(s: &str) -> String {
-    let s = s.to_lowercase();
-    let mut result = String::new();
-    for c in s.chars() {
-        if c.is_alphanumeric() {
-            result.push(c);
-        } else {
-            result.push('-');
-        }
-    }
-    // Clean up multiple hyphens and trim
-    let mut s = result;
-    while s.contains("--") {
-        s = s.replace("--", "-");
-    }
-    s.trim_matches('-').to_string()
 }

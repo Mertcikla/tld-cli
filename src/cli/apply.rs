@@ -1,3 +1,4 @@
+use crate::cli::repository_root;
 use crate::client;
 use crate::error::TldError;
 use crate::output;
@@ -18,7 +19,7 @@ pub struct ApplyArgs {
 
 #[expect(clippy::print_stdout)]
 pub async fn exec(args: ApplyArgs, wdir: String) -> Result<(), TldError> {
-    let ws = workspace::load(&wdir)?;
+    let mut ws = workspace::load(&wdir)?;
 
     // Check for server URL
     if ws.config.server_url.is_empty() {
@@ -34,18 +35,31 @@ pub async fn exec(args: ApplyArgs, wdir: String) -> Result<(), TldError> {
                 .to_string(),
         ));
     }
+    if ws.config.org_id.is_empty() {
+        return Err(TldError::Generic(
+            "No org ID found. Run 'tld login' first, or set TLD_ORG_ID environment variable."
+                .to_string(),
+        ));
+    }
 
-    // 1. Build and show plan first (unless force is used)
-    // For now we'll just go straight to apply if force is on, or do a simplified flow.
+    let mut ws_client =
+        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
+
+    let prep_spinner = output::new_spinner("Preparing repository roots...");
+    let _ = repository_root::run_dry_run_with_repository_root_sync(
+        &mut ws,
+        &mut ws_client,
+        args.recreate_ids,
+        true,
+    )
+    .await?;
+    prep_spinner.finish_and_clear();
 
     output::print_info("Applying workspace to tlDiagram...");
     let mut plan = planner::build(&ws, args.recreate_ids)?;
     plan.request.dry_run = Some(false); // Actually apply
 
     let spinner = output::new_spinner("Contacting server...");
-    let mut ws_client =
-        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
-
     let resp = ws_client
         .apply_workspace_plan(Request::new(plan.request))
         .await?

@@ -1,13 +1,12 @@
+use crate::cli::repository_root;
 use crate::client;
 use crate::client::diagv1::ApplyPlanResponse;
 use crate::error::TldError;
 use crate::output;
-use crate::planner;
 use crate::workspace;
 use clap::Args;
 use std::fmt::Write;
 use std::fs;
-use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
 pub struct PlanArgs {
@@ -40,18 +39,26 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
                 .to_string(),
         ));
     }
+    if ws.config.org_id.is_empty() {
+        return Err(TldError::Generic(
+            "No org ID found. Run 'tld login' first, or set TLD_ORG_ID environment variable."
+                .to_string(),
+        ));
+    }
 
     output::print_info("Building plan...");
-    let plan = planner::build(&ws, args.recreate_ids)?;
-
     let spinner = output::new_spinner("Contacting server for dry-run...");
     let mut ws_client =
         client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
 
-    let resp = ws_client
-        .apply_workspace_plan(Request::new(plan.request))
-        .await?
-        .into_inner();
+    let mut ws = ws;
+    let resp = repository_root::run_dry_run_with_repository_root_sync(
+        &mut ws,
+        &mut ws_client,
+        args.recreate_ids,
+        true,
+    )
+    .await?;
     spinner.finish_and_clear();
 
     output::print_ok("Plan built successfully.");

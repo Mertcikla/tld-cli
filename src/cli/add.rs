@@ -33,12 +33,20 @@ pub struct AddArgs {
 #[expect(clippy::needless_pass_by_value)]
 pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
+    let default_root = workspace::ensure_default_repository_root(&mut ws)?;
+    let save_config = default_root
+        .as_ref()
+        .is_some_and(|binding| binding.config_changed);
     let ref_name = args
         .ref_name
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map_or_else(|| workspace::slugify(&args.name), ToOwned::to_owned);
+    let default_parent = default_root
+        .as_ref()
+        .map(|binding| binding.local_ref.clone())
+        .filter(|parent_ref| parent_ref != &ref_name);
 
     let existing = ws.elements.get(&ref_name).cloned();
     let mut element = existing.clone().unwrap_or_else(|| Element {
@@ -82,7 +90,7 @@ pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
         element.url = url;
     }
 
-    if let Some(parent) = args.parent {
+    if let Some(parent) = args.parent.or(default_parent) {
         // For parent, we check if it's already set in placements
         let has_different_parent = element
             .placements
@@ -94,10 +102,12 @@ pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
             )));
         }
 
-        element.placements = vec![ViewPlacement {
-            parent_ref: parent,
-            ..Default::default()
-        }];
+        if element.placements.is_empty() {
+            element.placements = vec![ViewPlacement {
+                parent_ref: parent,
+                ..Default::default()
+            }];
+        }
     }
 
     // Validation
@@ -117,6 +127,9 @@ pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
 
     ws.upsert_element(ref_name.clone(), element);
     workspace::save(&ws)?;
+    if save_config && let Some(config) = &ws.ws_config {
+        workspace::save_workspace_config(&ws.dir, config)?;
+    }
 
     output::print_ok(&format!(
         "Added/updated element '{ref_name}' in elements.yaml"

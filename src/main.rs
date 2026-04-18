@@ -1,3 +1,16 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::needless_raw_string_hashes,
+        clippy::needless_update,
+        clippy::items_after_test_module,
+        clippy::default_trait_access
+    )
+)]
+
 mod analyzer;
 mod cli;
 mod client;
