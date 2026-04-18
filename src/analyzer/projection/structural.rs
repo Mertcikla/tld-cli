@@ -11,15 +11,31 @@ use crate::analyzer::{
 use crate::workspace::workspace_builder::{self, BuildContext, BuildOutput};
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug, Clone, Default)]
+pub struct StructuralStats {
+    pub symbols_scored: usize,
+    pub symbols_pruned: usize,
+    pub salience_entries: Vec<SalienceEntry>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SalienceEntry {
+    pub file_path: String,
+    pub name: String,
+    pub score: i32,
+    pub kept: bool,
+}
+
 /// Project an `AnalysisResult` into workspace elements and connectors using the
 /// structural (file/folder/symbol) representation, but with role-driven symbol
 /// kinds and `symbol_kind` preserving the original declaration kind.
-pub fn project(
+pub fn project_with_threshold(
     result: &AnalysisResult,
     ctx: &BuildContext,
     auto_tags: AutoTagOptions,
     collapse_config: CollapseConfig,
-) -> BuildOutput {
+    noise_threshold: i32,
+) -> (BuildOutput, StructuralStats) {
     let mut output = workspace_builder::build(result, ctx);
 
     let mut bundle = resolver::resolve(result, &ctx.repo_name, &ctx.scan_root);
@@ -54,6 +70,7 @@ pub fn project(
 
     let mut high_signal_slugs: HashSet<String> = HashSet::new();
     let mut signal_by_slug: HashMap<String, i32> = HashMap::new();
+    let mut salience_entries: Vec<SalienceEntry> = Vec::new();
 
     for (slug, element) in &mut output.elements {
         if element.symbol.is_empty() || element.file_path.is_empty() {
@@ -94,14 +111,34 @@ pub fn project(
             high_signal_slugs.insert(slug.clone());
         }
         signal_by_slug.insert(slug.clone(), score);
+        salience_entries.push(SalienceEntry {
+            file_path: element.file_path.clone(),
+            name: element.name.clone(),
+            score,
+            kept: score > noise_threshold,
+        });
 
         tags::assign_semantic_tags(element, symbol, role, score, auto_tags);
     }
 
+    let pruned_slugs: HashSet<String> = signal_by_slug
+        .iter()
+        .filter_map(|(slug, score)| (*score <= noise_threshold).then_some(slug.clone()))
+        .collect();
+    prune_symbols(&mut output, &pruned_slugs);
+    high_signal_slugs.retain(|slug| output.elements.contains_key(slug));
+
     prune_utility_sinks(&mut output, &high_signal_slugs);
     tags::prune_auto_tags(&mut output.elements, 3);
 
-    collapse::auto_collapse(output, &signal_by_slug, collapse_config)
+    let collapsed = collapse::auto_collapse(output, &signal_by_slug, collapse_config);
+    let stats = StructuralStats {
+        symbols_scored: salience_entries.len(),
+        symbols_pruned: pruned_slugs.len(),
+        salience_entries,
+    };
+
+    (collapsed, stats)
 }
 
 /// Drop `calls` connectors pointing at utility-sink elements — targets with
@@ -131,6 +168,19 @@ fn prune_utility_sinks(output: &mut BuildOutput, high_signal_slugs: &HashSet<Str
         let incoming = fan_in.get(&connector.target).copied().unwrap_or(0);
         let outgoing = fan_out.get(&connector.target).copied().unwrap_or(0);
         !(outgoing == 0 && incoming >= FAN_IN_THRESHOLD)
+    });
+}
+
+fn prune_symbols(output: &mut BuildOutput, prune_slugs: &HashSet<String>) {
+    if prune_slugs.is_empty() {
+        return;
+    }
+    output
+        .elements
+        .retain(|slug, _| !prune_slugs.contains(slug));
+    let kept_slugs: HashSet<String> = output.elements.keys().cloned().collect();
+    output.connectors.retain(|connector| {
+        kept_slugs.contains(&connector.source) && kept_slugs.contains(&connector.target)
     });
 }
 

@@ -1,40 +1,13 @@
-pub mod business;
 pub mod collapse;
-pub mod data_flow;
 pub mod structural;
 pub mod tags;
 
 use crate::analyzer::semantic::{
-    endpoints::detect_endpoint,
-    roles::DerivedRole,
-    types::{EdgeKind, SemanticSymbol},
+    endpoints::detect_endpoint, roles::DerivedRole, types::SemanticSymbol,
 };
 use crate::analyzer::syntax::types::DeclKind;
-use crate::workspace::{slugify, types::Connector};
+use crate::workspace::types::Connector;
 use std::collections::HashMap;
-
-/// Which projection view to use when generating workspace output.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum ViewMode {
-    /// Current inventory-style output: files, folders, symbols, bare-name connectors.
-    #[default]
-    Structural,
-    /// Semantic projection: high-salience symbols and LSP-resolved connections only.
-    Business,
-    /// Data-flow projection: symbols on traced flow paths around entrypoints.
-    DataFlow,
-}
-
-impl ViewMode {
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "structural" | "structure" => Some(Self::Structural),
-            "business" | "biz" => Some(Self::Business),
-            "data-flow" | "dataflow" | "data_flow" => Some(Self::DataFlow),
-            _ => None,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct ElementPresentation {
@@ -104,22 +77,6 @@ pub fn present_symbol(sym: &SemanticSymbol, role: Option<&DerivedRole>) -> Eleme
     }
 }
 
-pub fn unique_slug(name: &str, file_path: &str, registry: &mut HashMap<String, usize>) -> String {
-    let base = slugify(name);
-    let count = registry.entry(base.clone()).or_insert(0);
-    if *count == 0 {
-        *count += 1;
-        base
-    } else {
-        *count += 1;
-        let stem = std::path::Path::new(file_path)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("x");
-        format!("{}-{}", slugify(stem), base)
-    }
-}
-
 pub fn domain_for_symbol(sym: &SemanticSymbol) -> String {
     if sym.external {
         return "infrastructure".to_string();
@@ -135,21 +92,6 @@ pub fn domain_for_symbol(sym: &SemanticSymbol) -> String {
     domain_from_file_path(&sym.file_path)
         .or_else(|| domain_from_symbol_name(&sym.name))
         .unwrap_or_else(|| "misc".to_string())
-}
-
-pub fn edge_labels(kind: &EdgeKind) -> (&'static str, &'static str) {
-    match kind {
-        EdgeKind::Calls => ("calls", "uses"),
-        EdgeKind::Imports => ("references", "depends_on"),
-        EdgeKind::DependsOn => ("depends_on", "depends_on"),
-        EdgeKind::Constructs => ("constructs", "creates"),
-        EdgeKind::Reads => ("reads", "reads"),
-        EdgeKind::Writes => ("writes", "mutates"),
-        EdgeKind::Returns => ("returns", "provides"),
-        EdgeKind::Throws => ("throws", "raises"),
-        EdgeKind::Extends => ("extends", "extends"),
-        EdgeKind::Implements => ("implements", "implements"),
-    }
 }
 
 pub fn collapse_connectors(connectors: Vec<Connector>) -> Vec<Connector> {

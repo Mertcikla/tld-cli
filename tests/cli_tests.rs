@@ -34,12 +34,15 @@ fn test_tld_add_help() {
 }
 
 #[test]
-fn test_tld_analyze_help_no_longer_exposes_lsp_flag() {
+fn test_tld_analyze_help_exposes_simplified_flags() {
     let mut cmd = Command::cargo_bin("tld").unwrap();
     cmd.arg("analyze").arg("--help");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("--lsp").not());
+        .stdout(predicate::str::contains("--noise-threshold"))
+        .stdout(predicate::str::contains("--view").not())
+        .stdout(predicate::str::contains("--changed-since").not())
+        .stdout(predicate::str::contains("--deep").not());
 }
 
 #[test]
@@ -241,7 +244,7 @@ fn test_tld_analyze_empty() {
 }
 
 #[test]
-fn test_tld_analyze_workspace_root_uses_configured_repositories() {
+fn test_tld_analyze_workspace_root_respects_pointed_path_not_repo_projection() {
     let dir = tempdir().unwrap();
     let wdir = dir.path();
 
@@ -284,15 +287,11 @@ repositories:
     let mut cmd = Command::cargo_bin("tld").unwrap();
     cmd.arg("-w").arg(wdir).arg("analyze").arg(wdir);
 
-    cmd.assert()
-        .success()
-        .stderr(predicate::str::contains("repositories=2"));
+    cmd.assert().success();
 
     let elements = fs::read_to_string(wdir.join("elements.yaml")).unwrap();
     assert!(elements.contains("placeOrder"));
     assert!(elements.contains("reserveStock"));
-    assert!(!elements.contains("internalOnly"));
-    assert!(!elements.contains("debugOnly"));
 }
 
 fn write_typescript_fixture(path: &Path, source: &str) {

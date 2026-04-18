@@ -78,7 +78,7 @@ async fn main() -> Result<(), TldError> {
         }
         Commands::Analyze(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::analyze::exec(args.clone(), wdir).await?;
+            cli::analyze::exec(args.clone(), wdir, cli.verbose).await?;
         }
         Commands::Tag(ref args) => {
             let wdir = cli.workspace_dir();

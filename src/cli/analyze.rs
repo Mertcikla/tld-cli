@@ -1,8 +1,6 @@
+use crate::analyzer::projection;
 use crate::analyzer::projection::collapse::CollapseConfig;
 use crate::analyzer::projection::tags::AutoTagOptions;
-use crate::analyzer::projection::{self, ViewMode};
-use crate::analyzer::scope;
-use crate::analyzer::syntax;
 use crate::analyzer::{AnalysisResult, Rules, Service, TreeSitterService};
 use crate::error::TldError;
 use crate::output;
@@ -97,7 +95,7 @@ const DEFAULT_EXCLUDES: &[&str] = &[
 ];
 
 const HARD_MAX_ELEMENTS: usize = 10_000;
-const DEFAULT_TARGET_ELEMENTS: usize = 500;
+const DEFAULT_TARGET_ELEMENTS: usize = HARD_MAX_ELEMENTS;
 const LSP_AUTO_MAX_PENDING_CALLS: usize = 5_000;
 const LSP_AUTO_MAX_SYMBOLS: usize = 8_000;
 const LSP_AUTO_MAX_FILES: usize = 1_500;
@@ -107,38 +105,22 @@ pub struct AnalyzeArgs {
     /// Path to analyze (file or directory)
     pub path: String,
 
-    /// Expand scope to the git repository root for cross-file call resolution
-    #[arg(long, default_value = "false")]
-    pub deep: bool,
-
     /// Print what would be written without modifying workspace
     #[arg(long = "dry-run", default_value = "false")]
     pub dry_run: bool,
-
-    /// Only re-analyse files changed since this git SHA or branch ref
-    #[arg(long = "changed-since")]
-    pub changed_since: Option<String>,
 
     /// Download tree-sitter parsers for specific languages before analyzing.
     /// Accepts a comma-separated list: --download rust,python
     #[arg(long = "download")]
     pub download: Option<String>,
 
-    /// Diagram view to generate: structural | business | data-flow
-    ///
-    /// - structural: current inventory-style (files, folders, symbols) — default
-    /// - business: semantic projection showing high-salience orchestration symbols only
-    /// - data-flow: traces dominant flow paths from entrypoints
-    #[arg(long = "view", default_value = "structural")]
-    pub view: String,
-
-    /// Salience threshold for business/data-flow views. Symbols with scores at or
-    /// below this value are hidden. Default -1 (hides constructors, DTOs, and
-    /// trivial wrappers while keeping symbols called by orchestration paths).
-    #[arg(long = "noise-threshold", default_value = "-1")]
+    /// Salience threshold for structural view noise pruning.
+    /// Symbol elements with scores at or below this value are hidden.
+    /// Default -4 keeps almost everything and only removes absolute low-signal noise.
+    #[arg(long = "noise-threshold", default_value = "-4")]
     pub noise_threshold: i32,
 
-    /// Include low-signal nodes that would normally be pruned (business view only)
+    /// Include low-signal nodes that would normally be pruned
     #[arg(long = "include-low-signal", default_value = "false")]
     pub include_low_signal: bool,
 
@@ -149,8 +131,6 @@ pub struct AnalyzeArgs {
     pub auto_tag: Option<String>,
 
     /// LSP enrichment mode: auto | on | off
-    ///
-    /// auto skips expensive definition lookup for structural views and very large scans.
     #[arg(long = "lsp", default_value = "auto")]
     pub lsp: String,
 
@@ -162,7 +142,7 @@ pub struct AnalyzeArgs {
 }
 
 #[expect(clippy::print_stdout, clippy::print_stderr)]
-pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
+pub async fn exec(args: AnalyzeArgs, wdir: String, verbose: bool) -> Result<(), TldError> {
     if args.max_elements == 0 {
         return Err(TldError::Generic(
             "--max-elements must be greater than 0".to_string(),
@@ -194,13 +174,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         }
     }
 
-    // ── Resolve view mode ─────────────────────────────────────────────────────
-    let view_mode = ViewMode::from_str(&args.view).ok_or_else(|| {
-        TldError::Generic(format!(
-            "Unknown view '{}'. Valid values: structural, business, data-flow",
-            args.view
-        ))
-    })?;
+    // ── Parse options ─────────────────────────────────────────────────────────
     let lsp_mode = LspMode::from_str(&args.lsp).ok_or_else(|| {
         TldError::Generic(format!(
             "Unknown LSP mode '{}'. Valid values: auto, on, off",
@@ -224,6 +198,13 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     let abs_scan_path = Path::new(&scan_path)
         .canonicalize()
         .map_err(|e| TldError::Generic(format!("Failed to resolve path {scan_path}: {e}")))?;
+    let effective_scan_root = if abs_scan_path.is_file() {
+        abs_scan_path
+            .parent()
+            .map_or_else(|| abs_scan_path.clone(), Path::to_path_buf)
+    } else {
+        abs_scan_path.clone()
+    };
 
     output::print_info(&format!("Analyzing {scan_path}..."));
 
@@ -240,136 +221,71 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         }
     }
 
-    // ── Build scan plan (scope) ───────────────────────────────────────────────
-    let initial_repo_name = derive_repo_identity(&ws, &abs_scan_path, None).name;
-
-    let scan_scope = scope::plan(
-        abs_scan_path.to_str().unwrap_or(""),
-        &scope::PlanOptions {
-            workspace_dir: &ws.dir,
-            ws_config: ws.ws_config.as_ref(),
-            repo_name: &initial_repo_name,
-            deep: args.deep,
-            changed_since: args.changed_since.as_deref(),
-            exclude: &exclude,
-        },
-    )?;
-
-    output::print_info(&format!(
-        "Scope: root={}, repositories={}, constrained_files={}",
-        scan_scope.root_dir,
-        scan_scope.repositories.len(),
-        scan_scope.files.len()
-    ));
-
-    // The effective root may have been expanded to the git repo root by --deep.
-    let effective_scan_root = scan_scope.root_dir.clone();
-
     // ── Run tree-sitter analysis ──────────────────────────────────────────────
     let analyzer_service = TreeSitterService::new();
-
-    let scan_total = if scan_scope.files.is_empty() {
-        let mut total = 0_u64;
-        for repo in &scan_scope.repositories {
-            total +=
-                TreeSitterService::count_path(&repo.root_dir, &Rules::new(repo.exclude.clone()))?;
-        }
-        total
-    } else {
-        scan_scope.files.len() as u64
-    };
+    let scan_rules = Rules::new(exclude);
+    let scan_total =
+        TreeSitterService::count_path(abs_scan_path.to_str().unwrap_or(""), &scan_rules)?;
     let scan_progress = progress_bar_for_total(scan_total, "Scanning files...");
 
-    let mut result = if scan_scope.files.is_empty() {
-        let mut merged = crate::analyzer::types::AnalysisResult::default();
-        for repo in &scan_scope.repositories {
-            let repo_rules = Rules::new(repo.exclude.clone());
-            let repo_start = scan_progress.position();
-            let repo_progress = scan_progress.clone();
-            match analyzer_service.extract_path(
-                &repo.root_dir,
-                &repo_rules,
-                Some(&|path, is_dir| {
-                    if !is_dir {
-                        update_progress_message(&repo_progress, path, "Scanning");
-                        repo_progress.inc(1);
+    let progress = scan_progress.clone();
+    let mut result = match analyzer_service.extract_path(
+        abs_scan_path.to_str().unwrap_or(""),
+        &scan_rules,
+        Some(&|path, is_dir| {
+            if !is_dir {
+                update_progress_message(&progress, path, "Scanning");
+                progress.inc(1);
+            }
+        }),
+    ) {
+        Ok(result) => result,
+        Err(TldError::ParserDownloadRequired { ref lang, .. }) => {
+            scan_progress.finish_and_clear();
+            eprintln!(
+                "{}",
+                TldError::ParserDownloadRequired {
+                    lang: lang.clone(),
+                    reason: "grammar not in local cache".to_string(),
+                }
+            );
+            eprintln!();
+            eprint!("Download the '{lang}' parser now? [y/N]: ");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).ok();
+            if input.trim().eq_ignore_ascii_case("y") {
+                let lang_clone = lang.clone();
+                let dl_spinner =
+                    output::new_spinner(&format!("Downloading '{lang_clone}' parser..."));
+                match ts_pack_core::download(&[lang_clone.as_str()]) {
+                    Ok(_) => {
+                        dl_spinner.finish_and_clear();
+                        output::print_ok("Download complete. Re-running analysis...");
+                        scan_progress.set_position(0);
+                        analyzer_service.extract_path(
+                            abs_scan_path.to_str().unwrap_or(""),
+                            &scan_rules,
+                            Some(&|path, is_dir| {
+                                if !is_dir {
+                                    update_progress_message(&progress, path, "Scanning");
+                                    progress.inc(1);
+                                }
+                            }),
+                        )?
                     }
-                }),
-            ) {
-                Ok(r) => merged.merge(r),
-                Err(TldError::ParserDownloadRequired { ref lang, .. }) => {
-                    scan_progress.finish_and_clear();
-                    eprintln!(
-                        "{}",
-                        TldError::ParserDownloadRequired {
-                            lang: lang.clone(),
-                            reason: "grammar not in local cache".to_string(),
-                        }
-                    );
-                    eprintln!();
-                    eprint!("Download the '{lang}' parser now? [y/N]: ");
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input).ok();
-                    if input.trim().eq_ignore_ascii_case("y") {
-                        let lang_clone = lang.clone();
-                        let dl_spinner =
-                            output::new_spinner(&format!("Downloading '{lang_clone}' parser..."));
-                        match ts_pack_core::download(&[lang_clone.as_str()]) {
-                            Ok(_) => {
-                                dl_spinner.finish_and_clear();
-                                output::print_ok("Download complete. Re-running analysis...");
-                                scan_progress.set_position(repo_start);
-                                let retry = analyzer_service.extract_path(
-                                    &repo.root_dir,
-                                    &repo_rules,
-                                    Some(&|path, is_dir| {
-                                        if !is_dir {
-                                            update_progress_message(
-                                                &repo_progress,
-                                                path,
-                                                "Scanning",
-                                            );
-                                            repo_progress.inc(1);
-                                        }
-                                    }),
-                                )?;
-                                merged.merge(retry);
-                            }
-                            Err(e) => {
-                                dl_spinner.finish_and_clear();
-                                return Err(TldError::Generic(format!("Download failed: {e}")));
-                            }
-                        }
-                    } else {
-                        return Err(TldError::Generic("Analysis aborted.".to_string()));
+                    Err(e) => {
+                        dl_spinner.finish_and_clear();
+                        return Err(TldError::Generic(format!("Download failed: {e}")));
                     }
                 }
-                Err(e) => {
-                    scan_progress.finish_and_clear();
-                    return Err(e);
-                }
+            } else {
+                return Err(TldError::Generic("Analysis aborted.".to_string()));
             }
         }
-        merged
-    } else {
-        // --changed-since: analyze only the listed files.
-        let mut merged = crate::analyzer::types::AnalysisResult::default();
-        for file in &scan_scope.files {
-            update_progress_message(&scan_progress, &file.abs_path, "Scanning");
-            match TreeSitterService::extract_file(&file.abs_path) {
-                Ok(mut r) => {
-                    r.files_scanned.push(file.abs_path.clone());
-                    merged.merge(r);
-                }
-                Err(TldError::UnsupportedLanguage(_) | TldError::ParserNotImplemented(_)) => {}
-                Err(e) => {
-                    scan_progress.finish_and_clear();
-                    return Err(e);
-                }
-            }
-            scan_progress.inc(1);
+        Err(e) => {
+            scan_progress.finish_and_clear();
+            return Err(e);
         }
-        merged
     };
 
     scan_progress.finish_and_clear();
@@ -380,7 +296,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             "Dry run: {} files scanned, {} symbols found, effective root {}",
             result.files_scanned.len(),
             result.symbols.len(),
-            effective_scan_root
+            effective_scan_root.to_string_lossy()
         ));
         for sym in &result.symbols {
             println!(
@@ -425,7 +341,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
             .iter()
             .filter(|r| r.kind == "call" && r.target_path.is_empty())
             .count();
-        match lsp_decision(&lsp_mode, &view_mode, &result, pending_lsp_lookups) {
+        match lsp_decision(lsp_mode, &result, pending_lsp_lookups) {
             LspDecision::Run => {
                 let lsp_progress = progress_bar_for_total(
                     pending_lsp_lookups as u64,
@@ -433,7 +349,7 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
                 );
                 match crate::analyzer::lsp::resolve_calls_with_lsp(
                     &mut result.refs,
-                    &effective_scan_root,
+                    effective_scan_root.to_str().unwrap_or(""),
                     &unique_langs,
                     &lsp_progress,
                 )
@@ -464,19 +380,10 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
         }
     }
 
-    let syntax_bundle = match view_mode {
-        ViewMode::Structural => None,
-        ViewMode::Business | ViewMode::DataFlow => Some(syntax::from_analysis_result(
-            &result,
-            &repo_name_hint(&ws, &abs_scan_path, Some(&effective_scan_root)),
-        )),
-    };
-
-    // ── Build workspace output via the chosen projection ──────────────────────
-    let scan_root = effective_scan_root.clone();
-    let repo_identity = derive_repo_identity(&ws, &abs_scan_path, Some(&effective_scan_root));
-    let branch =
-        detect_git_branch(Path::new(&effective_scan_root)).unwrap_or_else(|| "main".to_string());
+    // ── Build workspace output ────────────────────────────────────────────────
+    let scan_root = effective_scan_root.to_string_lossy().to_string();
+    let repo_identity = derive_repo_identity(&ws, &abs_scan_path, Some(&scan_root));
+    let branch = detect_git_branch(&effective_scan_root).unwrap_or_else(|| "main".to_string());
 
     let ctx = BuildContext {
         repo_name: repo_identity.name,
@@ -493,58 +400,23 @@ pub async fn exec(args: AnalyzeArgs, wdir: String) -> Result<(), TldError> {
     };
     let collapse_config = CollapseConfig::new(args.max_elements, HARD_MAX_ELEMENTS);
 
-    let semantic_syntax = syntax_bundle.as_ref();
-
-    let (build_output, stats_msg) = match view_mode {
-        ViewMode::Structural => {
-            let out =
-                projection::structural::project(&result, &ctx, auto_tag_opts, collapse_config);
-            let msg = format!(
-                "{} elements written, {} connectors created (structural view).",
-                out.elements.len(),
-                out.connectors.len()
-            );
-            (out, msg)
-        }
-        ViewMode::Business => {
-            let syntax = semantic_syntax.ok_or_else(|| {
-                TldError::Generic("semantic views should build a syntax bundle".to_string())
-            })?;
-            let (out, stats) = projection::business::project(
-                syntax,
-                &ctx,
-                noise_threshold,
-                auto_tag_opts,
-                collapse_config,
-            );
-            let msg = format!(
-                "{} elements written, {} connectors created, {} low-signal symbols hidden, {} unresolved refs, {} resolved call edges ({} via LSP) (business view).",
-                out.elements.len(),
-                out.connectors.len(),
-                stats.symbols_hidden,
-                stats.unresolved_refs,
-                stats.resolved_call_edges,
-                stats.lsp_resolved_edges,
-            );
-            (out, msg)
-        }
-        ViewMode::DataFlow => {
-            let syntax = semantic_syntax.ok_or_else(|| {
-                TldError::Generic("semantic views should build a syntax bundle".to_string())
-            })?;
-            let (out, stats) =
-                projection::data_flow::project(syntax, &ctx, noise_threshold, auto_tag_opts);
-            let msg = format!(
-                "{} elements written, {} connectors created, {} flows synthesized, {} low-signal symbols hidden, {} unresolved refs (data-flow view).",
-                out.elements.len(),
-                out.connectors.len(),
-                stats.flow_count,
-                stats.symbols_hidden,
-                stats.unresolved_refs,
-            );
-            (out, msg)
-        }
-    };
+    let (build_output, stats) = projection::structural::project_with_threshold(
+        &result,
+        &ctx,
+        auto_tag_opts,
+        collapse_config,
+        noise_threshold,
+    );
+    if verbose {
+        print_salience_scores(&stats.salience_entries, noise_threshold);
+    }
+    let stats_msg = format!(
+        "{} elements written, {} connectors created, {} low-signal symbols hidden ({} symbols scored; structural map).",
+        build_output.elements.len(),
+        build_output.connectors.len(),
+        stats.symbols_pruned,
+        stats.symbols_scored,
+    );
 
     // ── Persist to workspace ──────────────────────────────────────────────────
     // analyze is the sole producer of derived elements/connectors, so replace
@@ -589,12 +461,7 @@ enum LspDecision {
     Skip(String),
 }
 
-fn lsp_decision(
-    mode: &LspMode,
-    view_mode: &ViewMode,
-    result: &AnalysisResult,
-    pending_lsp_lookups: usize,
-) -> LspDecision {
+fn lsp_decision(mode: LspMode, result: &AnalysisResult, pending_lsp_lookups: usize) -> LspDecision {
     match mode {
         LspMode::On => {
             if pending_lsp_lookups == 0 {
@@ -607,9 +474,6 @@ fn lsp_decision(
         LspMode::Auto => {
             if pending_lsp_lookups == 0 {
                 return LspDecision::Skip("no unresolved call sites".to_string());
-            }
-            if matches!(view_mode, ViewMode::Structural) {
-                return LspDecision::Skip("auto mode disables LSP for structural view".to_string());
             }
             if pending_lsp_lookups > LSP_AUTO_MAX_PENDING_CALLS {
                 return LspDecision::Skip(format!(
@@ -633,12 +497,27 @@ fn lsp_decision(
     }
 }
 
-fn repo_name_hint(
-    ws: &workspace::Workspace,
-    scan_path: &Path,
-    effective_root: Option<&str>,
-) -> String {
-    derive_repo_identity(ws, scan_path, effective_root).name
+fn print_salience_scores(entries: &[projection::structural::SalienceEntry], noise_threshold: i32) {
+    output::print_info(&format!(
+        "Salience scores ({} symbols, pruning <= {noise_threshold}):",
+        entries.len()
+    ));
+    let mut rows = entries.to_vec();
+    rows.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.file_path.cmp(&b.file_path))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    for row in rows {
+        let status = if row.kept { "keep" } else { "drop" };
+        output::print_info(&format!(
+            "    {score:>3} {status:>4}  {file}::{name}",
+            score = row.score,
+            file = row.file_path,
+            name = row.name
+        ));
+    }
 }
 
 #[derive(Debug, Clone)]

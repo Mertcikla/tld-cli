@@ -126,9 +126,12 @@ pub fn auto_collapse(
         .iter()
         .filter_map(|slug| {
             let info = infos.get(slug)?;
+            let hidden_descendants = i64::try_from(info.hidden_descendants).unwrap_or(i64::MAX);
             (info.hidden_descendants > 0).then_some((
                 slug.clone(),
-                info.hidden_descendants as i64 * 100 + i64::from(info.subtree_signal.max(0)),
+                hidden_descendants
+                    .saturating_mul(100)
+                    .saturating_add(i64::from(info.subtree_signal.max(0))),
             ))
         })
         .collect::<Vec<_>>();
