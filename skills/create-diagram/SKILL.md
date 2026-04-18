@@ -69,6 +69,13 @@ Keep each view focused. **Aim for ~15 elements per view; never exceed 25.** A cr
 
 Before clustering, consider whether **tags** can give the view enough structure to remain readable at a higher element count. Tags let a reader filter the view to a single plane, role, or boundary — making ~20 elements navigable where a flat list would not be.
 
+Tags are applied at element creation time with `--tag` (repeatable):
+
+```bash
+tld add "Auth Service" --ref auth-svc --parent backend \
+  --tag boundary:internal --tag protocol:grpc
+```
+
 **Good uses of tags:**
 - Layer/plane: `layer:api`, `layer:data`, `layer:infra`
 - Boundary: `boundary:public`, `boundary:private`, `boundary:internal`, `boundary:external`
@@ -161,19 +168,19 @@ Create `diagram.sh`, then append and run the root elements as the first batch. R
 
 ```bash
 # === Root elements ===
-tld add "Domain & Business Logic" --ref domain --diagram-label "System"
-tld add "Data & Persistence" --ref data --diagram-label "System"
-tld add "Interfaces & Integrations" --ref interfaces --diagram-label "System"
-tld add "Platform & Infrastructure" --ref deployment --diagram-label "System"
+tld add "Domain & Business Logic" --ref domain --diagram-label "System" --tag layer:domain
+tld add "Data & Persistence" --ref data --diagram-label "System" --tag layer:data
+tld add "Interfaces & Integrations" --ref interfaces --diagram-label "System" --tag layer:interfaces
+tld add "Platform & Infrastructure" --ref deployment --diagram-label "System" --tag layer:infra
 ```
 
 Append and run the next level as a second batch:
 
 ```bash
 # === Level 2: major subsystems ===
-tld add "Backend" --ref backend --parent domain
-tld add "Frontend" --ref frontend --parent interfaces
-tld add "Storage" --ref storage --parent data
+tld add "Backend" --ref backend --parent domain --tag layer:api
+tld add "Frontend" --ref frontend --parent interfaces --tag boundary:public
+tld add "Storage" --ref storage --parent data --tag role:database
 ```
 
 **Batch checkpoint:** Are there connectors between root elements suggested by your inventory? Add them now:
@@ -191,9 +198,9 @@ Work one view at a time. For each view (parent element), append its children as 
 
 ```bash
 # === Backend children ===
-tld add "REST API" --parent backend --technology "Go" --ref api
-tld add "Stripe API" --parent backend --technology "Stripe" --ref stripe
-tld add "Job Worker" --parent backend --technology "Go" --ref worker
+tld add "REST API" --parent backend --technology "Go" --ref api --tag protocol:rest --tag boundary:public
+tld add "Stripe API" --parent backend --technology "Stripe" --ref stripe --tag boundary:external
+tld add "Job Worker" --parent backend --technology "Go" --ref worker --tag role:worker
 ```
 
 **Batch checkpoint after elements:** Do any of these elements also belong in other views? Add those placements now.
@@ -268,12 +275,12 @@ No separate link command needed — drilling into `api-internals` from the backe
 
 ### 6b. Populate with internal elements
 
-Go back to the code — don't guess. Apply the 10-element rule here too; cluster if needed.
+Go back to the code — don't guess. Apply the 15-element rule here too; use tags and cluster if needed.
 
 ```bash
-tld add "Auth Middleware" --parent api-internals --technology "Go" --ref auth-mw
-tld add "User Handler" --parent api-internals --technology "Go" --ref user-handler
-tld add "Database" --parent api-internals --technology "PostgreSQL" --ref db
+tld add "Auth Middleware" --parent api-internals --technology "Go" --ref auth-mw --tag boundary:internal
+tld add "User Handler" --parent api-internals --technology "Go" --ref user-handler --tag protocol:rest
+tld add "Database" --parent api-internals --technology "PostgreSQL" --ref db --tag role:database
 ```
 
 > If `db` already exists from a parent view, `tld add` with the same ref but a new `--parent` adds a new *placement* rather than a duplicate. Reused elements don't inherit connectors — add them explicitly for this context.
