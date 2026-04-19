@@ -32,7 +32,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import helpers  # noqa: E402
-from scenarios import phase1  # noqa: E402
+from scenarios import phase1, phase2, phase3  # noqa: E402
 
 GREEN = "\033[32m"
 RED = "\033[31m"
@@ -42,7 +42,7 @@ RESET = "\033[0m"
 
 
 def collect() -> list[tuple[str, callable]]:
-    return list(phase1.SCENARIOS)
+    return list(phase1.SCENARIOS) + list(phase2.SCENARIOS) + list(phase3.SCENARIOS)
 
 
 def run_one(name: str, fn, artifacts_root: Path, keep: bool) -> tuple[bool, str]:

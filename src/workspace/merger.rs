@@ -172,7 +172,7 @@ fn clean_yaml_str(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::merge_workspace;
-    use crate::workspace::{Config, Meta, Workspace};
+    use crate::workspace::types::{Config, Element, Meta, Workspace};
     use std::collections::HashMap;
     use std::fs;
 
@@ -206,5 +206,78 @@ mod tests {
         let merged = fs::read_to_string(dir.path().join("elements.yaml")).expect("read elements");
         assert!(merged.contains("synctest-c-mine"));
         assert!(merged.contains("name: MyThing"));
+    }
+
+    #[test]
+    fn merge_workspace_pull_empty_remote_safety_bug_c() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let elements_path = dir.path().join("elements.yaml");
+        fs::write(
+            &elements_path,
+            "local-addition-ref:\n  name: Local Addition\n  kind: database\n",
+        )
+        .expect("write elements");
+
+        let server_ws = Workspace {
+            dir: dir.path().to_string_lossy().into_owned(),
+            config: Config::default(),
+            ws_config: None,
+            elements: HashMap::new(),
+            connectors: HashMap::new(),
+            meta: Some(Meta::default()),
+        };
+
+        merge_workspace(
+            &dir.path().to_string_lossy(),
+            &server_ws,
+            &Meta::default(),
+            &Meta::default(),
+        )
+        .expect("merge workspace");
+
+        let merged = fs::read_to_string(&elements_path).expect("read elements");
+        // Bug C says local file is wiped, this asserts it isn't.
+        assert!(merged.contains("local-addition-ref:"));
+    }
+
+    #[test]
+    fn merge_workspace_ref_persistence_bug_b() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let elements_path = dir.path().join("elements.yaml");
+
+        let mut elements = HashMap::new();
+        elements.insert(
+            "synctest-bugb-seed".to_string(),
+            Element {
+                name: "Seed Element".to_string(),
+                kind: "service".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let server_ws = Workspace {
+            dir: dir.path().to_string_lossy().into_owned(),
+            config: Config::default(),
+            ws_config: None,
+            elements,
+            connectors: HashMap::new(),
+            meta: Some(Meta::default()),
+        };
+
+        // Merge into an empty workspace (simulating pull into clean workspace)
+        merge_workspace(
+            &dir.path().to_string_lossy(),
+            &server_ws,
+            &Meta::default(),
+            &Meta::default(),
+        )
+        .expect("merge workspace");
+
+        let merged = fs::read_to_string(&elements_path).expect("read elements");
+        
+        // Assert that the YAML key is the explicit ref verbatim
+        assert!(merged.contains("synctest-bugb-seed:"));
+        // Assert it did NOT slugify the name
+        assert!(!merged.contains("seed-element:"));
     }
 }
