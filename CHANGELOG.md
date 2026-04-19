@@ -2,6 +2,31 @@
 
 All notable changes to tld are documented here.
 
+## [0.1.12] - 2026-04-19
+
+### Bug Fixes
+
+- Suppress verbosity of add and connect commands ([`cdbede7`](https://github.com/Mertcikla/tld-cli/commit/cdbede7ee4898552b23621bcbf733a35a61000b5))
+
+### Documentation
+
+- Document element tags and usage; raise internal element rule to 15 ([`f1dfc6a`](https://github.com/Mertcikla/tld-cli/commit/f1dfc6a9b18f4a96c2899c0aecf69238badebeb5))
+- Raise view density to 15 elements and add tag guidance ([`3ada4dc`](https://github.com/Mertcikla/tld-cli/commit/3ada4dc6d736ccbe586b5f89e724cc235e4df041))
+
+### Features
+
+- Add code coverage workflow and update documentation for coverage commands ([`e82687f`](https://github.com/Mertcikla/tld-cli/commit/e82687f1c25c7b675b82ff073a8ffa40b130814f))
+- Enhance workspace management with new metadata handling and tests ([`5b83ddd`](https://github.com/Mertcikla/tld-cli/commit/5b83ddd97f1d896c07a072b4bac75d6c763529fd))
+- Update dependencies and improve CLI command usage in documentation ([`3adff46`](https://github.com/Mertcikla/tld-cli/commit/3adff460515b4224e6ab6946bbc8bfc78c24bbb9))
+- Implement repository root management and enhance CLI commands ([`8d2037b`](https://github.com/Mertcikla/tld-cli/commit/8d2037b3936b2181c7eee01bb223a50b25a37449))
+- Add --ref flag to 'tld add' and update docs and tests ([`3bc3ae9`](https://github.com/Mertcikla/tld-cli/commit/3bc3ae948ced838f3e63a99b80ecbd6949a13902))
+- Render plan and write report to --output; update docs and tests ([`2994bac`](https://github.com/Mertcikla/tld-cli/commit/2994bac46fe49eac89aa0a617fd1bceb9d2c88de))
+
+### Refactoring
+
+- Update test codebase and workflows while removing deprecated skill-writer ([`a3de165`](https://github.com/Mertcikla/tld-cli/commit/a3de16566d34ebc0dace8286156848c5515c3c3a))
+- Update CLI modules and expand test codebase with new project configurations and artifacts ([`66a9395`](https://github.com/Mertcikla/tld-cli/commit/66a9395ad19d06e335df8d21be8dd0bfc10e0e60))
+
 ## [0.1.11] - 2026-04-18
 
 ### Features
