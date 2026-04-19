@@ -89,7 +89,11 @@ impl Workspace {
     }
 
     /// Upserts a connector, handling Rule 3 & 4 of the PRD.
-    pub fn upsert_connector(&mut self, mut connector: Connector) -> Result<String, TldError> {
+    pub fn upsert_connector(
+        &mut self,
+        mut connector: Connector,
+        verbose: bool,
+    ) -> Result<String, TldError> {
         if connector.view.is_empty() {
             connector.view = self.infer_connector_view(&connector.source, &connector.target)?;
         }
@@ -144,7 +148,7 @@ impl Workspace {
 
             if modified {
                 self.connectors.insert(ref_name.clone(), new_conn);
-            } else {
+            } else if verbose {
                 crate::output::print_info(&format!(
                     "Connector '{ref_name}' already exists with identical or matching properties."
                 ));

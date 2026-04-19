@@ -24,7 +24,7 @@ pub struct ConnectArgs {
 }
 
 #[expect(clippy::needless_pass_by_value)]
-pub fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
+pub fn exec(args: ConnectArgs, wdir: String, verbose: bool) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
 
     // 1. Check existence and suggest
@@ -82,13 +82,15 @@ pub fn exec(args: ConnectArgs, wdir: String) -> Result<(), TldError> {
     };
 
     // 3 & 4. Duplicate/Update check
-    let ref_name = ws.upsert_connector(connector)?;
+    let ref_name = ws.upsert_connector(connector, verbose)?;
     workspace::save(&ws)?;
 
-    output::print_ok(&format!(
-        "Processed connector '{ref_name}' in connectors.yaml"
-    ));
-    output::print_info("Run 'tld apply' to push changes to the server.");
+    if verbose {
+        output::print_ok(&format!(
+            "Processed connector '{ref_name}' in connectors.yaml"
+        ));
+        output::print_info("Run 'tld apply' to push changes to the server.");
+    }
 
     Ok(())
 }

@@ -196,6 +196,37 @@ fn test_tld_add_upsert_and_conflict() {
 }
 
 #[test]
+fn test_tld_add_is_silent_without_verbose_and_chatty_with_verbose() {
+    let dir = tempdir().unwrap();
+    let wdir = dir.path().to_str().unwrap();
+
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("-w")
+        .arg(wdir)
+        .arg("add")
+        .arg("Service A")
+        .arg("--kind")
+        .arg("service");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("-w")
+        .arg(wdir)
+        .arg("-v")
+        .arg("add")
+        .arg("Service B")
+        .arg("--kind")
+        .arg("service");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Added/updated element 'service-b' in elements.yaml"))
+        .stderr(predicate::str::contains("Run 'tld apply' to push changes to the server."));
+}
+
+#[test]
 fn test_tld_connect_checks_and_conflicts() {
     let dir = tempdir().unwrap();
     let wdir = dir.path().to_str().unwrap();
@@ -244,6 +275,20 @@ fn test_tld_connect_checks_and_conflicts() {
     let mut cmd = Command::cargo_bin("tld").unwrap();
     cmd.arg("-w")
         .arg(wdir)
+        .arg("connect")
+        .arg("servicea")
+        .arg("serviceb")
+        .arg("--relationship")
+        .arg("calls");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    let mut cmd = Command::cargo_bin("tld").unwrap();
+    cmd.arg("-w")
+        .arg(wdir)
+        .arg("-v")
         .arg("connect")
         .arg("servicea")
         .arg("serviceb")

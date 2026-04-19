@@ -33,18 +33,17 @@ Every element automatically gets a view (`has_view: true`), so any element can b
 **Flags:**
 - `--ref <slug>` - Override the auto-generated ref (default: slugified name, e.g. `"My API"` → `my-api`)
 - `--parent <ref>` - Place this element in the named element's view (default: `root`)
-- `--kind <kind>` - Element kind (default: `element`)
+- `--kind <kind>` - Element kind (e.g. `service`, `database`, `function`)
 - `--description "..."` - What this element does
 - `--technology "..."` - Primary technology (e.g. `Go`, `React`, `PostgreSQL`)
 - `--url "..."` - Link to docs, repo, or dashboard
-- `--position-x <float>` - Horizontal canvas position
-- `--position-y <float>` - Vertical canvas position
+- `--tag <tag>` - Semantic tag to apply (can be used multiple times)
 
 ```bash
 # Root-level elements (shown in the top-level canvas)
-tld add "Frontend" --technology "React"
-tld add "API Gateway" --technology "Go"
-tld add "Database" --technology "PostgreSQL"
+tld add "Frontend" --technology "React" --tag "role:frontend"
+tld add "API Gateway" --technology "Go" --tag "role:gateway"
+tld add "Database" --technology "PostgreSQL" --tag "role:database"
 
 # Child elements (shown inside the parent's view when you drill down)
 tld add "Auth Middleware" --parent api-gateway --technology "Go"
@@ -53,27 +52,27 @@ tld add "User Handler" --parent api-gateway --technology "Go"
 
 ---
 
-### `tld connect [flags]`
-Add a connector between two elements. The view is **automatically inferred** from the elements' shared parent — you never need to specify it.
+### `tld connect <source> <target> [flags]`
+Add a connector between two elements. The view is **automatically inferred** from the elements' shared parent if omitted.
+
+**Arguments:**
+- `<source>` **(required)** - Source element ref
+- `<target>` **(required)** - Target element ref
 
 **Flags:**
-- `--from <ref>` **(required)** - Source element ref
-- `--to <ref>` **(required)** - Target element ref
+- `--view <ref>` - Parent view ref for the connector (inferred if missing)
 - `--label "..."` - Short label shown on the connector (e.g. `"calls"`, `"reads"`)
-- `--description "..."` - Longer explanation shown in the connector panel
 - `--relationship "..."` - Semantic type (e.g. `uses`, `depends_on`, `integrates`)
 - `--direction` - `forward` | `backward` | `both` | `none` (default: `forward`)
-- `--style` - `bezier` | `straight` | `step` | `smoothstep` (default: `bezier`)
-- `--url "..."` - Link to relevant docs or API spec
 
 ```bash
 # Connectors between root-level elements
-tld connect --from frontend --to api-gateway --label "HTTP"
-tld connect --from api-gateway --to database --label "SQL"
+tld connect frontend api-gateway --label "HTTP"
+tld connect api-gateway database --label "SQL"
 
 # Connectors within a drill-down view (view inferred from shared parent)
-tld connect --from auth-middleware --to user-handler --label "forwards request"
-tld connect --from user-handler --to database --label "SQL"
+tld connect auth-middleware user-handler --label "forwards request"
+tld connect user-handler database --label "SQL"
 ```
 
 ---
@@ -87,8 +86,20 @@ tld remove element old-service
 
 ---
 
-### `tld remove connector [flags]`
+### `tld remove connector <source> <target> [flags]`
 Remove a specific connector from `connectors.yaml`.
+
+**Flags:**
+- `--view <ref>` - View ref where the connector exists (inferred if missing)
+
+---
+
+### `tld update <ref> <field> <value>`
+Update a specific field of an element.
+
+```bash
+tld update my-api technology "Rust"
+```
 
 ---
 
@@ -122,8 +133,8 @@ tld add "Web App" --ref web-app --technology "React"
 tld add "Payment Gateway" --ref payment-gateway --technology "Stripe"
 
 # 3. Connect them (view inferred automatically as "root")
-tld connect --from customer --to web-app --label "browses and buys"
-tld connect --from web-app --to payment-gateway --label "processes payments"
+tld connect customer web-app --label "browses and buys"
+tld connect web-app payment-gateway --label "processes payments"
 
 # 4. Drill down into Web App (add children — view inferred as "web-app")
 tld add "React Frontend" --parent web-app --technology "React"
@@ -131,8 +142,8 @@ tld add "GraphQL API" --parent web-app --technology "Go"
 tld add "Postgres DB" --parent web-app --technology "PostgreSQL"
 
 # 5. Connect inside the Web App view
-tld connect --from react-frontend --to graphql-api --label "queries"
-tld connect --from graphql-api --to postgres-db --label "SQL"
+tld connect react-frontend graphql-api --label "queries"
+tld connect graphql-api postgres-db --label "SQL"
 
 # 6. Validate and apply
 tld validate

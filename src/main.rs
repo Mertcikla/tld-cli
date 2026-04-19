@@ -47,11 +47,11 @@ async fn main() -> Result<(), TldError> {
         }
         Commands::Add(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::add::exec(args.clone(), wdir)?;
+            cli::add::exec(args.clone(), wdir, cli.verbose)?;
         }
         Commands::Connect(ref args) => {
             let wdir = cli.workspace_dir();
-            cli::connect::exec(args.clone(), wdir)?;
+            cli::connect::exec(args.clone(), wdir, cli.verbose)?;
         }
         Commands::Remove(ref args) => {
             let wdir = cli.workspace_dir();

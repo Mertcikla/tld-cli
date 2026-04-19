@@ -31,7 +31,7 @@ pub struct AddArgs {
 }
 
 #[expect(clippy::needless_pass_by_value)]
-pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
+pub fn exec(args: AddArgs, wdir: String, verbose: bool) -> Result<(), TldError> {
     let mut ws = workspace::load(&wdir)?;
     let default_root = workspace::ensure_default_repository_root(&mut ws)?;
     let save_config = default_root
@@ -131,10 +131,12 @@ pub fn exec(args: AddArgs, wdir: String) -> Result<(), TldError> {
         workspace::save_workspace_config(&ws.dir, config)?;
     }
 
-    output::print_ok(&format!(
-        "Added/updated element '{ref_name}' in elements.yaml"
-    ));
-    output::print_info("Run 'tld apply' to push changes to the server.");
+    if verbose {
+        output::print_ok(&format!(
+            "Added/updated element '{ref_name}' in elements.yaml"
+        ));
+        output::print_info("Run 'tld apply' to push changes to the server.");
+    }
 
     Ok(())
 }
