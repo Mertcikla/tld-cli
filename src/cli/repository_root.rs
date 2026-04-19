@@ -5,7 +5,6 @@ use crate::planner;
 use crate::workspace::{self, RepositoryRootBinding, ResourceMetadata, Workspace};
 use chrono::{DateTime, TimeZone, Utc};
 use std::collections::HashSet;
-use tonic::Request;
 
 pub async fn run_dry_run_with_repository_root_sync(
     ws: &mut Workspace,
@@ -77,10 +76,7 @@ async fn execute_dry_run(
     recreate_ids: bool,
 ) -> Result<diagv1::ApplyPlanResponse, TldError> {
     let plan = planner::build(ws, recreate_ids)?;
-    Ok(client
-        .apply_workspace_plan(Request::new(plan.request))
-        .await?
-        .into_inner())
+    client.apply_workspace_plan(plan.request).await
 }
 
 fn persist_root_changes(
@@ -168,13 +164,12 @@ async fn find_remote_repository_root(
     }
 
     let response = client
-        .list_elements(Request::new(diagv1::ListElementsRequest {
+        .list_elements(diagv1::ListElementsRequest {
             limit: 100,
             offset: 0,
             search: project_name.to_string(),
-        }))
-        .await?
-        .into_inner();
+        })
+        .await?;
 
     let mut candidates = Vec::new();
     for element in response.elements {
@@ -183,11 +178,10 @@ async fn find_remote_repository_root(
         }
 
         let placements = client
-            .list_element_placements(Request::new(diagv1::ListElementPlacementsRequest {
+            .list_element_placements(diagv1::ListElementPlacementsRequest {
                 element_id: element.id,
-            }))
-            .await?
-            .into_inner();
+            })
+            .await?;
 
         if !placements
             .placements
@@ -217,7 +211,7 @@ async fn list_root_view_ids(
     org_id: &str,
 ) -> Result<HashSet<i32>, TldError> {
     let response = client
-        .get_workspace(Request::new(diagv1::GetWorkspaceRequest {
+        .get_workspace(diagv1::GetWorkspaceRequest {
             org_id: org_id.to_string(),
             parent_id: None,
             level: None,
@@ -226,9 +220,8 @@ async fn list_root_view_ids(
             offset: 0,
             include_content: false,
             api_key: None,
-        }))
-        .await?
-        .into_inner();
+        })
+        .await?;
 
     Ok(response
         .views

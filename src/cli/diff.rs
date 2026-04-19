@@ -6,7 +6,6 @@ use crate::workspace;
 use clap::Args;
 use std::fs;
 use std::process::Command;
-use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
 pub struct DiffArgs {
@@ -33,12 +32,12 @@ pub async fn exec(_args: DiffArgs, wdir: String) -> Result<(), TldError> {
 
     let mut client =
         client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
-    let req = Request::new(diagv1::ExportOrganizationRequest {
+    let req = diagv1::ExportOrganizationRequest {
         org_id: ws.config.org_id.clone(),
         api_key: None,
-    });
+    };
 
-    let resp = client.export_workspace(req).await?.into_inner();
+    let resp = client.export_workspace(req).await?;
 
     let server_ws_dir = temp_dir
         .to_str()

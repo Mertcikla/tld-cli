@@ -5,7 +5,6 @@ use crate::output;
 use crate::planner;
 use crate::workspace;
 use clap::Args;
-use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
 pub struct ApplyArgs {
@@ -60,10 +59,7 @@ pub async fn exec(args: ApplyArgs, wdir: String) -> Result<(), TldError> {
     plan.request.dry_run = Some(false); // Actually apply
 
     let spinner = output::new_spinner("Contacting server...");
-    let resp = ws_client
-        .apply_workspace_plan(Request::new(plan.request))
-        .await?
-        .into_inner();
+    let resp = ws_client.apply_workspace_plan(plan.request).await?;
     spinner.finish_and_clear();
 
     if let Some(summary) = &resp.summary {

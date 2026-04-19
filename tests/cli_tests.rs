@@ -222,8 +222,12 @@ fn test_tld_add_is_silent_without_verbose_and_chatty_with_verbose() {
         .arg("service");
     cmd.assert()
         .success()
-        .stderr(predicate::str::contains("Added/updated element 'service-b' in elements.yaml"))
-        .stderr(predicate::str::contains("Run 'tld apply' to push changes to the server."));
+        .stderr(predicate::str::contains(
+            "Added/updated element 'service-b' in elements.yaml",
+        ))
+        .stderr(predicate::str::contains(
+            "Run 'tld apply' to push changes to the server.",
+        ));
 }
 
 #[test]

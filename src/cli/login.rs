@@ -6,7 +6,6 @@ use crate::workspace;
 use clap::Args;
 use std::time::Duration;
 use tokio::time::sleep;
-use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
 pub struct LoginArgs {
@@ -27,11 +26,11 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
 
     let mut device_client = client::new_device_client(&server_url).await?;
 
-    let req = Request::new(diagv1::DeviceAuthorizeRequest {
+    let req = diagv1::DeviceAuthorizeRequest {
         client_name: "tld CLI (Rust)".to_string(),
-    });
+    };
 
-    let auth = device_client.authorize(req).await?.into_inner();
+    let auth = device_client.authorize(req).await?;
 
     println!(
         "\nOpen the following URL to log in:\n\n  {uri}\n\n",
@@ -57,13 +56,13 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
     // Poll for token
     let (api_key, org_id) = loop {
         sleep(interval).await;
-        let poll_req = Request::new(diagv1::DevicePollTokenRequest {
+        let poll_req = diagv1::DevicePollTokenRequest {
             device_code: auth.device_code.clone(),
-        });
+        };
 
         match device_client.poll_token(poll_req).await {
             Ok(res) => {
-                let token = res.into_inner();
+                let token = res;
                 if !token.error.is_empty() {
                     match token.error.as_str() {
                         "authorization_pending" => continue,
@@ -87,12 +86,7 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
                 }
                 break (token.api_key, token.org_id);
             }
-            Err(status) => {
-                if status.code() == tonic::Code::Unavailable {
-                    continue;
-                }
-                return Err(status.into());
-            }
+            Err(err) => return Err(err),
         }
     };
 

@@ -4,7 +4,6 @@ use crate::error::TldError;
 use crate::output;
 use crate::workspace;
 use clap::Args;
-use tonic::Request;
 
 #[derive(Args, Debug, Clone)]
 pub struct ExportArgs {
@@ -42,13 +41,13 @@ pub async fn exec(args: ExportArgs, wdir: String) -> Result<(), TldError> {
     let mut client =
         client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
 
-    let req = Request::new(diagv1::ExportOrganizationRequest {
+    let req = diagv1::ExportOrganizationRequest {
         org_id: org_id.clone(),
         api_key: None,
-    });
+    };
 
     let spinner = output::new_spinner("Contacting server...");
-    let resp = client.export_workspace(req).await?.into_inner();
+    let resp = client.export_workspace(req).await?;
     spinner.finish_and_clear();
 
     let new_ws = workspace::conversion::from_export_response(

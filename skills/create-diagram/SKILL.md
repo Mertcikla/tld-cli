@@ -186,8 +186,8 @@ tld add "Storage" --ref storage --parent data --tag role:database
 **Batch checkpoint:** Are there connectors between root elements suggested by your inventory? Add them now:
 
 ```bash
-tld connect --from domain --to data --label "reads/writes"
-tld connect --from interfaces --to domain --label "calls"
+tld connect domain data --label "reads/writes"
+tld connect interfaces domain --label "calls"
 ```
 
 ---
@@ -211,9 +211,9 @@ Append and run connectors for the same view immediately after its elements. View
 
 ```bash
 # === Backend connectors ===
-tld connect --from api --to stripe --label "billing"
-tld connect --from api --to db --label "reads/writes"
-tld connect --from worker --to queue --label "consumes jobs"
+tld connect api stripe --label "billing"
+tld connect api db --label "reads/writes"
+tld connect worker queue --label "consumes jobs"
 ```
 
 Labels should describe *what* the interaction does — "validates JWT", "publishes events" — not just "calls".
@@ -288,8 +288,8 @@ tld add "Database" --parent api-internals --technology "PostgreSQL" --ref db --t
 ### 6c. Connect internal elements
 
 ```bash
-tld connect --from auth-mw --to user-handler --label "forwards request"
-tld connect --from user-handler --to db --label "SQL"
+tld connect auth-mw user-handler --label "forwards request"
+tld connect user-handler db --label "SQL"
 ```
 
 Before moving to the next subsystem, check every element: at least one incoming connector, at least one outgoing connector, labels specific enough to tell a reader what the interaction does. Missing connectors = go back to the code.
