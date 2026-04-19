@@ -1,4 +1,7 @@
-.PHONY: build dev test test-sync fmt lint clean release install changelog
+.PHONY: build dev test test-sync fmt lint clean release install changelog coverage coverage-html setup-hooks
+
+setup-hooks:
+	./scripts/setup-hooks.sh
 
 build:
 	cargo build

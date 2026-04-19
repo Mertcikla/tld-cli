@@ -274,7 +274,7 @@ mod tests {
         .expect("merge workspace");
 
         let merged = fs::read_to_string(&elements_path).expect("read elements");
-        
+
         // Assert that the YAML key is the explicit ref verbatim
         assert!(merged.contains("synctest-bugb-seed:"));
         // Assert it did NOT slugify the name
