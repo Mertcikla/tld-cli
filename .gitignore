@@ -11,3 +11,5 @@ scripts/test-analyze-codebase.sh
 
 /target
 tld-bench-work/
+tests/sync/artifacts/
+__pycache__/

@@ -66,11 +66,10 @@ pub async fn exec(args: PullArgs, wdir: String) -> Result<(), TldError> {
         return Ok(());
     }
 
+    workspace::merger::merge_workspace(&wdir, &server_ws, &last_sync_meta, &current_meta)?;
     if args.force {
-        workspace::save(&server_ws)?;
-        output::print_ok("Workspace updated (forced overwrite).");
+        output::print_ok("Workspace updated with server state.");
     } else {
-        workspace::merger::merge_workspace(&wdir, &server_ws, &last_sync_meta, &current_meta)?;
         output::print_ok("Workspace merged with server state.");
     }
 

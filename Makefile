@@ -1,4 +1,4 @@
-.PHONY: build dev test fmt lint clean release install changelog
+.PHONY: build dev test test-sync fmt lint clean release install changelog
 
 build:
 	cargo build
@@ -11,6 +11,9 @@ test:
 
 repo-test:
 	uv run scripts/test_bench.py
+
+test-sync:
+	python3 tests/sync/run_sync_suite.py $(filter-out $@,$(MAKECMDGOALS))
 
 fmt:
 	cargo fmt

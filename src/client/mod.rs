@@ -34,10 +34,7 @@ fn resolved_server_url(server_url: &str) -> String {
 
 fn default_headers() -> Result<HeaderMap, TldError> {
     let mut headers = HeaderMap::new();
-    headers.insert(
-        CONTENT_TYPE,
-        HeaderValue::from_static(CONNECT_CONTENT_TYPE),
-    );
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static(CONNECT_CONTENT_TYPE));
     headers.insert(ACCEPT, HeaderValue::from_static(CONNECT_ACCEPT));
     headers.insert(
         CONNECT_PROTOCOL_VERSION_HEADER,
@@ -110,9 +107,7 @@ impl ConnectTransport {
         }
 
         Resp::decode(body.as_ref()).map_err(|e| {
-            TldError::Generic(format!(
-                "Failed to decode {service}/{method} response: {e}"
-            ))
+            TldError::Generic(format!("Failed to decode {service}/{method} response: {e}"))
         })
     }
 }
@@ -296,9 +291,8 @@ mod tests {
 
     #[test]
     fn rpc_url_joins_service_and_method() {
-        let transport =
-            ConnectTransport::new("https://tldiagram.com", Some("secret".to_string()))
-                .expect("transport should build");
+        let transport = ConnectTransport::new("https://tldiagram.com", Some("secret".to_string()))
+            .expect("transport should build");
         assert_eq!(
             transport.rpc_url("diag.v1.WorkspaceService", "ApplyWorkspacePlan"),
             "https://tldiagram.com/api/diag.v1.WorkspaceService/ApplyWorkspacePlan"

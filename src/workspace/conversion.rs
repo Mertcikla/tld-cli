@@ -26,14 +26,9 @@ pub fn from_export_response(
     };
 
     let mut existing_element_refs = HashMap::new();
-    let mut existing_connector_refs = HashMap::new();
-
     if let Some(meta) = existing_meta {
         for (r, m) in &meta.elements {
             existing_element_refs.insert(m.id, r.clone());
-        }
-        for (r, m) in &meta.connectors {
-            existing_connector_refs.insert(m.id, r.clone());
         }
     }
 
@@ -42,6 +37,7 @@ pub fn from_export_response(
         let ref_name = existing_element_refs
             .get(&e.id)
             .cloned()
+            .or_else(|| (!e.r#ref.is_empty()).then(|| e.r#ref.clone()))
             .unwrap_or_else(|| crate::workspace::slugify(&e.name));
 
         object_id_to_ref.insert(e.id, ref_name.clone());
@@ -89,13 +85,10 @@ pub fn from_export_response(
 
     let mut diagram_id_to_view_ref = HashMap::new();
     for d in msg.views {
-        let mut owner_ref = "root".to_string();
-        for (r, el) in &new_ws.elements {
-            if el.name.to_lowercase() == d.name.to_lowercase() {
-                owner_ref.clone_from(r);
-                break;
-            }
-        }
+        let owner_ref = d
+            .owner_element_id
+            .and_then(|id| object_id_to_ref.get(&id).cloned())
+            .unwrap_or_else(|| "root".to_string());
 
         diagram_id_to_view_ref.insert(d.id, owner_ref.clone());
 
@@ -184,4 +177,80 @@ pub fn from_export_response(
     }
 
     new_ws
+}
+
+#[cfg(test)]
+mod tests {
+    use super::from_export_response;
+    use crate::client::diagv1;
+    use crate::workspace::{Config, Meta, ResourceMetadata, WorkspaceConfig};
+    use chrono::{TimeZone, Utc};
+    use prost_types::Timestamp;
+    use std::collections::HashMap;
+
+    #[test]
+    fn export_conversion_prefers_server_ref_for_fresh_workspaces() {
+        let ws = from_export_response(
+            ".",
+            Config::default(),
+            Some(WorkspaceConfig::default()),
+            None,
+            diagv1::ExportOrganizationResponse {
+                elements: vec![diagv1::Element {
+                    id: 1,
+                    name: "Seed Element".to_string(),
+                    r#ref: "synctest-bugb-seed".to_string(),
+                    updated_at: Some(Timestamp {
+                        seconds: 1,
+                        nanos: 0,
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        );
+
+        assert!(ws.elements.contains_key("synctest-bugb-seed"));
+        assert!(!ws.elements.contains_key("seed-element"));
+    }
+
+    #[test]
+    fn export_conversion_preserves_existing_id_to_ref_mapping() {
+        let mut meta = Meta {
+            elements: HashMap::new(),
+            views: HashMap::new(),
+            connectors: HashMap::new(),
+        };
+        meta.elements.insert(
+            "kept-local-ref".to_string(),
+            ResourceMetadata {
+                id: 1,
+                updated_at: Utc.timestamp_opt(1, 0).single().expect("timestamp"),
+                conflict: false,
+            },
+        );
+
+        let ws = from_export_response(
+            ".",
+            Config::default(),
+            Some(WorkspaceConfig::default()),
+            Some(&meta),
+            diagv1::ExportOrganizationResponse {
+                elements: vec![diagv1::Element {
+                    id: 1,
+                    name: "Different Name".to_string(),
+                    r#ref: "server-ref".to_string(),
+                    updated_at: Some(Timestamp {
+                        seconds: 2,
+                        nanos: 0,
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        );
+
+        assert!(ws.elements.contains_key("kept-local-ref"));
+        assert!(!ws.elements.contains_key("server-ref"));
+    }
 }

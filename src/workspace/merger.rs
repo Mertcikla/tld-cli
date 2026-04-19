@@ -168,3 +168,43 @@ fn clean_yaml_str(s: &str) -> String {
         .trim()
         .to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::merge_workspace;
+    use crate::workspace::{Config, Meta, Workspace};
+    use std::collections::HashMap;
+    use std::fs;
+
+    #[test]
+    fn merge_workspace_preserves_local_only_elements_when_server_is_empty() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(
+            dir.path().join("elements.yaml"),
+            "synctest-c-mine:\n  name: MyThing\n  kind: service\n",
+        )
+        .expect("write elements");
+        fs::write(dir.path().join("connectors.yaml"), "{}\n").expect("write connectors");
+
+        let server_ws = Workspace {
+            dir: dir.path().to_string_lossy().into_owned(),
+            config: Config::default(),
+            ws_config: None,
+            elements: HashMap::new(),
+            connectors: HashMap::new(),
+            meta: Some(Meta::default()),
+        };
+
+        merge_workspace(
+            &dir.path().to_string_lossy(),
+            &server_ws,
+            &Meta::default(),
+            &Meta::default(),
+        )
+        .expect("merge workspace");
+
+        let merged = fs::read_to_string(dir.path().join("elements.yaml")).expect("read elements");
+        assert!(merged.contains("synctest-c-mine"));
+        assert!(merged.contains("name: MyThing"));
+    }
+}
