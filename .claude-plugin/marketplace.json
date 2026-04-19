@@ -1,0 +1,18 @@
+{
+  "name": "tlDiagram",
+  "owner": {
+    "name": "tlDiagram.com",
+    "email": "mertcikla@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "create-diagram",
+      "source": "./",
+      "description": "Codebase diagram generation for tldiagram.com",
+      "version": "0.1.0",
+      "author": {
+        "name": "Mert Çıkla"
+      }
+    }
+  ]
+}

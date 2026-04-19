@@ -1,10 +1,12 @@
 {
   "name": "tldiagram",
   "description": "Codebase diagram generation for tldiagram.com",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "homepage": "https://tldiagram.com",
   "author": {
     "name": "Mert Çıkla",
     "url": "https://github.com/mertcikla"
-  }
+  },
+  "repository": "https://github.com/mertcikla/tld-cli",
+  "skills": "./skills"
 }
