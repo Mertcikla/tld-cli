@@ -24,7 +24,7 @@ pub async fn exec(args: LoginArgs, _wdir: String) -> Result<(), TldError> {
         .or_else(|| std::env::var("TLD_SERVER_URL").ok())
         .unwrap_or_else(|| "https://tldiagram.com".to_string());
 
-    let mut device_client = client::new_device_client(&server_url).await?;
+    let mut device_client = client::new_device_client(&server_url)?;
 
     let req = diagv1::DeviceAuthorizeRequest {
         client_name: "tld CLI (Rust)".to_string(),

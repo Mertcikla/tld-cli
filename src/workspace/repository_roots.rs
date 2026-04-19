@@ -97,7 +97,7 @@ fn select_default_repository(config: &WorkspaceConfig) -> Option<(String, &Repos
     }
 
     let mut entries: Vec<_> = config.repositories.iter().collect();
-    entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+    entries.sort_by_key(|(key, _)| *key);
 
     if entries.len() == 1 {
         let (key, repo) = entries.into_iter().next()?;

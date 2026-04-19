@@ -48,7 +48,7 @@ async fn exec_create(args: &TagCreateArgs) -> Result<(), TldError> {
         return Err(TldError::Generic("Tag name cannot be empty.".to_string()));
     }
 
-    let mut client = crate::client::new_org_client(&cfg.server_url, &cfg.api_key).await?;
+    let mut client = crate::client::new_org_client(&cfg.server_url, &cfg.api_key)?;
 
     let req = UpdateTagRequest {
         tag: tag.clone(),

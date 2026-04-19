@@ -38,8 +38,7 @@ pub async fn exec(args: ExportArgs, wdir: String) -> Result<(), TldError> {
         org_id, ws.config.server_url
     ));
 
-    let mut client =
-        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
+    let mut client = client::new_workspace_client(&ws.config.server_url, &ws.config.api_key)?;
 
     let req = diagv1::ExportOrganizationRequest {
         org_id: org_id.clone(),

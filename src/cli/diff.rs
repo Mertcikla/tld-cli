@@ -30,8 +30,7 @@ pub async fn exec(_args: DiffArgs, wdir: String) -> Result<(), TldError> {
     let temp_dir = std::env::temp_dir().join(format!("tld-diff-{}", std::process::id()));
     fs::create_dir_all(&temp_dir)?;
 
-    let mut client =
-        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
+    let mut client = client::new_workspace_client(&ws.config.server_url, &ws.config.api_key)?;
     let req = diagv1::ExportOrganizationRequest {
         org_id: ws.config.org_id.clone(),
         api_key: None,

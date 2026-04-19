@@ -48,8 +48,7 @@ pub async fn exec(args: PlanArgs, wdir: String) -> Result<(), TldError> {
 
     output::print_info("Building plan...");
     let spinner = output::new_spinner("Contacting server for dry-run...");
-    let mut ws_client =
-        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
+    let mut ws_client = client::new_workspace_client(&ws.config.server_url, &ws.config.api_key)?;
 
     let mut ws = ws;
     let resp = repository_root::run_dry_run_with_repository_root_sync(

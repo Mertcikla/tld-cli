@@ -32,7 +32,7 @@ fn resolved_server_url(server_url: &str) -> String {
     }
 }
 
-fn default_headers() -> Result<HeaderMap, TldError> {
+fn default_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static(CONNECT_CONTENT_TYPE));
     headers.insert(ACCEPT, HeaderValue::from_static(CONNECT_ACCEPT));
@@ -44,7 +44,7 @@ fn default_headers() -> Result<HeaderMap, TldError> {
         USER_AGENT,
         HeaderValue::from_static(concat!("tld/", env!("CARGO_PKG_VERSION"))),
     );
-    Ok(headers)
+    headers
 }
 
 #[derive(Clone)]
@@ -57,7 +57,7 @@ struct ConnectTransport {
 impl ConnectTransport {
     fn new(server_url: &str, bearer_token: Option<String>) -> Result<Self, TldError> {
         let http = reqwest::Client::builder()
-            .default_headers(default_headers()?)
+            .default_headers(default_headers())
             .build()
             .map_err(|e| TldError::Generic(format!("Failed to build HTTP client: {e}")))?;
 
@@ -233,7 +233,7 @@ impl OrgClient {
 }
 
 /// Creates a WorkspaceService client with bearer-token authentication.
-pub async fn new_workspace_client(
+pub fn new_workspace_client(
     server_url: &str,
     api_key: &str,
 ) -> Result<AuthedWorkspaceClient, TldError> {
@@ -243,14 +243,14 @@ pub async fn new_workspace_client(
 }
 
 /// Creates a DeviceService client for device-flow authentication.
-pub async fn new_device_client(server_url: &str) -> Result<DeviceClient, TldError> {
+pub fn new_device_client(server_url: &str) -> Result<DeviceClient, TldError> {
     Ok(DeviceClient {
         transport: ConnectTransport::new(server_url, None)?,
     })
 }
 
 /// Creates an OrgService client with bearer-token authentication.
-pub async fn new_org_client(server_url: &str, api_key: &str) -> Result<OrgClient, TldError> {
+pub fn new_org_client(server_url: &str, api_key: &str) -> Result<OrgClient, TldError> {
     Ok(OrgClient {
         transport: ConnectTransport::new(server_url, Some(api_key.to_string()))?,
     })

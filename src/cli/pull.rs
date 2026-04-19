@@ -32,8 +32,7 @@ pub async fn exec(args: PullArgs, wdir: String) -> Result<(), TldError> {
 
     output::print_info("Pulling latest state from server...");
 
-    let mut client =
-        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
+    let mut client = client::new_workspace_client(&ws.config.server_url, &ws.config.api_key)?;
 
     let req = diagv1::ExportOrganizationRequest {
         org_id: ws.config.org_id.clone(),

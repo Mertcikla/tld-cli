@@ -43,8 +43,7 @@ pub async fn exec(args: ApplyArgs, wdir: String) -> Result<(), TldError> {
         ));
     }
 
-    let mut ws_client =
-        client::new_workspace_client(&ws.config.server_url, &ws.config.api_key).await?;
+    let mut ws_client = client::new_workspace_client(&ws.config.server_url, &ws.config.api_key)?;
 
     let prep_spinner = output::new_spinner("Preparing repository roots...");
     let _ = repository_root::run_dry_run_with_repository_root_sync(
