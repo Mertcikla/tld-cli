@@ -17,6 +17,8 @@ make test         # Run all tests: cargo test
 make fmt          # Format code: cargo fmt
 make lint         # Lint code: cargo clippy
 make install      # Install to path: cargo install --path .
+make coverage     # Generate test coverage summary
+make coverage-html # Generate and open HTML coverage report
 ```
 
 Run a single test:

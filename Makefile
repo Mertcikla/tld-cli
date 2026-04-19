@@ -9,6 +9,12 @@ dev:
 test:
 	cargo test
 
+coverage:
+	cargo llvm-cov --all-features --workspace --summary-only
+
+coverage-html:
+	cargo llvm-cov --all-features --workspace --open
+
 repo-test:
 	uv run scripts/test_bench.py
 
