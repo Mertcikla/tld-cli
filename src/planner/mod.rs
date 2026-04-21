@@ -55,7 +55,8 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             } else {
                 let anchor = serde_json::json!({
                     "name": element.symbol,
-                    "type": element.symbol_kind
+                    "type": element.symbol_kind,
+                    "startLine": element.symbol_line.saturating_sub(1)
                 });
                 Some(format!("{}#{}", element.file_path, anchor))
             },
@@ -265,5 +266,49 @@ mod tests {
             .expect("view owner element in plan");
 
         assert!(owner.has_view);
+    }
+
+    #[test]
+    fn encodes_symbol_start_line_in_editor_anchor() {
+        let mut elements = HashMap::new();
+        elements.insert(
+            "entrypoint".to_string(),
+            Element {
+                name: "handleRequest".to_string(),
+                kind: "entrypoint".to_string(),
+                file_path: "src/server.ts".to_string(),
+                symbol: "handleRequest".to_string(),
+                symbol_kind: "function".to_string(),
+                symbol_line: 42,
+                ..Default::default()
+            },
+        );
+
+        let ws = Workspace {
+            dir: ".".to_string(),
+            config: Config {
+                org_id: "org-id".to_string(),
+                ..Default::default()
+            },
+            ws_config: None,
+            elements,
+            connectors: HashMap::<String, Connector>::new(),
+            meta: None,
+        };
+
+        let plan = build(&ws, false).expect("build plan");
+        let entrypoint = plan
+            .request
+            .elements
+            .iter()
+            .find(|e| e.r#ref == "entrypoint")
+            .expect("entrypoint element in plan");
+
+        assert_eq!(
+            entrypoint.file_path.as_deref(),
+            Some(
+                "src/server.ts#{\"name\":\"handleRequest\",\"startLine\":41,\"type\":\"function\"}"
+            )
+        );
     }
 }

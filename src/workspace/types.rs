@@ -79,6 +79,11 @@ fn is_zero_f64(v: &f64) -> bool {
     *v == 0.0
 }
 
+#[expect(clippy::trivially_copy_pass_by_ref)]
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
+}
+
 /// The primary workspace element resource.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Element {
@@ -108,6 +113,9 @@ pub struct Element {
     /// Original declaration kind preserved when `kind` is normalized by a projection.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub symbol_kind: String,
+    /// 1-based source line for the symbol declaration.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub symbol_line: u32,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

@@ -365,6 +365,7 @@ impl<'a> WorkspaceBuilder<'a> {
                     file_path: rel.clone(),
                     symbol: sym.name.clone(),
                     symbol_kind: sym.kind.clone(),
+                    symbol_line: sym.line.max(0) as u32,
                     description: sym.description.clone(),
                     placements: vec![ViewPlacement {
                         parent_ref: parent_slug,

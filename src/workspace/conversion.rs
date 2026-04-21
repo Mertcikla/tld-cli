@@ -60,6 +60,7 @@ pub fn from_export_response(
                 file_path: e.file_path.unwrap_or_default(),
                 symbol: String::new(), // Protobuf Element doesn't have symbol yet?
                 symbol_kind: String::new(),
+                symbol_line: 0,
                 tags: e.tags,
                 has_view: e.has_view,
                 view_label: e.view_label.unwrap_or_default(),
