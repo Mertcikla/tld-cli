@@ -50,7 +50,15 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             repo: some_if_not_empty(&element.repo),
             branch: some_if_not_empty(&element.branch),
             language: some_if_not_empty(&element.language),
-            file_path: some_if_not_empty(&element.file_path),
+            file_path: if element.symbol.is_empty() {
+                some_if_not_empty(&element.file_path)
+            } else {
+                let anchor = serde_json::json!({
+                    "name": element.symbol,
+                    "type": element.symbol_kind
+                });
+                Some(format!("{}#{}", element.file_path, anchor))
+            },
             view_label: some_if_not_empty(&element.view_label),
             has_view,
             tags: element.tags.clone(),
