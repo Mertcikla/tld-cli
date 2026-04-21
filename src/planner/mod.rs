@@ -55,8 +55,7 @@ pub fn build(ws: &Workspace, recreate_ids: bool) -> Result<Plan, TldError> {
             } else {
                 let anchor = serde_json::json!({
                     "name": element.symbol,
-                    "type": element.symbol_kind,
-                    "startLine": element.symbol_line.saturating_sub(1)
+                    "type": element.symbol_kind
                 });
                 Some(format!("{}#{}", element.file_path, anchor))
             },
@@ -269,13 +268,14 @@ mod tests {
     }
 
     #[test]
-    fn encodes_symbol_start_line_in_editor_anchor() {
+    fn encodes_symbol_editor_anchor_in_frontend_format() {
         let mut elements = HashMap::new();
         elements.insert(
             "entrypoint".to_string(),
             Element {
                 name: "handleRequest".to_string(),
                 kind: "entrypoint".to_string(),
+                language: "typescript".to_string(),
                 file_path: "src/server.ts".to_string(),
                 symbol: "handleRequest".to_string(),
                 symbol_kind: "function".to_string(),
@@ -306,9 +306,8 @@ mod tests {
 
         assert_eq!(
             entrypoint.file_path.as_deref(),
-            Some(
-                "src/server.ts#{\"name\":\"handleRequest\",\"startLine\":41,\"type\":\"function\"}"
-            )
+            Some("src/server.ts#{\"name\":\"handleRequest\",\"type\":\"function\"}")
         );
+        assert_eq!(entrypoint.language.as_deref(), Some("typescript"));
     }
 }

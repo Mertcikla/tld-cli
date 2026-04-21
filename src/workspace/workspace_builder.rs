@@ -362,6 +362,7 @@ impl<'a> WorkspaceBuilder<'a> {
                     technology: sym.technology.clone(),
                     owner: self.ctx.owner.clone(),
                     branch: self.ctx.branch.clone(),
+                    language: detect_file_language(&rel).unwrap_or_default().to_string(),
                     file_path: rel.clone(),
                     symbol: sym.name.clone(),
                     symbol_kind: sym.kind.clone(),
@@ -657,22 +658,25 @@ fn collect_folder_rel_paths(file_rel_paths: &[String]) -> BTreeSet<String> {
     folders
 }
 
-fn detect_file_technology(rel_path: &str) -> String {
+fn detect_file_language(rel_path: &str) -> Option<&'static str> {
     let ext = Path::new(rel_path)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");
     match ext {
-        "go" => "go",
-        "rs" => "rust",
-        "py" => "python",
-        "ts" | "tsx" => "typescript",
-        "js" | "jsx" => "javascript",
-        "java" => "java",
-        "cpp" | "cc" | "cxx" | "h" | "hpp" => "cpp",
-        _ => "File",
+        "go" => Some("go"),
+        "rs" => Some("rust"),
+        "py" => Some("python"),
+        "ts" | "tsx" => Some("typescript"),
+        "js" | "jsx" => Some("javascript"),
+        "java" => Some("java"),
+        "cpp" | "cc" | "cxx" | "h" | "hpp" => Some("cpp"),
+        _ => None,
     }
-    .to_string()
+}
+
+fn detect_file_technology(rel_path: &str) -> String {
+    detect_file_language(rel_path).unwrap_or("File").to_string()
 }
 
 fn find_containing_symbol<'a>(
@@ -848,5 +852,36 @@ mod tests {
                 .all(|element| element.file_path != "src/empty"),
             "folders should only be emitted when they contain a real file element"
         );
+    }
+
+    #[test]
+    fn build_sets_language_for_known_symbol_files() {
+        let result = AnalysisResult {
+            symbols: vec![Symbol {
+                name: "resolve_git_version".to_string(),
+                kind: "function_item".to_string(),
+                file_path: "/repo/build.rs".to_string(),
+                line: 12,
+                ..Default::default()
+            }],
+            refs: Vec::new(),
+            files_scanned: vec!["/repo/build.rs".to_string()],
+        };
+        let ctx = BuildContext {
+            repo_name: "repo".to_string(),
+            branch: "main".to_string(),
+            owner: "repo".to_string(),
+            repo_url: None,
+            scan_root: "/repo".to_string(),
+        };
+
+        let output = build(&result, &ctx);
+        let symbol_element = output
+            .elements
+            .values()
+            .find(|element| element.symbol == "resolve_git_version")
+            .expect("symbol element in build output");
+
+        assert_eq!(symbol_element.language, "rust");
     }
 }
