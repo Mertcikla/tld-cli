@@ -5,11 +5,17 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-env-changed=TLD_BUILD_VERSION");
+    println!("cargo:rerun-if-env-changed=CI");
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
+    println!("cargo:rustc-check-cfg=cfg(ci)");
 
     if let Some(counter_path) = local_counter_path() {
         println!("cargo:rerun-if-changed={}", counter_path.display());
+    }
+
+    if env::var_os("CI").is_some() {
+        println!("cargo:rustc-cfg=ci");
     }
 
     let version = env::var_os("TLD_BUILD_VERSION")
