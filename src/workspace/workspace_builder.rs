@@ -46,6 +46,10 @@ struct WorkspaceBuilder<'a> {
 }
 
 impl<'a> WorkspaceBuilder<'a> {
+    fn repo_value(&self) -> String {
+        self.ctx.repo_url.clone().unwrap_or_default()
+    }
+
     fn new(result: &'a AnalysisResult, ctx: &'a BuildContext) -> Self {
         // Keep paths relative to the analyzed root itself to avoid creating a
         // synthetic top-level folder that can collide with the repository slug.
@@ -132,7 +136,7 @@ impl<'a> WorkspaceBuilder<'a> {
                 name: self.ctx.repo_name.clone(),
                 kind: "repository".to_string(),
                 technology: "Git Repository".to_string(),
-                repo: self.ctx.repo_url.clone().unwrap_or_default(),
+                repo: self.repo_value(),
                 owner: self.ctx.owner.clone(),
                 branch: self.ctx.branch.clone(),
                 has_view: true,
@@ -201,6 +205,7 @@ impl<'a> WorkspaceBuilder<'a> {
                     name: display_name,
                     kind: "folder".to_string(),
                     technology: "Folder".to_string(),
+                    repo: self.repo_value(),
                     owner: self.ctx.owner.clone(),
                     branch: self.ctx.branch.clone(),
                     file_path: (*folder_path).clone(),
@@ -279,6 +284,7 @@ impl<'a> WorkspaceBuilder<'a> {
                     name: display_name.clone(),
                     kind: "file".to_string(),
                     technology: detect_file_technology(rel_path),
+                    repo: self.repo_value(),
                     owner: self.ctx.owner.clone(),
                     branch: self.ctx.branch.clone(),
                     file_path: rel_path.clone(),
@@ -360,13 +366,14 @@ impl<'a> WorkspaceBuilder<'a> {
                     name: compound_name,
                     kind: sym.kind.clone(),
                     technology: sym.technology.clone(),
+                    repo: self.repo_value(),
                     owner: self.ctx.owner.clone(),
                     branch: self.ctx.branch.clone(),
                     language: detect_file_language(&rel).unwrap_or_default().to_string(),
                     file_path: rel.clone(),
                     symbol: sym.name.clone(),
                     symbol_kind: sym.kind.clone(),
-                    symbol_line: sym.line.max(0) as u32,
+                    symbol_line: sym.line.max(0).cast_unsigned(),
                     description: sym.description.clone(),
                     placements: vec![ViewPlacement {
                         parent_ref: parent_slug,
@@ -883,5 +890,47 @@ mod tests {
             .expect("symbol element in build output");
 
         assert_eq!(symbol_element.language, "rust");
+    }
+
+    #[test]
+    fn build_sets_repo_for_all_analyzed_elements() {
+        let result = AnalysisResult {
+            symbols: vec![Symbol {
+                name: "resolve_git_version".to_string(),
+                kind: "function_item".to_string(),
+                file_path: "/repo/build.rs".to_string(),
+                line: 12,
+                ..Default::default()
+            }],
+            refs: Vec::new(),
+            files_scanned: vec!["/repo/build.rs".to_string()],
+        };
+        let ctx = BuildContext {
+            repo_name: "repo".to_string(),
+            branch: "main".to_string(),
+            owner: "repo".to_string(),
+            repo_url: Some("git@github.com:example/repo.git".to_string()),
+            scan_root: "/repo".to_string(),
+        };
+
+        let output = build(&result, &ctx);
+
+        let build_rs = output
+            .elements
+            .values()
+            .find(|element| element.kind == "file" && element.file_path == "build.rs")
+            .expect("file element in build output");
+        let symbol_element = output
+            .elements
+            .values()
+            .find(|element| element.symbol == "resolve_git_version")
+            .expect("symbol element in build output");
+
+        assert_eq!(
+            output.elements["repo"].repo,
+            "git@github.com:example/repo.git"
+        );
+        assert_eq!(build_rs.repo, "git@github.com:example/repo.git");
+        assert_eq!(symbol_element.repo, "git@github.com:example/repo.git");
     }
 }
