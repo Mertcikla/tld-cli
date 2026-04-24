@@ -1,6 +1,10 @@
 # tld - CLI for diagrams as code
 [![License](https://img.shields.io/github/license/mertcikla/tld-cli)](./LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/mertcikla/tld-cli/test.yml?branch=main)](https://github.com/mertcikla/tld-cli/actions) 
 
+# The Functionality of the CLI moved to 
+[https://github.com/Mertcikla/tld](https://github.com/Mertcikla/tld)
+
+
 tld is a command-line interface for managing software architecture diagrams as code. It is a companion app designed for use with [tlDiagram.com](http://tldiagram.com/). It lets you define your architecture in YAML, validate the consistency of your definitions, and sync them to [tlDiagram.com](http://tldiagram.com/).
 
 The workspace uses the unified `element/view/connector` model. The CLI writes `elements.yaml` and `connectors.yaml`, while `tld plan`, `tld apply`, `tld export`, and `tld pull` bridge that model onto the backend's current export/apply contract.
